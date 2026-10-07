@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+api/config.local.php
+api/cache/
+*.log
+.DS_Store
+*.zip
+coverage/

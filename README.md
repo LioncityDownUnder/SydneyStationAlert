@@ -19,7 +19,7 @@ Mobile-first, accessible Sydney Trains / Sydney Metro rail journey utility. Warm
 
 `npm run typecheck` checks TypeScript; `npm test` runs frontend/source regression checks; `php tests/backend-test.php` runs provider/parser fixtures; `npm run build` produces `dist/`.
 
-## Namecheap shared hosting deployment
+## Hosting deployment
 
 1. Confirm PHP 8.2+, `curl`, `mbstring`, `mod_rewrite`, and HTTPS.
 2. Run `npm run build`.
@@ -47,8 +47,6 @@ Mobile-first, accessible Sydney Trains / Sydney Metro rail journey utility. Warm
 
 ## Current baseline
 
-This repository baseline combines the **locked v16 UI** with the **v17 validated rail-routing backend**. The passenger-facing footer credit is:
-
-**Designed for Sydney commuters by Y.T. Ng**
+This repository baseline combines the **locked v16 UI** with the **v17 validated rail-routing backend**.
 
 The v16 visual system is considered locked unless a future change explicitly requests a UI revision.
