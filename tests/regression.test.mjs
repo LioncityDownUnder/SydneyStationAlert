@@ -96,7 +96,7 @@ test('onboard delay-aware connection warning uses arrival and departure with int
  assert.match(main,/function connectionAtRisk\(j\)/);
  assert.match(main,/if\(!state\.onboard\|\|state\.paused/);
  assert.match(main,/arrival\+3\*60000>departure/);
- assert.match(main,/updateDelayConnectionWarning\(\);return true/);
+ assert.match(main,/updateDelayConnectionWarning\(\);void suggestOnwardConnection\(\);return true/);
  assert.match(main,/Connection at risk at /);
 });
 
