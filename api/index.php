@@ -37,8 +37,10 @@ try {
    $t0=microtime(true);$body=upstream('trip',['depArrMacro'=>'dep','itdDate'=>$probe->format('Ymd'),'itdTime'=>$probe->format('Hi'),'type_origin'=>'stop','name_origin'=>$from,'type_destination'=>'stop','name_destination'=>$to,'calcNumberOfTrips'=>$tripCount,'TfNSWTR'=>'true'],25);if($debugTiming)$timings[]=['step'=>'whole-trip','seconds'=>round(microtime(true)-$t0,4),'probe'=>$probe->format('Hi')];
    $t0=microtime(true);$route=better_route($route,normalized_journey($body,$originSeed,$destinationSeed));if($debugTiming)$timings[]=['step'=>'normalize-whole','seconds'=>round(microtime(true)-$t0,4),'found'=>$route!==null];
    $needsInterchangeCheck=!$route;
-   if($debugTiming&&$needsInterchangeCheck){$dbgCandidates=prioritized_transfer_candidates($route,$body,$originSeed,$destinationSeed,4);$timings[]=['step'=>'fallback-candidates','names'=>array_map(fn($x)=>(string)($x['name']??''),$dbgCandidates)];}
-   foreach($needsInterchangeCheck?prioritized_transfer_candidates($route,$body,$originSeed,$destinationSeed,1):[] as $transfer){
+   $candidateList=$needsInterchangeCheck?prioritized_transfer_candidates($route,$body,$originSeed,$destinationSeed,$debugTiming?4:1):[];
+   if($debugTiming&&$needsInterchangeCheck)$timings[]=['step'=>'fallback-candidates','names'=>array_map(fn($x)=>(string)($x['name']??''),$candidateList)];
+   if($debugTiming&&isset($_GET['debugTransfer'])&&is_string($_GET['debugTransfer'])){$wanted=strtolower(trim((string)$_GET['debugTransfer']));$forced=array_values(array_filter($candidateList,fn($x)=>strtolower(trim((string)($x['name']??'')))===$wanted));if($forced)$candidateList=[$forced[0]];else $candidateList=array_slice($candidateList,0,1);}else $candidateList=array_slice($candidateList,0,1);
+   foreach($candidateList as $transfer){
     $t0=microtime(true);$firstBody=upstream('trip',['depArrMacro'=>'dep','itdDate'=>$probe->format('Ymd'),'itdTime'=>$probe->format('Hi'),'type_origin'=>'stop','name_origin'=>$from,'type_destination'=>'stop','name_destination'=>$transfer['id'],'calcNumberOfTrips'=>16,'TfNSWTR'=>'true'],25);if($debugTiming)$timings[]=['step'=>'fallback-first-leg','seconds'=>round(microtime(true)-$t0,4),'transfer'=>$transfer['name']??$transfer['id']];
     $firstRoute=normalized_journey($firstBody,$originSeed,$transfer);if(!$firstRoute)continue;
     $arrival=route_arrival_ts($firstRoute);if($arrival===PHP_INT_MAX)continue;
