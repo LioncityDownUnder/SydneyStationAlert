@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### UI iteration 11
+- Stabilize live refresh rendering: background refreshes no longer re-render at the start of a fetch, and journey updates preserve the current scroll position. Location updates and pause/resume also keep the page anchored instead of visually jumping.
+
 ### UI iteration 10
 - Replace variable-size carriage crowding boxes with compact Car 1, Car 2, etc. labels and fixed-width colour bars. Green means Quiet, amber Moderate, and red Busy/Very busy; a small legend explains the colours. The heading now states the detected car count and Metro/train type.
 
