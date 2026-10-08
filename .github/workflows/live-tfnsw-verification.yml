@@ -1,0 +1,58 @@
+name: Live TfNSW Verification
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Query production station search
+        id: stations
+        run: |
+          set -euo pipefail
+          HURSTVILLE_JSON="$(curl --fail --silent --show-error --retry 2 'https://trains.nytnetwork.work/api/index.php?action=stations&q=Hurstville')"
+          CENTRAL_JSON="$(curl --fail --silent --show-error --retry 2 'https://trains.nytnetwork.work/api/index.php?action=stations&q=Central')"
+          HURSTVILLE_ID="$(printf '%s' "$HURSTVILLE_JSON" | jq -r '.data[] | select(.name | test("Hurstville"; "i")) | .id' | head -n1)"
+          CENTRAL_ID="$(printf '%s' "$CENTRAL_JSON" | jq -r '.data[] | select(.name | test("Central"; "i")) | .id' | head -n1)"
+          test -n "$HURSTVILLE_ID"
+          test -n "$CENTRAL_ID"
+          echo "hurstville_id=$HURSTVILLE_ID" >> "$GITHUB_OUTPUT"
+          echo "central_id=$CENTRAL_ID" >> "$GITHUB_OUTPUT"
+          echo "Resolved Hurstville and Central production station IDs."
+
+      - name: Query live journey status
+        env:
+          HURSTVILLE_ID: ${{ steps.stations.outputs.hurstville_id }}
+          CENTRAL_ID: ${{ steps.stations.outputs.central_id }}
+        run: |
+          set -euo pipefail
+          JOURNEY_JSON="$(curl --fail --silent --show-error --retry 2 --get             --data-urlencode 'action=journey'             --data-urlencode "from=$HURSTVILLE_ID"             --data-urlencode "to=$CENTRAL_ID"             --data-urlencode 'fromName=Hurstville'             --data-urlencode 'toName=Central'             'https://trains.nytnetwork.work/api/index.php')"
+
+          printf '%s' "$JOURNEY_JSON" | jq -e '.data.id and .data.serviceStatus' >/dev/null
+
+          echo "=== Journey summary ==="
+          printf '%s' "$JOURNEY_JSON" | jq '{
+            origin: .data.origin.name,
+            destination: .data.destination.name,
+            source: .data.source,
+            legs: [.data.legs[] | {mode, line, origin: .origin.name, destination: .destination.name}],
+            serviceStatus: {
+              level: .data.serviceStatus.level,
+              hasMaterialChange: .data.serviceStatus.hasMaterialChange,
+              updatedAt: .data.serviceStatus.updatedAt,
+              alertCount: (.data.serviceStatus.alerts | length),
+              alerts: [.data.serviceStatus.alerts[] | {
+                severity,
+                title,
+                materialChange,
+                affectedLines,
+                affectedStations
+              }]
+            }
+          }'
+
+          STATUS_LEVEL="$(printf '%s' "$JOURNEY_JSON" | jq -r '.data.serviceStatus.level')"
+          test -n "$STATUS_LEVEL"
+          echo "Live serviceStatus verification completed: $STATUS_LEVEL"
