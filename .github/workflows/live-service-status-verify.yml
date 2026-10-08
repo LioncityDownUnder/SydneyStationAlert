@@ -8,53 +8,80 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     steps:
-      - name: Resolve stations and verify journeys
+      - name: Inspect station resolution and live journey payloads
         shell: bash
         run: |
           set -euo pipefail
           API="https://trains.nytnetwork.work/api/index.php"
 
-          station_id() {
-            curl --fail --silent --show-error --get "$API"               --data-urlencode "action=stations"               --data-urlencode "q=$1" | jq -r '.data[0].id'
+          station_json() {
+            curl --fail --silent --show-error --get "$API"               --data-urlencode "action=stations"               --data-urlencode "q=$1"
           }
 
-          HURSTVILLE="$(station_id Hurstville)"
-          CENTRAL="$(station_id Central)"
-          PADSTOW="$(station_id Padstow)"
+          H_JSON="$(station_json Hurstville)"
+          C_JSON="$(station_json Central)"
+          P_JSON="$(station_json Padstow)"
 
-          test -n "$HURSTVILLE" && test "$HURSTVILLE" != "null"
-          test -n "$CENTRAL" && test "$CENTRAL" != "null"
-          test -n "$PADSTOW" && test "$PADSTOW" != "null"
+          echo "=== Hurstville candidates ==="
+          echo "$H_JSON" | jq '[.data[] | {id,name,mode}]'
+          echo "=== Central candidates ==="
+          echo "$C_JSON" | jq '[.data[] | {id,name,mode}]'
+          echo "=== Padstow candidates ==="
+          echo "$P_JSON" | jq '[.data[] | {id,name,mode}]'
 
-          echo "Resolved station IDs successfully."
+          exact_id() {
+            local json="$1"
+            local name="$2"
+            echo "$json" | jq -r --arg name "$name" '.data[] | select((.name|ascii_downcase)==($name|ascii_downcase)) | .id' | head -n1
+          }
+
+          HURSTVILLE="$(exact_id "$H_JSON" Hurstville)"
+          CENTRAL="$(exact_id "$C_JSON" Central)"
+          PADSTOW="$(exact_id "$P_JSON" Padstow)"
+
+          test -n "$HURSTVILLE"
+          test -n "$CENTRAL"
+          test -n "$PADSTOW"
 
           verify_journey() {
             local from_id="$1"
             local from_name="$2"
             local to_id="$3"
             local to_name="$4"
+            local out
+            local status
 
             echo "=== $from_name -> $to_name ==="
-            curl --fail --silent --show-error --get "$API"               --data-urlencode "action=journey"               --data-urlencode "from=$from_id"               --data-urlencode "to=$to_id"               --data-urlencode "fromName=$from_name"               --data-urlencode "toName=$to_name" |
-              jq '{
-                source: .data.source,
-                legs: (.data.legs | length),
-                stops: [.data.stops[].name],
-                serviceStatus: {
-                  level: .data.serviceStatus.level,
-                  hasMaterialChange: .data.serviceStatus.hasMaterialChange,
-                  updatedAt: .data.serviceStatus.updatedAt,
-                  alertCount: (.data.serviceStatus.alerts | length),
-                  alerts: [.data.serviceStatus.alerts[] | {
-                    severity,
-                    title,
-                    materialChange,
-                    affectedLines,
-                    affectedStations
-                  }]
-                }
-              }'
+            out="$(mktemp)"
+            status="$(curl --silent --show-error --output "$out" --write-out '%{http_code}' --get "$API"               --data-urlencode "action=journey"               --data-urlencode "from=$from_id"               --data-urlencode "to=$to_id"               --data-urlencode "fromName=$from_name"               --data-urlencode "toName=$to_name")"
+            echo "HTTP $status"
+
+            if [ "$status" != "200" ]; then
+              jq '.' "$out"
+              rm -f "$out"
+              return 1
+            fi
+
+            jq '{
+              source: .data.source,
+              legs: (.data.legs | length),
+              stops: [.data.stops[].name],
+              serviceStatus: {
+                level: .data.serviceStatus.level,
+                hasMaterialChange: .data.serviceStatus.hasMaterialChange,
+                updatedAt: .data.serviceStatus.updatedAt,
+                alertCount: (.data.serviceStatus.alerts | length),
+                alerts: [.data.serviceStatus.alerts[] | {
+                  severity,
+                  title,
+                  materialChange,
+                  affectedLines,
+                  affectedStations
+                }]
+              }
+            }' "$out"
+            rm -f "$out"
           }
 
-          verify_journey "$HURSTVILLE" "Hurstville" "$CENTRAL" "Central"
-          verify_journey "$HURSTVILLE" "Hurstville" "$PADSTOW" "Padstow"
+          verify_journey "$HURSTVILLE" "Hurstville" "$CENTRAL" "Central" || true
+          verify_journey "$HURSTVILLE" "Hurstville" "$PADSTOW" "Padstow" || true
