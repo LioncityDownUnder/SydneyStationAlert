@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### UI iteration 8
+- Prevent the background live-detail status from appearing stuck: the visible “Checking live service details…” message now clears after five seconds even if optional enrichment continues in the background.
+
 ### UI iteration 7
 - Make carriage crowding understandable for first-time commuters: label cars as Car 1, Car 2, etc., add a short explanation, and hide the whole-train crowding summary when carriage-level data is available. TfNSW carriage codes remain available only as secondary metadata.
 
