@@ -113,6 +113,6 @@ $transferBody=[
 ];
 $prioritized=prioritized_transfer_candidates($routeWithKnownTransfer,$transferBody,
  ['id'=>'222020','name'=>'Hurstville','mode'=>'train','lat'=>-33.967,'lon'=>151.102],
- ['id'=>'221810','name'=>'Padstow','mode'=>'train','lat'=>-33.953,'lon'=>151.031],2);
-assertit(count($prioritized)<=2,'transfer validation fanout is capped');
+ ['id'=>'221810','name'=>'Padstow','mode'=>'train','lat'=>-33.953,'lon'=>151.031],1);
+assertit(count($prioritized)<=1,'transfer validation fanout is capped');
 assertit(($prioritized[0]['name']??'')==='Wolli Creek','selected route transfer is validated first');
