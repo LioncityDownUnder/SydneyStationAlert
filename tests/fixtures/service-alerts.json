@@ -3,26 +3,75 @@
     "current": [
       {
         "id": "alert-t4-1",
-        "heading": "T4 Eastern Suburbs & Illawarra Line delays",
+        "subtitle": "T4 delays",
         "content": "Services may be delayed between Hurstville and Central due to a signal issue.",
-        "severity": "warning",
-        "affectedLines": ["T4"],
-        "affectedStops": ["Hurstville", "Central"]
+        "priority": "normal",
+        "affected": {
+          "lines": [
+            {
+              "id": "nsw:020T4: :H:",
+              "name": "Sydney Trains Network T4 Eastern Suburbs & Illawarra Line",
+              "number": "T4 Eastern Suburbs & Illawarra Line",
+              "product": {"class": 1}
+            }
+          ]
+        }
       },
       {
         "id": "alert-bus-1",
-        "heading": "Route 970 bus diversion",
-        "content": "Buses are diverting in Miranda.",
-        "severity": "warning",
-        "affectedLines": ["970"],
-        "affectedStops": ["Miranda"]
+        "subtitle": "Route 970 bus diversion",
+        "content": "Buses are diverting through Central.",
+        "priority": "normal",
+        "affected": {
+          "lines": [
+            {
+              "id": "nsw:970: :H:",
+              "name": "Sydney Buses Network 970",
+              "number": "970",
+              "product": {"class": 5}
+            }
+          ],
+          "stops": [
+            {"id": "200060", "name": "Central Station, Sydney"}
+          ]
+        }
       },
       {
         "id": "alert-t4-major",
-        "heading": "T4 service change",
-        "content": "Selected services are not stopping at Wolli Creek.",
-        "affectedLines": ["T4"],
-        "affectedStops": ["Wolli Creek"]
+        "subtitle": "Not stopping at",
+        "content": "Selected T4 services are not stopping at Wolli Creek.",
+        "priority": "normal",
+        "affected": {
+          "lines": [
+            {
+              "id": "nsw:020T4: :H:",
+              "name": "Sydney Trains Network T4 Eastern Suburbs & Illawarra Line",
+              "number": "T4 Eastern Suburbs & Illawarra Line",
+              "product": {"class": 1}
+            }
+          ],
+          "stops": [
+            {"id": "220810", "name": "Wolli Creek Station, Wolli Creek"}
+          ]
+        }
+      },
+      {
+        "id": "alert-t1-central",
+        "subtitle": "T1 service change",
+        "content": "A T1 service is altered at Central.",
+        "affected": {
+          "lines": [
+            {
+              "id": "nsw:020T1:N:H:",
+              "name": "Sydney Trains Network T1 North Shore & Western Line",
+              "number": "T1 North Shore & Western Line",
+              "product": {"class": 1}
+            }
+          ],
+          "stops": [
+            {"id": "200060", "name": "Central Station, Sydney"}
+          ]
+        }
       }
     ]
   }
