@@ -2,15 +2,16 @@ name: Production Regression Smoke
 
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - '.github/workflows/production-regression-smoke.yml'
+  workflow_run:
+    workflows: ["Deploy Production"]
+    types: [completed]
 
 permissions:
   contents: read
 
 jobs:
   smoke:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
