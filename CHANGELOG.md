@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Service disruption backend
+- Read current TfNSW Trip Planner Service Alerts through the documented `add_info` endpoint.
+- Cache the disruption feed for 60 seconds and fail open if the optional alert endpoint is unavailable.
+- Normalize current alerts into info, warning, and major severity levels.
+- Match alerts against the selected journey's stations and rail line identifiers so unrelated notices are excluded.
+- Flag material changes such as cancellations, skipped stops, early termination, platform changes, suspensions, and station/line closures for journey revalidation.
+- Add typed `serviceStatus` metadata to journey responses without changing the locked v16 UI.
+- Add regression fixtures for relevant vs unrelated alerts and material stopping-pattern changes.
+
 ## 17.0.0 — 2026-10-08
 
 Current production baseline.
