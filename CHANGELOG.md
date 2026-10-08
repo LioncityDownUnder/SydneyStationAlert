@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### UI iteration 4
+- Add an expandable disruption-details section under the existing service alert, using the current notice styling. It distinguishes a selected-service impact from a broader line/station notice and shows the TfNSW description when available.
+
 ### UI cache fix
 - Bump frontend asset cache keys so the new carriage crowding styles load immediately instead of rendering as unstyled concatenated text from a stale stylesheet.
 
