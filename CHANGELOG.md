@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### UI iteration 14
+- Fill gaps in per-station timing when TfNSW omits times for intermediate stops. Missing times are interpolated only when bounded by known stops and are marked with `~` to show they are approximate rather than official timings.
+
 ### UI iteration 13
 - Show a concise journey time beside each station in the route list. The origin uses departure time; intermediate, transfer, and destination stops use arrival time with departure as a fallback. Platform information stays on the same muted detail line.
 
