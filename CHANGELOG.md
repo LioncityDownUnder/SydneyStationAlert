@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### UI iteration 16
+- Add an “I’m on this train” confirmation that pins the selected service locally in the browser. Confirmed onboard trips survive hard refreshes and browser restarts, resume monitoring from the saved route, and will not silently switch to a later service during refresh. An “Abandon trip” action clears the saved journey and returns to journey setup. Saved trips expire a few hours after the final arrival time.
+
 ### UI iteration 15
 - Treat intermediate stations with no TfNSW arrival or departure time as bypassed stops rather than estimating a time. Bypassed stations are greyed out and labelled “Does not stop”.
 
