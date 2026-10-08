@@ -21,6 +21,8 @@ try {
   $destinationSeed=['id'=>$to,'name'=>$toName,'lat'=>0.0,'lon'=>0.0,'mode'=>'train'];
   $now=new DateTimeImmutable('now',new DateTimeZone('Australia/Sydney'));
   $coreOnly=(string)($_GET['coreOnly']??'')==='1';
+  $debugTiming=$coreOnly&&(string)($_GET['debugTiming']??'')==='1';
+  $timings=[];
   $tripCount=$coreOnly?10:30;
   $route=null;
   $searchTimes=[$now];
@@ -31,16 +33,16 @@ try {
    $searchTimes[]=$probe;
   }
   foreach($searchTimes as $probe){
-   $body=upstream('trip',['depArrMacro'=>'dep','itdDate'=>$probe->format('Ymd'),'itdTime'=>$probe->format('Hi'),'type_origin'=>'stop','name_origin'=>$from,'type_destination'=>'stop','name_destination'=>$to,'calcNumberOfTrips'=>$tripCount,'TfNSWTR'=>'true'],25);
-   $route=better_route($route,normalized_journey($body,$originSeed,$destinationSeed));
+   $t0=microtime(true);$body=upstream('trip',['depArrMacro'=>'dep','itdDate'=>$probe->format('Ymd'),'itdTime'=>$probe->format('Hi'),'type_origin'=>'stop','name_origin'=>$from,'type_destination'=>'stop','name_destination'=>$to,'calcNumberOfTrips'=>$tripCount,'TfNSWTR'=>'true'],25);if($debugTiming)$timings[]=['step'=>'whole-trip','seconds'=>round(microtime(true)-$t0,4),'probe'=>$probe->format('Hi')];
+   $t0=microtime(true);$route=better_route($route,normalized_journey($body,$originSeed,$destinationSeed));if($debugTiming)$timings[]=['step'=>'normalize-whole','seconds'=>round(microtime(true)-$t0,4),'found'=>$route!==null];
    $needsInterchangeCheck=!$route;
    foreach($needsInterchangeCheck?prioritized_transfer_candidates($route,$body,$originSeed,$destinationSeed,1):[] as $transfer){
-    $firstBody=upstream('trip',['depArrMacro'=>'dep','itdDate'=>$probe->format('Ymd'),'itdTime'=>$probe->format('Hi'),'type_origin'=>'stop','name_origin'=>$from,'type_destination'=>'stop','name_destination'=>$transfer['id'],'calcNumberOfTrips'=>16,'TfNSWTR'=>'true'],25);
+    $t0=microtime(true);$firstBody=upstream('trip',['depArrMacro'=>'dep','itdDate'=>$probe->format('Ymd'),'itdTime'=>$probe->format('Hi'),'type_origin'=>'stop','name_origin'=>$from,'type_destination'=>'stop','name_destination'=>$transfer['id'],'calcNumberOfTrips'=>16,'TfNSWTR'=>'true'],25);if($debugTiming)$timings[]=['step'=>'fallback-first-leg','seconds'=>round(microtime(true)-$t0,4),'transfer'=>$transfer['name']??$transfer['id']];
     $firstRoute=normalized_journey($firstBody,$originSeed,$transfer);if(!$firstRoute)continue;
     $arrival=route_arrival_ts($firstRoute);if($arrival===PHP_INT_MAX)continue;
     $onward=(new DateTimeImmutable('@'.($arrival+120)))->setTimezone(new DateTimeZone('Australia/Sydney'));
     if($onward->format('Ymd')!==$now->format('Ymd'))continue;
-    $secondBody=upstream('trip',['depArrMacro'=>'dep','itdDate'=>$onward->format('Ymd'),'itdTime'=>$onward->format('Hi'),'type_origin'=>'stop','name_origin'=>$transfer['id'],'type_destination'=>'stop','name_destination'=>$to,'calcNumberOfTrips'=>16,'TfNSWTR'=>'true'],25);
+    $t0=microtime(true);$secondBody=upstream('trip',['depArrMacro'=>'dep','itdDate'=>$onward->format('Ymd'),'itdTime'=>$onward->format('Hi'),'type_origin'=>'stop','name_origin'=>$transfer['id'],'type_destination'=>'stop','name_destination'=>$to,'calcNumberOfTrips'=>16,'TfNSWTR'=>'true'],25);if($debugTiming)$timings[]=['step'=>'fallback-second-leg','seconds'=>round(microtime(true)-$t0,4),'transfer'=>$transfer['name']??$transfer['id']];
     $secondRoute=normalized_journey($secondBody,$transfer,$destinationSeed);if(!$secondRoute)continue;
     $route=better_route($route,stitch_routes($firstRoute,$secondRoute,$originSeed,$destinationSeed));
    }
@@ -51,6 +53,7 @@ try {
    $route['serviceStatus']=['level'=>'unavailable','hasMaterialChange'=>false,'updatedAt'=>gmdate('c'),'alerts'=>[],'revalidationAttempted'=>false,'replacementFound'=>false];
    $route['crowding']=['available'=>false,'level'=>'unknown','updatedAt'=>gmdate('c'),'legs'=>[]];
    $route['nextDepartures']=[];
+   if($debugTiming)$route['_debugTiming']=$timings;
    echo json_encode(['data'=>$route],JSON_INVALID_UTF8_SUBSTITUTE);exit;
   }
   $alertBody=fetch_current_service_alerts($now);
