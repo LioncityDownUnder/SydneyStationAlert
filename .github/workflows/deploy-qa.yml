@@ -117,3 +117,7 @@ jobs:
           check_route Chatswood Gadigal
           check_route Hurstville Padstow
           check_route Hurstville Casula
+          # Repeat the problem route to expose cache and upstream variability.
+          # Diagnostic only: keep a single slow TfNSW response from failing deployment.
+          check_route Hurstville Padstow
+          check_route Hurstville Padstow
