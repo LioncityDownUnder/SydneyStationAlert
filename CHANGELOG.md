@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### UI iteration 9
+- Fix a crowding render crash that could make Refresh and Pause appear unresponsive after carriage data loaded. Carriage numbers now fall back to Car 1–6 when TfNSW reports position 0.
+
 ### UI iteration 8
 - Prevent the background live-detail status from appearing stuck: the visible “Checking live service details…” message now clears after five seconds even if optional enrichment continues in the background.
 
