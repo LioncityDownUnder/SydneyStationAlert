@@ -105,13 +105,16 @@ jobs:
             local from="$1" to="$2" a b tmp time
             a="$(station_id "$from")"; b="$(station_id "$to")"; test -n "$a"; test -n "$b"
             tmp="$(mktemp)"
-            time="$(curl --fail --silent --show-error --max-time 35 --get "$API" \
+            local headers
+            headers="$(mktemp)"
+            time="$(curl --fail --silent --show-error --max-time 35 --dump-header "$headers" --get "$API" \
               --data-urlencode "action=journey" --data-urlencode "from=$a" --data-urlencode "to=$b" \
               --data-urlencode "fromName=$from" --data-urlencode "toName=$to" \
               --data-urlencode "coreOnly=1" -o "$tmp" -w '%{time_total}')"
             jq -e '.data.legs|length>=1' "$tmp" >/dev/null
             echo "$from to $to: ${time}s (5s target)"
-            rm -f "$tmp"
+            grep -i '^server-timing:' "$headers" || true
+            rm -f "$tmp" "$headers"
           }
           check_route Hurstville Kogarah
           check_route Chatswood Gadigal
