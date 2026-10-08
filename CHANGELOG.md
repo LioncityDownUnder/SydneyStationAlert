@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Crowding backend
+- Read TfNSW GTFS-realtime v2 vehicle-position feeds for Sydney Trains and Metro using the existing server-side API key.
+- Parse whole-train and carriage occupancy, including carriage position, quiet-carriage flag, accessible/normal toilet metadata, and luggage-rack availability.
+- Match crowding to the exact selected trip using GTFS trip identifiers already retained by the journey engine.
+- Normalize occupancy conservatively to quiet, moderate, busy, very_busy, or unknown; unknown data is never fabricated.
+- Cache vehicle-position feeds for 15 seconds and fail open when realtime crowding is unavailable.
+- Return crowding as backend metadata only; the locked UI is unchanged.
+
 ### Service disruption backend
 - Materially disrupted selected journeys are now revalidated automatically against the current Trip Planner results. The backend skips exact affected services, preserves the normal fastest-route ranking, and returns revalidation metadata without changing the locked UI.
 - Live verification identified TfNSW exact-service identifiers (RealtimeTripId, AVMSTripID, gtfsTripId, and tripCode) in Trip Planner journey legs and exact affected trips in add_info alerts.
