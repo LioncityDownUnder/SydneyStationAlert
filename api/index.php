@@ -63,8 +63,20 @@ try {
   }
   journey_perf_phase('additional_search');
   $remainingSearchTimes=($coreOnly&&count($searchTimes)>=6)?array_slice($searchTimes,6):$searchTimes;
-  foreach($remainingSearchTimes as $probe){
-   $body=timed_upstream('trip',['depArrMacro'=>'dep','itdDate'=>$probe->format('Ymd'),'itdTime'=>$probe->format('Hi'),'type_origin'=>'stop','name_origin'=>$from,'type_destination'=>'stop','name_destination'=>$to,'calcNumberOfTrips'=>$tripCount,'TfNSWTR'=>'true'],25);
+  // Prefetch the next two probes together only when the initial batch found no route.
+  // Keep later probes sequential to limit unnecessary upstream requests.
+  $prefetchedBodies=[];
+  if($coreOnly&&!$route&&count($remainingSearchTimes)>=2){
+   $prefetchParams=[];
+   foreach(array_slice($remainingSearchTimes,0,2) as $probe){
+    $prefetchParams[]=['depArrMacro'=>'dep','itdDate'=>$probe->format('Ymd'),'itdTime'=>$probe->format('Hi'),'type_origin'=>'stop','name_origin'=>$from,'type_destination'=>'stop','name_destination'=>$to,'calcNumberOfTrips'=>$tripCount,'TfNSWTR'=>'true'];
+   }
+   $prefetchedBodies=timed_parallel_trip($prefetchParams,25);
+  }
+  foreach($remainingSearchTimes as $probeIndex=>$probe){
+   $body=array_key_exists($probeIndex,$prefetchedBodies)&&is_array($prefetchedBodies[$probeIndex])
+    ?$prefetchedBodies[$probeIndex]
+    :timed_upstream('trip',['depArrMacro'=>'dep','itdDate'=>$probe->format('Ymd'),'itdTime'=>$probe->format('Hi'),'type_origin'=>'stop','name_origin'=>$from,'type_destination'=>'stop','name_destination'=>$to,'calcNumberOfTrips'=>$tripCount,'TfNSWTR'=>'true'],25);
    $route=better_route($route,timed_normalized_journey($body,$originSeed,$destinationSeed));
    $needsInterchangeCheck=!$route;
    $candidateList=$needsInterchangeCheck?timed_transfer_candidates($route,$body,$originSeed,$destinationSeed,1):[];
