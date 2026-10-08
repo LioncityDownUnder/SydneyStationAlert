@@ -335,7 +335,7 @@ function alert_entity_values(array $alert,array $needles):array{
 function alert_severity(array $alert,string $title,string $description):string{
  $raw=strtolower(alert_text_field($alert,['severity','priority','type','status','level','messageType','messageTypeText']));
  $text=strtolower($title.' '.$description.' '.$raw);
- if(preg_match('/\b(severe|major|critical|suspend(?:ed|sion)?|cancel(?:led|lation)?|closed|closure|no trains|service stopped)\b/',$text))return 'major';
+ if(preg_match('/\\b(severe|major|critical|suspend(?:ed|sion)?|cancel(?:led|lation)?|closed|closure|no trains|service stopped|not stopping|skip(?:ping|s)?)\\b/',$text))return 'major';
  if(preg_match('/\b(delay|delays|delayed|disruption|disrupted|reduced|changed|altered|incident|warning|maintenance)\b/',$text))return 'warning';
  return 'info';
 }
