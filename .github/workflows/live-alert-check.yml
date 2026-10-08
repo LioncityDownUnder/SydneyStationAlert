@@ -1,0 +1,22 @@
+name: Live Alert Check
+on:
+  push:
+    branches: [main]
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check live journey alert
+        shell: bash
+        run: |
+          set -euo pipefail
+          API="https://trains.nytnetwork.work/api/index.php"
+          station_id() {
+            curl --fail --silent --show-error --get "$API"               --data-urlencode "action=stations"               --data-urlencode "q=$1" |
+              jq -r --arg n "$1" '.data[] | select((.name|ascii_downcase)==($n|ascii_downcase)) | .id' |
+              head -n1
+          }
+          FROM="$(station_id Hurstville)"
+          TO="$(station_id Kogarah)"
+          curl --fail --silent --show-error --get "$API"             --data-urlencode "action=journey"             --data-urlencode "from=$FROM"             --data-urlencode "to=$TO"             --data-urlencode "fromName=Hurstville"             --data-urlencode "toName=Kogarah" |
+            jq '{route:{source:.data.source,lines:[.data.legs[].line],origin:.data.origin.name,destination:.data.destination.name},serviceStatus:.data.serviceStatus}'
