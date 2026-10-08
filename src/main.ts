@@ -84,5 +84,20 @@ window.addEventListener('offline',()=>{state.offline=true;state.journey?renderJo
 window.addEventListener('beforeunload',stopTracking);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden&&state.journey&&!state.paused)void refresh();});
 if('Notification' in window&&Notification.permission==='default'){document.addEventListener('click',e=>{if(e.target.id==='set')void Notification.requestPermission().catch(()=>{});},{capture:true});}
-setup();
+const restoredTrip=loadActiveTrip();
+if(restoredTrip){
+  state.journey=restoredTrip;
+  state.origin=restoredTrip.origin;
+  state.destination=restoredTrip.destination;
+  state.onboard=true;
+  state.paused=false;
+  state.lastChecked=new Date(restoredTrip.fetchedAt||Date.now());
+  journeyGeneration++;
+  startTracking();
+  startPolling();
+  renderJourney();
+  if(navigator.onLine)void refresh();
+}else{
+  setup();
+}
 void warmStationIndex();
