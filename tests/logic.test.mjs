@@ -14,3 +14,15 @@ test('nearest station uses geodesic radius',()=>{assert.equal(nearestStation([ce
 test('progress and no duplicate threshold keys calculate accurately',()=>{const p=progress(mock,museum);assert.equal(p.remaining,1);assert.equal(p.toChange,null);assert.deepEqual(alertKeys(mock,1),['destination-one','transfer-2']);});
 test('journey start shows two remaining and next change first',()=>{const p=progress(mock,central);assert.equal(p.remaining,2);assert.equal(p.toChange,1);assert.ok(alertKeys(mock,0).includes('destination-two'));});
 test('Sydney clock uses destination timezone',()=>{assert.match(fmtTime('2026-10-07T03:20:00Z'),/2:20/);});
+
+test('bypassed stations do not count as remaining stops',()=>{
+  const sydenham={id:'10',name:'Sydenham',mode:'train',lat:-33.914,lon:151.166,departure:'2026-10-08T20:51:00+11:00'};
+  const stp={id:'11',name:'St Peters',mode:'train',lat:-33.907,lon:151.181,arrival:null,departure:null};
+  const ersk={id:'12',name:'Erskineville',mode:'train',lat:-33.902,lon:151.185,arrival:null,departure:null};
+  const redfern={id:'13',name:'Redfern',mode:'train',lat:-33.892,lon:151.199,arrival:'2026-10-08T20:57:00+11:00',departure:'2026-10-08T20:57:30+11:00'};
+  const central2={id:'14',name:'Central',mode:'train',lat:-33.883,lon:151.206,arrival:'2026-10-08T20:59:00+11:00',departure:null};
+  const j={...mock,origin:sydenham,destination:central2,stops:[sydenham,stp,ersk,redfern,central2],transfers:[]};
+  const p=progress(j,sydenham);
+  assert.equal(p.remaining,2);
+  assert.deepEqual(alertKeys(j,0),['destination-two']);
+});
