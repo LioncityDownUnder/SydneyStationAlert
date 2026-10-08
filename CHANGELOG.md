@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### UI iteration 10
+- Replace variable-size carriage crowding boxes with compact Car 1, Car 2, etc. labels and fixed-width colour bars. Green means Quiet, amber Moderate, and red Busy/Very busy; a small legend explains the colours. The heading now states the detected car count and Metro/train type.
+
 ### UI iteration 9
 - Fix a crowding render crash that could make Refresh and Pause appear unresponsive after carriage data loaded. Carriage numbers now fall back to Car 1–6 when TfNSW reports position 0.
 
