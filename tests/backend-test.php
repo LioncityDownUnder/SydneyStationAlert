@@ -67,3 +67,32 @@ assertit(count($parsedVehicle['carriages'])===2,'carriage occupancy records are 
 assertit($parsedVehicle['carriages'][0]['level']==='quiet'&&$parsedVehicle['carriages'][0]['quietCarriage']===true,'quiet carriage occupancy is normalized');
 assertit($parsedVehicle['carriages'][1]['level']==='busy','standing-room carriage is normalized as busy');
 assertit(crowding_level_from_occupancy(4)==='very_busy'&&crowding_level_from_occupancy(7)==='unknown','occupancy enum mapping is conservative');
+
+
+$trainUnknown=[
+ 'trip-a'=>['tripId'=>'trip-a','vehicleId'=>'train-a','level'=>'unknown','timestamp'=>1760000000,'carriages'=>[
+  ['name'=>'1','position'=>1,'level'=>'unknown','quietCarriage'=>false,'toilet'=>'unknown','luggageRack'=>false]
+ ]]
+];
+$metroKnown=[
+ 'trip-b'=>['tripId'=>'trip-b','vehicleId'=>'metro-b','level'=>'busy','timestamp'=>1760000001,'carriages'=>[
+  ['name'=>'1','position'=>1,'level'=>'busy','quietCarriage'=>false,'toilet'=>'none','luggageRack'=>false]
+ ]]
+];
+$transferCrowdingRoute=[
+ 'legs'=>[
+  ['id'=>'leg-a','mode'=>'train','tripIds'=>['trip-a']],
+  ['id'=>'leg-b','mode'=>'metro','tripIds'=>['trip-b']]
+ ]
+];
+$combinedCrowding=journey_crowding_from_feeds($transferCrowdingRoute,['train'=>$trainUnknown,'metro'=>$metroKnown]);
+assertit($combinedCrowding['available']===true,'known crowding on one transfer leg makes journey crowding available');
+assertit($combinedCrowding['level']==='busy','journey crowding uses the busiest known leg');
+assertit($combinedCrowding['legs'][0]['vehicleMatched']===true&&$combinedCrowding['legs'][0]['level']==='unknown','matched vehicle with unknown occupancy stays unknown');
+assertit($combinedCrowding['legs'][1]['vehicleMatched']===true&&$combinedCrowding['legs'][1]['level']==='busy','known Metro occupancy is retained on transfer leg');
+
+$unknownOnly=journey_crowding_from_feeds(['legs'=>[['id'=>'leg-a','mode'=>'train','tripIds'=>['trip-a']]]],['train'=>$trainUnknown]);
+assertit($unknownOnly['available']===false&&$unknownOnly['level']==='unknown','matched vehicle without occupancy does not claim crowding is available');
+
+$mismatch=journey_crowding_from_feeds(['legs'=>[['id'=>'leg-x','mode'=>'train','tripIds'=>['missing-trip']]]],['train'=>$trainUnknown]);
+assertit($mismatch['available']===false&&$mismatch['legs'][0]['vehicleMatched']===false,'trip-id mismatch fails open without crowding data');
