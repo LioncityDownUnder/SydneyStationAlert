@@ -169,12 +169,12 @@ async function recoverMissedConnection(legIndex){
  if(!state.onboard||state.checking||!state.journey||legIndex<1)return;
  const original=state.journey,prior=original.legs.slice(0,legIndex),transfer=original.legs[legIndex]?.origin;
  if(!transfer||!prior.length)return;
- const generation=journeyGeneration;state.checking=true;state.recoveringConnection=true;state.message='Finding another train from '+transfer.name+'…';renderJourneyStable();
+ const recoveryRequestedAt=Date.now();const generation=journeyGeneration;state.checking=true;state.recoveringConnection=true;state.message='Finding another train from '+transfer.name+'…';renderJourneyStable();
  try{
   const onward=await getJourney(transfer,original.destination,true);
   if(generation!==journeyGeneration||state.journey!==original)return;
   const departure=Date.parse(onward.legs?.[0]?.departure||onward.legs?.[0]?.origin?.departure||'');
-  if(!Number.isFinite(departure)||departure<Date.now()-60000)throw new Error('No upcoming connection was verified. Please retry shortly.');
+  if(!Number.isFinite(departure)||departure<recoveryRequestedAt)throw new Error('No connection departing after your recovery request was verified. Please retry shortly.');
   const legs=[...prior,...onward.legs];
   const stops=[];for(const leg of legs)for(const station of leg.stops||[leg.origin,leg.destination]){if(!station)continue;const last=stops[stops.length-1];if(last&&(last.id===station.id||last.name===station.name)){stops[stops.length-1]={...last,...station,arrival:last.arrival||station.arrival,departure:station.departure||last.departure};}else stops.push(station);}
   const transfers=[];for(let i=1;i<legs.length;i++){const previous=legs[i-1].destination,current=legs[i].origin;transfers.push({id:current.id,name:current.name,mode:current.mode,lat:current.lat,lon:current.lon,arrivalPlatform:previous.platform,departurePlatform:current.platform});}
