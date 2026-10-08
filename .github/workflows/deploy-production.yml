@@ -100,6 +100,7 @@ jobs:
           NAMECHEAP_DEPLOY_PATH: ${{ secrets.NAMECHEAP_DEPLOY_PATH }}
         run: |
           sshpass -e rsync -az --delete \
+            --exclude='/qatest/' \
             --exclude='api/config.local.php' \
             --exclude='api/cache/' \
             --exclude='*.log' \
