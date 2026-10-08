@@ -243,3 +243,9 @@ button:disabled { cursor: not-allowed; }
 
 /* Recover a missed interchange without abandoning the completed leg. */
 .route .missed-connection-action { display:block; margin-top: 12px; max-width:100%; white-space:normal; text-align:left; }
+
+/* Keep recovery controls legible even when the interchange is shown as a past stop. */
+.stop.past .missed-connection-action { opacity: 1; }
+.connection-recovery { margin: 14px 0; }
+.connection-recovery p { margin: 8px 0 10px; line-height: 1.5; }
+.connection-recovery .missed-connection-action { width: 100%; }
