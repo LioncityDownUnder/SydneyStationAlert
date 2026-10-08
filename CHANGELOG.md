@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### UI iteration 15
+- Treat intermediate stations with no TfNSW arrival or departure time as bypassed stops rather than estimating a time. Bypassed stations are greyed out and labelled “Does not stop”.
+
 ### UI iteration 14
 - Fill gaps in per-station timing when TfNSW omits times for intermediate stops. Missing times are interpolated only when bounded by known stops and are marked with `~` to show they are approximate rather than official timings.
 
