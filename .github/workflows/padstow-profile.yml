@@ -20,7 +20,7 @@ jobs:
           FROM="$(station_id Hurstville)"
           TO="$(station_id Padstow)"
           COUNT=22
-          # forced Beverly Hills pass
+          # forced Riverwood pass
           echo "== cold-ish trip count $COUNT =="
           sleep 30
           TMP="$(mktemp)"
@@ -33,7 +33,7 @@ jobs:
             --data-urlencode "coreOnly=1" \
             --data-urlencode "debugTiming=1" \
             --data-urlencode "debugTripCount=$COUNT" \
-            --data-urlencode "debugTransfer=Beverly Hills" \
+            --data-urlencode "debugTransfer=Riverwood" \
             -o "$TMP" -w 'total=%{time_total}\n'
           jq '{source:.data.source,lines:[.data.legs[].line],transfers:[.data.transfers[].name],timing:.data._debugTiming}' "$TMP"
           rm -f "$TMP"
