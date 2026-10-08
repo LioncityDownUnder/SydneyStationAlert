@@ -31,7 +31,7 @@ try {
   foreach($searchTimes as $probe){
    $body=upstream('trip',['depArrMacro'=>'dep','itdDate'=>$probe->format('Ymd'),'itdTime'=>$probe->format('Hi'),'type_origin'=>'stop','name_origin'=>$from,'type_destination'=>'stop','name_destination'=>$to,'calcNumberOfTrips'=>30,'TfNSWTR'=>'true'],25);
    $route=better_route($route,normalized_journey($body,$originSeed,$destinationSeed));
-   $needsInterchangeCheck=!$route||count(val($route,'legs',[]))>1;
+   $needsInterchangeCheck=!$route;
    foreach($needsInterchangeCheck?prioritized_transfer_candidates($route,$body,$originSeed,$destinationSeed,1):[] as $transfer){
     $firstBody=upstream('trip',['depArrMacro'=>'dep','itdDate'=>$probe->format('Ymd'),'itdTime'=>$probe->format('Hi'),'type_origin'=>'stop','name_origin'=>$from,'type_destination'=>'stop','name_destination'=>$transfer['id'],'calcNumberOfTrips'=>16,'TfNSWTR'=>'true'],25);
     $firstRoute=normalized_journey($firstBody,$originSeed,$transfer);if(!$firstRoute)continue;
@@ -61,7 +61,7 @@ try {
     foreach($searchTimes as $probe){
      $body=upstream('trip',['depArrMacro'=>'dep','itdDate'=>$probe->format('Ymd'),'itdTime'=>$probe->format('Hi'),'type_origin'=>'stop','name_origin'=>$from,'type_destination'=>'stop','name_destination'=>$to,'calcNumberOfTrips'=>30,'TfNSWTR'=>'true'],25);
      $replacement=better_route($replacement,best_unaffected_route(normalized_journeys($body,$originSeed,$destinationSeed),$alertBody));
-     $needsInterchangeCheck=!$replacement||count(val($replacement,'legs',[]))>1;
+     $needsInterchangeCheck=!$replacement;
      foreach($needsInterchangeCheck?prioritized_transfer_candidates($replacement,$body,$originSeed,$destinationSeed,1):[] as $transfer){
       $firstBody=upstream('trip',['depArrMacro'=>'dep','itdDate'=>$probe->format('Ymd'),'itdTime'=>$probe->format('Hi'),'type_origin'=>'stop','name_origin'=>$from,'type_destination'=>'stop','name_destination'=>$transfer['id'],'calcNumberOfTrips'=>16,'TfNSWTR'=>'true'],25);
       $firstRoute=best_unaffected_route(normalized_journeys($firstBody,$originSeed,$transfer),$alertBody);if(!$firstRoute)continue;
