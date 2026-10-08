@@ -624,7 +624,7 @@ function upstream_binary_optional(string $url,int $ttl=15):?string{
  if(!is_dir($cacheDir))@mkdir($cacheDir,0700,true);
  $cache=$cacheDir.'/'.hash('sha256',$url).'.bin';
  if(is_file($cache)&&filemtime($cache)>time()-$ttl){$cached=file_get_contents($cache);if(is_string($cached)&&$cached!=='')return $cached;}
- $h=curl_init($url);curl_setopt_array($h,[CURLOPT_RETURNTRANSFER=>true,CURLOPT_TIMEOUT=>7,CURLOPT_CONNECTTIMEOUT=>3,CURLOPT_HTTPHEADER=>['Authorization: apikey '.$key,'Accept: application/x-protobuf'],CURLOPT_FOLLOWLOCATION=>false]);
+ $h=curl_init($url);curl_setopt_array($h,[CURLOPT_RETURNTRANSFER=>true,CURLOPT_TIMEOUT=>3,CURLOPT_CONNECTTIMEOUT=>1,CURLOPT_HTTPHEADER=>['Authorization: apikey '.$key,'Accept: application/x-protobuf'],CURLOPT_FOLLOWLOCATION=>false]);
  $body=curl_exec($h);$status=(int)curl_getinfo($h,CURLINFO_RESPONSE_CODE);curl_close($h);
  if($status>=200&&$status<300&&is_string($body)&&$body!==''){@file_put_contents($cache,$body,LOCK_EX);return $body;}
  error_log('Sydney Station Alert optional vehicle feed failed: '.$status);return null;
@@ -669,7 +669,7 @@ function upstream_optional(string $endpoint,array $params,int $ttl=60):?array{
  if(is_file($cache)&&filemtime($cache)>time()-$ttl){
   $data=json_decode((string)file_get_contents($cache),true);if(is_array($data))return $data;
  }
- $h=curl_init($url);curl_setopt_array($h,[CURLOPT_RETURNTRANSFER=>true,CURLOPT_TIMEOUT=>7,CURLOPT_CONNECTTIMEOUT=>3,CURLOPT_HTTPHEADER=>['Authorization: apikey '.$key,'Accept: application/json'],CURLOPT_FOLLOWLOCATION=>false]);
+ $h=curl_init($url);curl_setopt_array($h,[CURLOPT_RETURNTRANSFER=>true,CURLOPT_TIMEOUT=>3,CURLOPT_CONNECTTIMEOUT=>1,CURLOPT_HTTPHEADER=>['Authorization: apikey '.$key,'Accept: application/json'],CURLOPT_FOLLOWLOCATION=>false]);
  $body=curl_exec($h);$status=(int)curl_getinfo($h,CURLINFO_RESPONSE_CODE);curl_close($h);
  $json=is_string($body)?json_decode($body,true):null;
  if($status>=200&&$status<300&&is_array($json)){@file_put_contents($cache,json_encode($json),LOCK_EX);return $json;}
