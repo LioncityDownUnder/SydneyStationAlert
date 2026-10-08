@@ -3,7 +3,7 @@ import { searchStations, preloadStations, nearbyStations, getJourney, ApiRequest
 import { GEO, REFRESH_MS, SEARCH_DEBOUNCE_MS, STATION_CACHE_MS } from './constants.js';
 import { nearestStation, progress, alertKeys, fmtTime, escapeHTML as esc } from './logic.js';
 const root = document.getElementById('app');
-const state = { origin: null, destination: null, detected: false, manual: false, locating: false, location: null, journey: null, onboard: false, paused: false, busy: false, checking: false, recoveringConnection: false, enriching: false, message: '', alert: '', searchResults: [], activeField: null, searchLoading: false, searchQuery: '', searchError: '', highlightedIndex: -1, lastChecked: null, offline: !navigator.onLine, noRoute: false };
+const state = { origin: null, destination: null, detected: false, manual: false, locating: false, location: null, locationCheckedAt: 0, journey: null, onboard: false, paused: false, busy: false, checking: false, recoveringConnection: false, enriching: false, message: '', alert: '', searchResults: [], activeField: null, searchLoading: false, searchQuery: '', searchError: '', highlightedIndex: -1, lastChecked: null, offline: !navigator.onLine, noRoute: false };
 let queryController = null;
 let debounce;
 let watchId = null;
@@ -90,10 +90,30 @@ function renderJourneyStable(){const x=window.scrollX,y=window.scrollY;renderJou
 async function enrichJourney(generation){if(!state.journey)return;state.enriching=true;renderJourneyStable();const statusTimer=window.setTimeout(()=>{if(generation===journeyGeneration&&state.enriching){state.enriching=false;renderJourneyStable();}},5000);try{const updated=await getJourney(state.journey.origin,state.journey.destination);if(generation!==journeyGeneration||!state.journey)return;adoptJourneyUpdate(updated);state.lastChecked=new Date();state.message='';checkAlerts();}catch{}finally{clearTimeout(statusTimer);if(generation===journeyGeneration){state.enriching=false;renderJourneyStable();}}}
 async function setJourney(){if(!state.origin||!state.destination||state.origin.id===state.destination.id)return;const generation=++journeyGeneration;state.busy=true;state.enriching=false;state.message='';state.noRoute=false;setup();try{const j=await getJourney(state.origin,state.destination,true);if(generation!==journeyGeneration)return;state.journey=j;state.onboard=false;clearActiveTrip();state.busy=false;state.paused=false;state.lastChecked=new Date();state.alert='';fired.clear();startTracking();startPolling();renderJourney();void enrichJourney(generation);}catch(e){if(generation!==journeyGeneration)return;state.busy=false;state.enriching=false;state.journey=null;state.noRoute=e instanceof ApiRequestError&&e.code==='NO_ROUTE';state.message=e.message;setup();}}
 function stopTracking(){if(watchId!==null&&navigator.geolocation)navigator.geolocation.clearWatch(watchId);watchId=null;clearInterval(pollId);pollId=undefined;}
-function startTracking(){if(watchId!==null||!navigator.geolocation||state.paused)return;try{watchId=navigator.geolocation.watchPosition(p=>{state.location={lat:p.coords.latitude,lon:p.coords.longitude};checkAlerts();renderJourneyStable();},()=>{},{...GEO.options,maximumAge:20000});}catch{}}
+function startTracking(){if(watchId!==null||!navigator.geolocation||state.paused)return;try{watchId=navigator.geolocation.watchPosition(p=>{state.location={lat:p.coords.latitude,lon:p.coords.longitude};state.locationCheckedAt=Date.now();checkAlerts();renderJourneyStable();},()=>{},{...GEO.options,maximumAge:20000});}catch{}}
 function startPolling(){clearInterval(pollId);if(!state.paused)pollId=window.setInterval(()=>{if(!document.hidden&&navigator.onLine)void refresh();},REFRESH_MS);}
 async function refresh(){if(!state.journey||state.checking||state.paused)return;const generation=journeyGeneration;state.checking=true;try{const updated=await getJourney(state.journey.origin,state.journey.destination);if(generation!==journeyGeneration)return;adoptJourneyUpdate(updated);state.lastChecked=new Date();state.message='';checkAlerts();}catch(e){state.message=`Unable to refresh live train details: ${e.message}`;}finally{if(generation===journeyGeneration){state.checking=false;renderJourneyStable();}}}
-function checkAlerts(){if(!state.journey||state.paused||!state.location)return;const p=progress(state.journey,state.location);if(!p.nearest)return;for(const key of alertKeys(state.journey,p.index)){if(fired.has(key))continue;fired.add(key);const text=key==='destination-two'?`2 stops to ${state.journey.destination.name}`:key==='destination-one'?`1 stop to ${state.journey.destination.name}`:`Change trains at ${state.journey.transfers.find(t=>'transfer-'+t.id===key)?.name??'the next interchange'}`;state.alert=text;if(Notification.permission==='granted')try{new Notification('Sydney Station Alert',{body:text,tag:state.journey.id+'-'+key});}catch{}}}
+// A stale or distant GPS reading must never trigger a missed-connection warning.
+function suspectedMissedConnection(){
+ if(!state.onboard||state.paused||state.recoveringConnection||!state.journey||!state.location||Date.now()-state.locationCheckedAt>90000)return -1;
+ const legs=state.journey.legs||[];
+ for(let i=1;i<legs.length;i++){
+  const stop=legs[i].origin,depart=Date.parse(legs[i].departure||stop?.departure||'');
+  const arrival=Date.parse(legs[i-1].arrival||legs[i-1].destination?.arrival||'');
+  if(!stop||!Number.isFinite(depart)||!Number.isFinite(arrival)||depart<arrival||Date.now()<depart+5*60000||Date.now()>depart+45*60000)continue;
+  if(!Number.isFinite(stop.lat)||!Number.isFinite(stop.lon))continue;
+  const lat=(state.location.lat-stop.lat)*111000,lon=(state.location.lon-stop.lon)*111000*Math.cos(stop.lat*Math.PI/180);
+  if(Math.hypot(lat,lon)<=250)return i;
+ }
+ return -1;
+}
+function updateConnectionWarning(){
+ const index=suspectedMissedConnection();
+ if(index<1)return;
+ const name=state.journey.legs[index].origin.name;
+ state.alert='Possible missed connection at '+name+'. If you did not board the connecting train, use “I missed my connection” to find another service.';
+}
+function checkAlerts(){updateConnectionWarning();if(!state.journey||state.paused||!state.location)return;const p=progress(state.journey,state.location);if(!p.nearest)return;for(const key of alertKeys(state.journey,p.index)){if(fired.has(key))continue;fired.add(key);const text=key==='destination-two'?`2 stops to ${state.journey.destination.name}`:key==='destination-one'?`1 stop to ${state.journey.destination.name}`:`Change trains at ${state.journey.transfers.find(t=>'transfer-'+t.id===key)?.name??'the next interchange'}`;state.alert=text;if(Notification.permission==='granted')try{new Notification('Sydney Station Alert',{body:text,tag:state.journey.id+'-'+key});}catch{}}}
 function displayedProgress(j){
  const gps=progress(j,state.location);
  if(!state.onboard)return progress(j,null);
