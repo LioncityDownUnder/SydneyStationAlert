@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### Reliability
+- Increase the fast core-journey client timeout from 8 seconds to 20 seconds so a slow but still valid TfNSW response is not aborted before the server-side request can finish. The production regression smoke still enforces the normal 5-second performance target.
+
 ### UI iteration 17
 - Count only scheduled stopping stations in “stops to destination” and transfer countdowns. Express/bypassed stations remain visible in the route list but no longer inflate the remaining-stop count or destination alert thresholds.
 
