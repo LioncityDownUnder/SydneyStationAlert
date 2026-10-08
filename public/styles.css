@@ -219,3 +219,17 @@ button:disabled { cursor: not-allowed; }
 /* Keep boarding confirmation attached to the selected origin station. */
 .route .boarding-action { display: block; margin-top: 12px; max-width: 100%; text-align: left; white-space: normal; }
 .route .boarding-confirmed { color: #386c4f; font-weight: 700; }
+
+/* Journey search feedback: reassure commuters during a live timetable lookup. */
+.journey-button-loading { display: inline-flex; align-items: center; justify-content: center; gap: 11px; }
+.journey-spinner { display: inline-block; width: 18px; height: 18px; flex: 0 0 18px; border: 2px solid rgba(70,75,70,.2); border-top-color: #6c706b; border-radius: 50%; animation: spin .8s linear infinite; }
+.journey-search-status { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 13px; color: #626963; font-size: .9rem; line-height: 1.45; text-align: left; }
+.journey-search-pulse { display: inline-flex; align-items: center; gap: 4px; flex: 0 0 auto; }
+.journey-search-pulse span { width: 5px; height: 5px; border-radius: 50%; background: #dc7734; animation: journey-pulse 1.2s ease-in-out infinite; }
+.journey-search-pulse span:nth-child(2) { animation-delay: .15s; }
+.journey-search-pulse span:nth-child(3) { animation-delay: .3s; }
+@keyframes journey-pulse { 0%,65%,100% { opacity: .3; transform: scale(.85); } 35% { opacity: 1; transform: scale(1.2); } }
+@media (prefers-reduced-motion: reduce) {
+ .journey-spinner, .journey-search-pulse span { animation: none; }
+ .journey-search-pulse span { opacity: .8; }
+}
