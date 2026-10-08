@@ -6,6 +6,26 @@ if($_SERVER['REQUEST_METHOD']!=='GET')fail('BAD_REQUEST','Only GET requests are 
 $action=(string)($_GET['action']??'');
 try {
  if($action==='health'){echo json_encode(['data'=>['ok'=>true,'configured'=>source_key()!=='']]);exit;}
+ if($action==='debug-alert-shape'){
+  $now=new DateTimeImmutable('now',new DateTimeZone('Australia/Sydney'));
+  $body=fetch_current_service_alerts($now);
+  if(!is_array($body)){echo json_encode(['data'=>['available'=>false,'alerts'=>[]]]);exit;}
+  $out=[];
+  foreach(current_service_alerts($body) as $raw){
+   if(!is_array($raw))continue;
+   $title=alert_text_field($raw,['title','heading','subject','summary','subtitle','name']);
+   if(!preg_match('/not stopping|cancelled|running late/i',$title))continue;
+   $out[]=[
+    'id'=>(string)val($raw,'id',val($raw,'infoId',val($raw,'identifier',''))),
+    'title'=>$title,
+    'affected'=>val($raw,'affected',[]),
+    'affectedLines'=>val($raw,'affectedLines',[]),
+    'affectedStops'=>val($raw,'affectedStops',[])
+   ];
+   if(count($out)>=6)break;
+  }
+  echo json_encode(['data'=>['available'=>true,'alerts'=>$out]],JSON_INVALID_UTF8_SUBSTITUTE);exit;
+ }
  if($action==='station-index'){$data=station_index();echo json_encode(['data'=>$data],JSON_INVALID_UTF8_SUBSTITUTE);exit;}
  if($action==='stations'){$q=trim((string)($_GET['q']??''));if(mb_strlen($q)<2||mb_strlen($q)>70)fail('BAD_REQUEST','Enter at least two station-name characters.');$data=station_search($q);echo json_encode(['data'=>$data]);exit;}
  if($action==='nearby'){$lat=filter_var($_GET['lat']??null,FILTER_VALIDATE_FLOAT);$lon=filter_var($_GET['lon']??null,FILTER_VALIDATE_FLOAT);if($lat===false||$lon===false||$lat< -38||$lat> -31||$lon<149||$lon>153)fail('BAD_REQUEST','Location is outside the supported NSW area.');
