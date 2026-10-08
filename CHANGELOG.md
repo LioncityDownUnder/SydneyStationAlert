@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### Performance hardening
+- Profiled the slow Hurstville → Padstow core search and found the delay came from sequential future-probe TfNSW calls, not frontend rendering. The fast core path now searches the near-future probe window in parallel and keeps fallback interchange lookups batched. Production regression timing improved to 2.45s for Hurstville → Padstow, with the full smoke matrix passing under the 5-second target.
+
 ### Reliability
 - Reduce TfNSW journey result volume for the fast core route request so difficult journeys are less likely to exceed the client timeout while preserving the fuller 30-trip search for background enrichment and disruption revalidation.
 
