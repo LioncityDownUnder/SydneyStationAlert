@@ -3,7 +3,7 @@ import { searchStations, preloadStations, nearbyStations, getJourney, ApiRequest
 import { GEO, REFRESH_MS, SEARCH_DEBOUNCE_MS, STATION_CACHE_MS } from './constants.js';
 import { nearestStation, progress, alertKeys, fmtTime, escapeHTML as esc } from './logic.js';
 const root = document.getElementById('app');
-const state = { origin: null, destination: null, detected: false, manual: false, locating: false, location: null, journey: null, paused: false, busy: false, checking: false, enriching: false, message: '', alert: '', searchResults: [], activeField: null, searchLoading: false, searchQuery: '', searchError: '', highlightedIndex: -1, lastChecked: null, offline: !navigator.onLine, noRailToday: false };
+const state = { origin: null, destination: null, detected: false, manual: false, locating: false, location: null, journey: null, onboard: false, paused: false, busy: false, checking: false, enriching: false, message: '', alert: '', searchResults: [], activeField: null, searchLoading: false, searchQuery: '', searchError: '', highlightedIndex: -1, lastChecked: null, offline: !navigator.onLine, noRailToday: false };
 let queryController = null;
 let debounce;
 let watchId = null;
@@ -12,6 +12,14 @@ const fired = new Set();
 let journeyGeneration = 0;
 let searchGeneration = 0;
 const STATION_CACHE_KEY = 'sydney-station-alert:stations:v1';
+const ACTIVE_TRIP_KEY = 'sydney-station-alert:active-trip:v1';
+function activeTripExpiry(j){const arrival=j?.legs?.[j.legs.length-1]?.arrival;const ts=arrival?+new Date(arrival):NaN;return Number.isFinite(ts)?ts+4*60*60*1000:Date.now()+8*60*60*1000;}
+function saveActiveTrip(){if(!state.onboard||!state.journey)return;try{localStorage.setItem(ACTIVE_TRIP_KEY,JSON.stringify({version:1,savedAt:Date.now(),expiresAt:activeTripExpiry(state.journey),journey:state.journey}));}catch{}}
+function clearActiveTrip(){try{localStorage.removeItem(ACTIVE_TRIP_KEY);}catch{}}
+function loadActiveTrip(){try{const raw=localStorage.getItem(ACTIVE_TRIP_KEY);if(!raw)return null;const p=JSON.parse(raw);if(!p||p.version!==1||!p.journey||!Array.isArray(p.journey.legs)||!Array.isArray(p.journey.stops)||Number(p.expiresAt)<=Date.now()){clearActiveTrip();return null;}return p.journey;}catch{clearActiveTrip();return null;}}
+function sameService(a,b){if(!a||!b||!Array.isArray(a.legs)||!Array.isArray(b.legs)||a.legs.length!==b.legs.length)return false;return a.legs.every((leg,i)=>{const other=b.legs[i];const ids=(leg.tripIds||[]).map(x=>String(x).toLowerCase());const otherIds=(other?.tripIds||[]).map(x=>String(x).toLowerCase());if(ids.length&&otherIds.length)return ids.some(id=>otherIds.includes(id));return leg.line===other?.line&&leg.origin?.id===other?.origin?.id&&leg.destination?.id===other?.destination?.id;});}
+function adoptJourneyUpdate(updated){if(!state.onboard){state.journey=updated;return true;}if(!sameService(state.journey,updated))return false;state.journey=updated;saveActiveTrip();return true;}
+
 function loadStationCache() { try {
     const raw = localStorage.getItem(STATION_CACHE_KEY);
     if (!raw) return [];
