@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Journey performance
+- Prioritize the selected route's known interchange and cap transfer validation to two candidates, reducing slow multi-call searches such as Hurstville → Padstow while preserving validated interchange routing.
+- Journey requests now fail with a friendly timeout message instead of exposing the browser AbortError.
+
 ### UI iteration 2
 - Show a single journey-level crowding line when TfNSW provides usable occupancy data: Quiet, Moderate, Busy, or Very busy. Unknown crowding remains hidden, with no carriage breakdown or CSS/layout changes.
 
