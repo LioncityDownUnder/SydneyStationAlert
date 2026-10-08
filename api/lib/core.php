@@ -259,6 +259,13 @@ function best_connecting_route(array $firstRoutes,array $secondRoutes,array $ori
 }
 function route_arrival_ts(array $route):int{$legs=val($route,'legs',[]);if(!is_array($legs)||!$legs)return PHP_INT_MAX;return iso_ts(val($legs[count($legs)-1],'arrival'))??PHP_INT_MAX;}
 function route_departure_ts(array $route):int{$legs=val($route,'legs',[]);if(!is_array($legs)||!$legs)return PHP_INT_MAX;return iso_ts(val($legs[0],'departure'))??PHP_INT_MAX;}
+function journey_search_probes(DateTimeImmutable $now):array{
+ // Search the next 24 hours from now, including the following calendar day.
+ // Keep the established bounded probe offsets and parallel fast path.
+ $times=[$now];
+ foreach([30,60,90,120,180,240,300,360,480,600,720,840,960,1080,1200,1320,1440] as $minutes)$times[]=$now->modify('+'.$minutes.' minutes');
+ return $times;
+}
 function earliest_future_route(array $body,array $origin,array $destination,int $notBefore):?array{
  $best=null;
  foreach(normalized_journeys($body,$origin,$destination) as $route){
