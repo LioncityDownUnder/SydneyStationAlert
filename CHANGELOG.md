@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### UI iteration 12
+- Simplify carriage crowding further by removing visible Car 1–Car 8 labels. The coloured carriage bars now stay on a single row and size themselves evenly to the detected train length, while screen-reader labels retain carriage number and crowding status.
+
 ### UI iteration 11
 - Stabilize live refresh rendering: background refreshes no longer re-render at the start of a fetch, and journey updates preserve the current scroll position. Location updates and pause/resume also keep the page anchored instead of visually jumping.
 
