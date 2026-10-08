@@ -148,3 +148,13 @@ $laterSecond['legs'][0]['arrival']='2026-10-08T23:40:00+11:00';
 $foundLate=best_connecting_route([$earlyFirst,$laterFirst],[$earlySecond,$laterSecond],$originLate,$destinationLate,strtotime('2026-10-08T22:42:00+11:00'));
 assertit($foundLate!==null,'later train is found even when first candidate has departed');
 assertit($foundLate['legs'][0]['departure']==='2026-10-08T22:51:00+11:00'&&$foundLate['legs'][1]['departure']==='2026-10-08T23:20:00+11:00','late interchange uses a valid subsequent T8 service');
+
+$overnightFirst=$firstLate;
+$overnightFirst['legs'][0]['departure']='2026-10-08T23:55:00+11:00';
+$overnightFirst['legs'][0]['arrival']='2026-10-09T00:10:00+11:00';
+$overnightNext=$secondLate;
+$overnightNext['legs'][0]['departure']='2026-10-09T00:24:00+11:00';
+$overnightNext['legs'][0]['arrival']='2026-10-09T00:44:00+11:00';
+$overnight=best_connecting_route([$overnightFirst],[$overnightNext],$originLate,$destinationLate,strtotime('2026-10-08T23:45:00+11:00'));
+assertit($overnight!==null,'train-only interchange after midnight is valid');
+assertit(route_arrival_ts($overnight)>strtotime('2026-10-09T00:40:00+11:00'),'overnight arrival is not cut off at calendar midnight');
