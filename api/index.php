@@ -86,7 +86,9 @@ try {
    $route['serviceStatus']=['level'=>'unavailable','hasMaterialChange'=>false,'updatedAt'=>gmdate('c'),'alerts'=>[],'revalidationAttempted'=>false,'replacementFound'=>false];
    $route['crowding']=['available'=>false,'level'=>'unknown','updatedAt'=>gmdate('c'),'legs'=>[]];
    $route['nextDepartures']=[];
-   echo json_encode(['data'=>$route],JSON_INVALID_UTF8_SUBSTITUTE);exit;
+   journey_perf_qa_header();
+   journey_perf_qa_header();
+  echo json_encode(['data'=>$route],JSON_INVALID_UTF8_SUBSTITUTE);exit;
   }
   journey_perf_phase('enrichment');
   $alertBody=fetch_current_service_alerts($now);
