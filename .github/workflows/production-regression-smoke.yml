@@ -1,0 +1,72 @@
+name: Production Regression Smoke
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/production-regression-smoke.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Verify production health and journey matrix
+        shell: bash
+        run: |
+          set -euo pipefail
+          API="https://trains.nytnetwork.work/api/index.php"
+
+          echo "== Health =="
+          curl --fail --silent --show-error "$API?action=health" | jq -e '.ok == true or .status == "ok"' >/dev/null
+
+          station_id() {
+            curl --fail --silent --show-error --get "$API"               --data-urlencode "action=stations"               --data-urlencode "q=$1" |
+              jq -r --arg n "$1" '.data[] | select((.name|ascii_downcase)==($n|ascii_downcase)) | .id' |
+              head -n1
+          }
+
+          check_core() {
+            local from_name="$1" to_name="$2" max_seconds="$3"
+            local from_id to_id tmp seconds
+            from_id="$(station_id "$from_name")"
+            to_id="$(station_id "$to_name")"
+            test -n "$from_id"
+            test -n "$to_id"
+            tmp="$(mktemp)"
+            seconds="$(curl --fail --silent --show-error --get "$API"               --data-urlencode "action=journey"               --data-urlencode "from=$from_id"               --data-urlencode "to=$to_id"               --data-urlencode "fromName=$from_name"               --data-urlencode "toName=$to_name"               --data-urlencode "coreOnly=1"               -o "$tmp" -w '%{time_total}')"
+
+            echo "$from_name → $to_name: ${seconds}s"
+            jq -e               --arg f "$from_name" --arg t "$to_name"               '.data.origin.name==$f and .data.destination.name==$t
+               and (.data.legs|length)>=1
+               and all(.data.legs[]; (.mode=="train" or .mode=="metro"))
+               and (.data.stops|length)>=2
+               and .data.serviceStatus.level=="unavailable"
+               and .data.crowding.available==false' "$tmp" >/dev/null
+
+            awk -v actual="$seconds" -v max="$max_seconds" 'BEGIN { exit !(actual <= max) }'
+            rm -f "$tmp"
+          }
+
+          echo "== Core journey matrix (target ≤5s) =="
+          check_core "Hurstville" "Kogarah" "5.0"
+          check_core "Chatswood" "Gadigal" "5.0"
+          check_core "Hurstville" "Padstow" "5.0"
+          check_core "Hurstville" "Casula" "5.0"
+
+          echo "== Full live enrichment shape =="
+          FROM="$(station_id Waterloo)"
+          TO="$(station_id Gadigal)"
+          TMP="$(mktemp)"
+          curl --fail --silent --show-error --max-time 30 --get "$API"             --data-urlencode "action=journey"             --data-urlencode "from=$FROM"             --data-urlencode "to=$TO"             --data-urlencode "fromName=Waterloo"             --data-urlencode "toName=Gadigal"             -o "$TMP"
+          jq -e             '.data.serviceStatus
+             and .data.crowding
+             and (.data.crowding.available|type=="boolean")
+             and (.data.crowding.legs|type=="array")
+             and (.data.nextDepartures|type=="array")' "$TMP" >/dev/null
+          rm -f "$TMP"
+
+          echo "Production regression smoke passed."
