@@ -3,6 +3,8 @@
 ## Unreleased
 
 ### Service disruption backend
+- Live verification identified TfNSW exact-service identifiers (RealtimeTripId, AVMSTripID, gtfsTripId, and tripCode) in Trip Planner journey legs and exact affected trips in add_info alerts.
+- Material trip-scoped disruptions now require an exact selected-trip match, preventing a cancellation or skipped-stop alert for another train on the same T4/T8 line from forcing journey revalidation.
 - Live production verification against Hurstville → Central confirmed the TfNSW `add_info` payload uses structured `affected.lines` metadata. The matcher was hardened to use those rail line entities rather than recursively harvesting nested trip/stop data, eliminating unrelated bus/other-line alerts.
 - Read current TfNSW Trip Planner Service Alerts through the documented `add_info` endpoint.
 - Cache the disruption feed for 60 seconds and fail open if the optional alert endpoint is unavailable.
