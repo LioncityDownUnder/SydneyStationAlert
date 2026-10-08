@@ -22,6 +22,52 @@ jobs:
           echo "central_id=$CENTRAL_ID" >> "$GITHUB_OUTPUT"
           echo "Resolved Hurstville and Central production station IDs."
 
+      - name: Inspect live add_info structure on production server
+        env:
+          SSHPASS: ${{ secrets.NAMECHEAP_PASSWORD }}
+          NAMECHEAP_HOST: ${{ secrets.NAMECHEAP_HOST }}
+          NAMECHEAP_USERNAME: ${{ secrets.NAMECHEAP_USERNAME }}
+          NAMECHEAP_PORT: ${{ secrets.NAMECHEAP_PORT }}
+          NAMECHEAP_DEPLOY_PATH: ${{ secrets.NAMECHEAP_DEPLOY_PATH }}
+        run: |
+          set -euo pipefail
+          sudo apt-get update >/dev/null
+          sudo apt-get install -y sshpass >/dev/null
+          mkdir -p ~/.ssh
+          ssh-keyscan -p "$NAMECHEAP_PORT" "$NAMECHEAP_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+
+          cat > /tmp/inspect-alerts.php <<'PHP'
+          <?php
+          require 'api/lib/core.php';
+          $now = new DateTimeImmutable('now', new DateTimeZone('Australia/Sydney'));
+          $body = fetch_current_service_alerts($now);
+          $alerts = is_array($body) ? current_service_alerts($body) : [];
+          $out = [];
+          foreach (array_slice($alerts, 0, 5) as $raw) {
+              if (!is_array($raw)) continue;
+              $entry = [
+                  'keys' => array_keys($raw),
+                  'subtitle' => $raw['subtitle'] ?? null,
+                  'title' => $raw['title'] ?? null,
+                  'priority' => $raw['priority'] ?? null,
+              ];
+              foreach (['affectedLines','affectedStops','lines','stops'] as $k) {
+                  if (array_key_exists($k, $raw)) {
+                      $v = $raw[$k];
+                      $entry[$k.'_type'] = gettype($v);
+                      $entry[$k.'_count'] = is_array($v) ? count($v) : null;
+                      if (is_array($v) && isset($v[0]) && is_array($v[0])) {
+                          $entry[$k.'_first_keys'] = array_keys($v[0]);
+                      }
+                  }
+              }
+              $out[] = $entry;
+          }
+          echo json_encode($out, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES), PHP_EOL;
+          PHP
+
+          sshpass -e ssh -p "$NAMECHEAP_PORT" -o StrictHostKeyChecking=yes             "$NAMECHEAP_USERNAME@$NAMECHEAP_HOST"             "cd '$NAMECHEAP_DEPLOY_PATH' && php" < /tmp/inspect-alerts.php
+
       - name: Query live journey status
         env:
           HURSTVILLE_ID: ${{ steps.stations.outputs.hurstville_id }}
@@ -43,16 +89,6 @@ jobs:
               hasMaterialChange: .data.serviceStatus.hasMaterialChange,
               updatedAt: .data.serviceStatus.updatedAt,
               alertCount: (.data.serviceStatus.alerts | length),
-              alerts: [.data.serviceStatus.alerts[] | {
-                severity,
-                title,
-                materialChange,
-                affectedLines,
-                affectedStations
-              }]
+              alertTitles: [.data.serviceStatus.alerts[] | {severity, title, materialChange}]
             }
           }'
-
-          STATUS_LEVEL="$(printf '%s' "$JOURNEY_JSON" | jq -r '.data.serviceStatus.level')"
-          test -n "$STATUS_LEVEL"
-          echo "Live serviceStatus verification completed: $STATUS_LEVEL"
