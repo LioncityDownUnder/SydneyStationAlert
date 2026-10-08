@@ -259,6 +259,14 @@ function best_connecting_route(array $firstRoutes,array $secondRoutes,array $ori
 }
 function route_arrival_ts(array $route):int{$legs=val($route,'legs',[]);if(!is_array($legs)||!$legs)return PHP_INT_MAX;return iso_ts(val($legs[count($legs)-1],'arrival'))??PHP_INT_MAX;}
 function route_departure_ts(array $route):int{$legs=val($route,'legs',[]);if(!is_array($legs)||!$legs)return PHP_INT_MAX;return iso_ts(val($legs[0],'departure'))??PHP_INT_MAX;}
+function earliest_future_route(array $body,array $origin,array $destination,int $notBefore):?array{
+ $best=null;
+ foreach(normalized_journeys($body,$origin,$destination) as $route){
+  if(route_departure_ts($route)<$notBefore)continue;
+  $best=better_route($best,$route);
+ }
+ return $best;
+}
 function route_rank(array $route):array{
  $arrival=route_arrival_ts($route);$departure=route_departure_ts($route);
  $duration=($arrival!==PHP_INT_MAX&&$departure!==PHP_INT_MAX&&$arrival>=$departure)?$arrival-$departure:PHP_INT_MAX;
