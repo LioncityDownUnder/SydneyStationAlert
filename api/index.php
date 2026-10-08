@@ -47,6 +47,12 @@ try {
   if(!$route)fail('NO_RAIL_TODAY','No more train services are available today from '.$fromName.' to '.$toName.'.',404);
   $first=$route['legs'][0];$dep=upstream('departure_mon',['mode'=>'direct','type_dm'=>'stop','name_dm'=>$first['origin']['id'],'depArrMacro'=>'dep','itdDate'=>$now->format('Ymd'),'itdTime'=>$now->format('Hi'),'TfNSWDM'=>'true'],25);
   $times=[];foreach(val($dep,'stopEvents',[]) as $evt){if(!mode(val($evt,'transportation',[])))continue;$t=val($evt,'departureTimeEstimated',val($evt,'departureTimePlanned'));if(is_string($t)&&strtotime($t)!==false)$times[]=$t;if(count($times)>=2)break;}$route['nextDepartures']=$times;
+  $alertBody=fetch_current_service_alerts($now);
+  if(is_array($alertBody)){
+   $route['serviceStatus']=journey_service_status($route,$alertBody);
+  }else{
+   $route['serviceStatus']=['level'=>'unavailable','hasMaterialChange'=>false,'updatedAt'=>gmdate('c'),'alerts'=>[]];
+  }
   echo json_encode(['data'=>$route],JSON_INVALID_UTF8_SUBSTITUTE);exit;
  }
  fail('BAD_REQUEST','Unknown API action.',404);
