@@ -96,3 +96,23 @@ assertit($unknownOnly['available']===false&&$unknownOnly['level']==='unknown','m
 
 $mismatch=journey_crowding_from_feeds(['legs'=>[['id'=>'leg-x','mode'=>'train','tripIds'=>['missing-trip']]]],['train'=>$trainUnknown]);
 assertit($mismatch['available']===false&&$mismatch['legs'][0]['vehicleMatched']===false,'trip-id mismatch fails open without crowding data');
+
+
+$routeWithKnownTransfer=[
+ 'transfers'=>[
+  ['id'=>'220810','name'=>'Wolli Creek','mode'=>'train','lat'=>-33.928,'lon'=>151.154]
+ ]
+];
+$transferBody=[
+ 'journeys'=>[
+  ['legs'=>[
+   ['transportation'=>['product'=>['class'=>1],'disassembledName'=>'T4'],'origin'=>['id'=>'222020','name'=>'Hurstville','coord'=>[-33.967,151.102]],'destination'=>['id'=>'220810','name'=>'Wolli Creek','coord'=>[-33.928,151.154]]],
+   ['transportation'=>['product'=>['class'=>1],'disassembledName'=>'T8'],'origin'=>['id'=>'220810','name'=>'Wolli Creek','coord'=>[-33.928,151.154]],'destination'=>['id'=>'221810','name'=>'Padstow','coord'=>[-33.953,151.031]]]
+  ]]
+ ]
+];
+$prioritized=prioritized_transfer_candidates($routeWithKnownTransfer,$transferBody,
+ ['id'=>'222020','name'=>'Hurstville','mode'=>'train','lat'=>-33.967,'lon'=>151.102],
+ ['id'=>'221810','name'=>'Padstow','mode'=>'train','lat'=>-33.953,'lon'=>151.031],2);
+assertit(count($prioritized)<=2,'transfer validation fanout is capped');
+assertit(($prioritized[0]['name']??'')==='Wolli Creek','selected route transfer is validated first');
