@@ -215,3 +215,7 @@ button:disabled { cursor: not-allowed; }
   .selected-station { grid-template-columns: minmax(0,1fr) auto; column-gap: 8px; }
   .change-station { padding-inline: 11px; }
 }
+
+/* Keep boarding confirmation attached to the selected origin station. */
+.route .boarding-action { display: block; margin-top: 12px; max-width: 100%; text-align: left; white-space: normal; }
+.route .boarding-confirmed { color: #386c4f; font-weight: 700; }
