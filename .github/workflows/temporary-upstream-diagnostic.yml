@@ -1,4 +1,4 @@
-name: Temporary Upstream Route Diagnostic
+name: Temporary Upstream Path Diagnostic
 on:
   push:
     paths:
