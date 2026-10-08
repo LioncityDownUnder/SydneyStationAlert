@@ -57,7 +57,7 @@ try {
    $body=timed_upstream('trip',['depArrMacro'=>'dep','itdDate'=>$probe->format('Ymd'),'itdTime'=>$probe->format('Hi'),'type_origin'=>'stop','name_origin'=>$from,'type_destination'=>'stop','name_destination'=>$to,'calcNumberOfTrips'=>$tripCount,'TfNSWTR'=>'true'],25);
    $route=better_route($route,timed_normalized_journey($body,$originSeed,$destinationSeed));
    $needsInterchangeCheck=!$route;
-   $candidateList=$needsInterchangeCheck?($knownTransfer?[$knownTransfer]:timed_transfer_candidates($route,$body,$originSeed,$destinationSeed,1)):[];
+   $candidateList=$needsInterchangeCheck?($knownTransfer?array_merge([$knownTransfer],array_filter(timed_transfer_candidates($route,$body,$originSeed,$destinationSeed,1),fn($t)=>!same_station($t,$knownTransfer))):timed_transfer_candidates($route,$body,$originSeed,$destinationSeed,1)):[];
    foreach($candidateList as $transfer){
     $firstBody=timed_upstream('trip',['depArrMacro'=>'dep','itdDate'=>$probe->format('Ymd'),'itdTime'=>$probe->format('Hi'),'type_origin'=>'stop','name_origin'=>$from,'type_destination'=>'stop','name_destination'=>$transfer['id'],'calcNumberOfTrips'=>$fallbackTripCount,'TfNSWTR'=>'true'],25);
     $firstRoute=timed_normalized_journey($firstBody,$originSeed,$transfer);if(!$firstRoute)continue;
