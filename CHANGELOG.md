@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### Performance pass
+- Return and render the core rail journey first, before optional disruption, crowding, and departure-monitor enrichment. Optional live details now load in the background so they do not block the initial journey result.
+
 ### UI iteration 5
 - When a disrupted journey is automatically replaced, explain that the original service was affected and show the replacement route's interchange station(s) when available.
 
