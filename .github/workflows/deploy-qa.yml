@@ -114,6 +114,7 @@ jobs:
             jq -e '.data.legs|length>=1' "$tmp" >/dev/null
             echo "$from to $to: ${time}s (5s target)"
             grep -i '^server-timing:' "$headers" || true
+            grep -i '^x-qa-journey-search:' "$headers" || true
             rm -f "$tmp" "$headers"
           }
           check_route Hurstville Kogarah
