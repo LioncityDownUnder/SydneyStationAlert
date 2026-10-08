@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### UI cache fix
+- Bump frontend asset cache keys so the new carriage crowding styles load immediately instead of rendering as unstyled concatenated text from a stale stylesheet.
+
 ### UI iteration 3
 - Show a compact carriage-by-carriage crowding row when TfNSW provides usable carriage occupancy. Unknown carriage occupancy stays hidden; no new card or navigation is introduced.
 
