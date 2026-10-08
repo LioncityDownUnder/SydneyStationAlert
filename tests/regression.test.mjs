@@ -64,3 +64,10 @@ test('additional journey prefetch is bounded and preserves sequential fallback',
  assert.match(api,/array_key_exists\(\$probeIndex,\$prefetchedBodies\)/);
  assert.match(api,/:timed_upstream\('trip',/);
 });
+
+test('verified core-only route skips redundant additional timetable probes',()=>{
+ const api=fs.readFileSync('api/index.php','utf8');
+ assert.match(api,/if\(\$coreOnly&&\$route\)\$remainingSearchTimes=\[\];/);
+ assert.match(api,/foreach\(\$remainingSearchTimes as \$probeIndex=>\$probe\)/);
+ assert.match(api,/if\(\$coreOnly&&!\$route&&count\(\$remainingSearchTimes\)>=2\)/);
+});
