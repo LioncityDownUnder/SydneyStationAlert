@@ -6,9 +6,9 @@ test('network calls never contain a client API secret',()=>{const code=fs.readFi
 test('provider fixtures exist',()=>{for(const name of ['success','no-route','mixed','transfer','missing-platform','partial'])assert.ok(JSON.parse(fs.readFileSync(`tests/fixtures/${name}.json`)));});
 
 import {nearestStation,progress,alertKeys,fmtTime} from '../dist/assets/logic.js';
-const central={id:'1',name:'Central',mode:'train',lat:-33.883,lon:151.206};
-const museum={id:'2',name:'Museum',mode:'train',lat:-33.876,lon:151.209};
-const town={id:'3',name:'Town Hall',mode:'train',lat:-33.873,lon:151.207};
+const central={id:'1',name:'Central',mode:'train',lat:-33.883,lon:151.206,departure:'2026-10-07T14:20:00+11:00'};
+const museum={id:'2',name:'Museum',mode:'train',lat:-33.876,lon:151.209,arrival:'2026-10-07T14:23:00+11:00',departure:'2026-10-07T14:23:30+11:00'};
+const town={id:'3',name:'Town Hall',mode:'train',lat:-33.873,lon:151.207,arrival:'2026-10-07T14:26:00+11:00'};
 const mock={id:'test',origin:central,destination:town,legs:[],stops:[central,museum,town],transfers:[museum],omittedNonRail:false,fetchedAt:'2026-10-07T00:00:00Z',source:'live',nextDepartures:[]};
 test('nearest station uses geodesic radius',()=>{assert.equal(nearestStation([central,museum],central)?.id,'1');assert.equal(nearestStation([central],{lat:-34.5,lon:150.4}),null);});
 test('progress and no duplicate threshold keys calculate accurately',()=>{const p=progress(mock,museum);assert.equal(p.remaining,1);assert.equal(p.toChange,null);assert.deepEqual(alertKeys(mock,1),['destination-one','transfer-2']);});
