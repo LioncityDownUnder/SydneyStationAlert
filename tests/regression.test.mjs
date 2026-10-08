@@ -117,11 +117,10 @@ test('background alert limitations are disclosed and foreground checks resume',(
  assert.match(main,/addEventListener\('pageshow'/);
 });
 
-test('missed connection recovery remains available independently of journey progress',()=>{
+test('missed connection recovery stays on interchange stops without duplicate top panel',()=>{
  const main=fs.readFileSync('src/main.ts','utf8');
- assert.match(main,/const missedConnectionActions=state\.onboard&&j\.legs\.length>1/);
- assert.match(main,/j\.legs\.slice\(1\)\.map/);
- assert.match(main,/I missed my connection at/);
- assert.match(main,/\$\{missedConnectionActions\}\$\{serviceUpdate\(j\)\}/);
+ assert.doesNotMatch(main,/missedConnectionActions|connection-recovery/);
+ assert.match(main,/transfer&&state.onboard/);
  assert.match(main,/data-recover-leg/);
+ assert.match(main,/window\.confirm\('Confirm missed connection at '/);
 });
