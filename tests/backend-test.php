@@ -158,3 +158,11 @@ $overnightNext['legs'][0]['arrival']='2026-10-09T00:44:00+11:00';
 $overnight=best_connecting_route([$overnightFirst],[$overnightNext],$originLate,$destinationLate,strtotime('2026-10-08T23:45:00+11:00'));
 assertit($overnight!==null,'train-only interchange after midnight is valid');
 assertit(route_arrival_ts($overnight)>strtotime('2026-10-09T00:40:00+11:00'),'overnight arrival is not cut off at calendar midnight');
+
+$lateProbeStart=new DateTimeImmutable('2026-10-08T23:42:00+11:00');
+$lateProbes=journey_search_probes($lateProbeStart);
+assertit(count($lateProbes)===18,'overnight search keeps the bounded probe count');
+assertit($lateProbes[0]->format('Y-m-d H:i')==='2026-10-08 23:42','overnight search begins at the requested current time');
+assertit($lateProbes[1]->format('Y-m-d H:i')==='2026-10-09 00:12','overnight search probes the following date');
+assertit($lateProbes[4]->format('Y-m-d H:i')==='2026-10-09 01:42','overnight search retains five probes for the parallel fast path');
+assertit($lateProbes[count($lateProbes)-1]->format('Y-m-d H:i')==='2026-10-09 23:42','overnight search ends within a rolling 24-hour horizon');
