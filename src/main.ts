@@ -11,8 +11,9 @@ let pollId;
 const fired = new Set();
 let journeyGeneration = 0;
 let searchGeneration = 0;
-const STATION_CACHE_KEY = 'sydney-station-alert:stations:v1';
-const ACTIVE_TRIP_KEY = 'sydney-station-alert:active-trip:v1';
+const isQaEnvironment = /^\/qatest(?:\/|$)/.test(window.location.pathname);
+const STATION_CACHE_KEY = isQaEnvironment ? 'sydstnalert:qa:stations:v1' : 'sydney-station-alert:stations:v1';
+const ACTIVE_TRIP_KEY = isQaEnvironment ? 'sydstnalert:qa:active-trip:v1' : 'sydney-station-alert:active-trip:v1';
 function activeTripExpiry(j){const arrival=j?.legs?.[j.legs.length-1]?.arrival;const ts=arrival?+new Date(arrival):NaN;return Number.isFinite(ts)?ts+4*60*60*1000:Date.now()+8*60*60*1000;}
 function saveActiveTrip(){if(!state.onboard||!state.journey)return;try{localStorage.setItem(ACTIVE_TRIP_KEY,JSON.stringify({version:1,savedAt:Date.now(),expiresAt:activeTripExpiry(state.journey),journey:state.journey}));}catch{}}
 function clearActiveTrip(){try{localStorage.removeItem(ACTIVE_TRIP_KEY);}catch{}}
