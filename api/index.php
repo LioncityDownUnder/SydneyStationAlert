@@ -64,6 +64,9 @@ try {
   $qaSearchDiagnostics=['initial_route_found'=>$route!==null,'additional_probes'=>0,'additional_route_probe'=>0,'additional_prefetch_count'=>0,'interchange_checks'=>0];
   journey_perf_phase('additional_search');
   $remainingSearchTimes=($coreOnly&&count($searchTimes)>=6)?array_slice($searchTimes,6):$searchTimes;
+  // The initial batch has already verified a train-only route. Avoid an extra
+  // TfNSW lookup on core-only requests; retain full search for non-core requests.
+  if($coreOnly&&$route)$remainingSearchTimes=[];
   // Prefetch the next two probes together only when the initial batch found no route.
   // Keep later probes sequential to limit unnecessary upstream requests.
   $prefetchedBodies=[];
