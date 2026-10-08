@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### UI iteration 13
+- Show a concise journey time beside each station in the route list. The origin uses departure time; intermediate, transfer, and destination stops use arrival time with departure as a fallback. Platform information stays on the same muted detail line.
+
 ### Regression hardening
 - Add a production regression smoke suite that runs after successful deployments. It checks production health, direct Sydney Trains and Metro journeys, one- and two-interchange routes, the 5-second core-journey target, rail-only legs, and the full live enrichment response shape.
 
