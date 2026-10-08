@@ -12,13 +12,15 @@ $alertRoute=[
   ['id'=>'220810','name'=>'Wolli Creek','mode'=>'train','lat'=>-33.928,'lon'=>151.154],
   ['id'=>'222020','name'=>'Hurstville','mode'=>'train','lat'=>-33.967,'lon'=>151.102]
  ],
- 'legs'=>[['id'=>'leg-0','line'=>'T4 Eastern Suburbs & Illawarra Line']]
+ 'legs'=>[['id'=>'leg-0','line'=>'T4 Eastern Suburbs & Illawarra Line','tripIds'=>['selected-live-trip','232']]]
 ];
 $status=journey_service_status($alertRoute,$alertBody);
 assertit(count($status['alerts'])===2,'journey filters unrelated bus and other-line service alerts');
 assertit($status['level']==='major','material stopping-pattern alert is major');
 assertit($status['hasMaterialChange']===true,'material service change triggers revalidation flag');
 assertit($status['alerts'][0]['materialChange']===true,'not-stopping alert is marked material');
+assertit(!in_array('alert-t4-other-trip-major',array_column($status['alerts'],'id'),true),'same-line material alert for another trip is excluded');
+assertit(in_array('selected-live-trip',$status['alerts'][0]['affectedTrips'],true),'exact realtime trip id is retained for matching');
 
 assertit($status['alerts'][0]['affectedLines'][0] !== '970','bus line is not exposed as a rail disruption');
 assertit(!in_array('T1 North Shore & Western Line',$status['alerts'][0]['affectedLines'],true),'other rail lines do not match merely through a shared station');
