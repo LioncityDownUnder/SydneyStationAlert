@@ -20,6 +20,8 @@ try {
   $originSeed=['id'=>$from,'name'=>$fromName,'lat'=>0.0,'lon'=>0.0,'mode'=>'train'];
   $destinationSeed=['id'=>$to,'name'=>$toName,'lat'=>0.0,'lon'=>0.0,'mode'=>'train'];
   $now=new DateTimeImmutable('now',new DateTimeZone('Australia/Sydney'));
+  $coreOnly=(string)($_GET['coreOnly']??'')==='1';
+  $tripCount=$coreOnly?10:30;
   $route=null;
   $searchTimes=[$now];
   $offsets=[30,60,90,120,180,240,300,360,480,600,720,840,960,1080,1200,1320,1440];
@@ -29,7 +31,7 @@ try {
    $searchTimes[]=$probe;
   }
   foreach($searchTimes as $probe){
-   $body=upstream('trip',['depArrMacro'=>'dep','itdDate'=>$probe->format('Ymd'),'itdTime'=>$probe->format('Hi'),'type_origin'=>'stop','name_origin'=>$from,'type_destination'=>'stop','name_destination'=>$to,'calcNumberOfTrips'=>30,'TfNSWTR'=>'true'],25);
+   $body=upstream('trip',['depArrMacro'=>'dep','itdDate'=>$probe->format('Ymd'),'itdTime'=>$probe->format('Hi'),'type_origin'=>'stop','name_origin'=>$from,'type_destination'=>'stop','name_destination'=>$to,'calcNumberOfTrips'=>$tripCount,'TfNSWTR'=>'true'],25);
    $route=better_route($route,normalized_journey($body,$originSeed,$destinationSeed));
    $needsInterchangeCheck=!$route;
    foreach($needsInterchangeCheck?prioritized_transfer_candidates($route,$body,$originSeed,$destinationSeed,1):[] as $transfer){
@@ -45,7 +47,6 @@ try {
    if($route)break;
   }
   if(!$route)fail('NO_RAIL_TODAY','No more train services are available today from '.$fromName.' to '.$toName.'.',404);
-  $coreOnly=(string)($_GET['coreOnly']??'')==='1';
   if($coreOnly){
    $route['serviceStatus']=['level'=>'unavailable','hasMaterialChange'=>false,'updatedAt'=>gmdate('c'),'alerts'=>[],'revalidationAttempted'=>false,'replacementFound'=>false];
    $route['crowding']=['available'=>false,'level'=>'unknown','updatedAt'=>gmdate('c'),'legs'=>[]];
@@ -59,7 +60,7 @@ try {
    if($initialStatus['hasMaterialChange']===true){
     $replacement=null;
     foreach($searchTimes as $probe){
-     $body=upstream('trip',['depArrMacro'=>'dep','itdDate'=>$probe->format('Ymd'),'itdTime'=>$probe->format('Hi'),'type_origin'=>'stop','name_origin'=>$from,'type_destination'=>'stop','name_destination'=>$to,'calcNumberOfTrips'=>30,'TfNSWTR'=>'true'],25);
+     $body=upstream('trip',['depArrMacro'=>'dep','itdDate'=>$probe->format('Ymd'),'itdTime'=>$probe->format('Hi'),'type_origin'=>'stop','name_origin'=>$from,'type_destination'=>'stop','name_destination'=>$to,'calcNumberOfTrips'=>$tripCount,'TfNSWTR'=>'true'],25);
      $replacement=better_route($replacement,best_unaffected_route(normalized_journeys($body,$originSeed,$destinationSeed),$alertBody));
      $needsInterchangeCheck=!$replacement;
      foreach($needsInterchangeCheck?prioritized_transfer_candidates($replacement,$body,$originSeed,$destinationSeed,1):[] as $transfer){
