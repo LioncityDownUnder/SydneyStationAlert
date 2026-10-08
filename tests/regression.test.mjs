@@ -124,3 +124,11 @@ test('missed connection recovery stays on interchange stops without duplicate to
  assert.match(main,/data-recover-leg/);
  assert.match(main,/window\.confirm\('Confirm missed connection at '/);
 });
+
+test('late missed connection recovery requires departure after request',()=>{
+ const main=fs.readFileSync('src/main.ts','utf8');
+ assert.match(main,/const recoveryRequestedAt=Date\.now\(\)/);
+ assert.match(main,/departure<recoveryRequestedAt/);
+ assert.match(main,/window\.confirm\('Confirm missed connection at '/);
+ assert.match(main,/transfer&&state\.onboard/);
+});
