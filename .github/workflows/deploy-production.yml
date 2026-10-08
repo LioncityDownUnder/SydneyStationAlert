@@ -1,0 +1,113 @@
+name: Deploy Production
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install TypeScript
+        run: npm install --no-save typescript@5.9.3
+
+      - name: Run project checks
+        run: npm run check
+
+      - name: PHP syntax
+        run: |
+          php -l api/index.php
+          php -l api/lib/core.php
+
+      - name: PHP fixture tests
+        run: php tests/backend-test.php
+
+      - name: Upload production build
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-dist
+          path: dist/
+          if-no-files-found: error
+
+  deploy:
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download production build
+        uses: actions/download-artifact@v4
+        with:
+          name: production-dist
+          path: dist
+
+      - name: Validate deployment secrets
+        env:
+          NAMECHEAP_HOST: ${{ secrets.NAMECHEAP_HOST }}
+          NAMECHEAP_USERNAME: ${{ secrets.NAMECHEAP_USERNAME }}
+          NAMECHEAP_PASSWORD: ${{ secrets.NAMECHEAP_PASSWORD }}
+          NAMECHEAP_PORT: ${{ secrets.NAMECHEAP_PORT }}
+          NAMECHEAP_DEPLOY_PATH: ${{ secrets.NAMECHEAP_DEPLOY_PATH }}
+        run: |
+          test -n "$NAMECHEAP_HOST"
+          test -n "$NAMECHEAP_USERNAME"
+          test -n "$NAMECHEAP_PASSWORD"
+          test -n "$NAMECHEAP_PORT"
+          test -n "$NAMECHEAP_DEPLOY_PATH"
+
+      - name: Install deployment tools
+        run: sudo apt-get update && sudo apt-get install -y sshpass rsync
+
+      - name: Trust Namecheap SSH host
+        env:
+          NAMECHEAP_HOST: ${{ secrets.NAMECHEAP_HOST }}
+          NAMECHEAP_PORT: ${{ secrets.NAMECHEAP_PORT }}
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          ssh-keyscan -p "$NAMECHEAP_PORT" "$NAMECHEAP_HOST" >> ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Test Namecheap SSH connection
+        env:
+          SSHPASS: ${{ secrets.NAMECHEAP_PASSWORD }}
+          NAMECHEAP_HOST: ${{ secrets.NAMECHEAP_HOST }}
+          NAMECHEAP_USERNAME: ${{ secrets.NAMECHEAP_USERNAME }}
+          NAMECHEAP_PORT: ${{ secrets.NAMECHEAP_PORT }}
+          NAMECHEAP_DEPLOY_PATH: ${{ secrets.NAMECHEAP_DEPLOY_PATH }}
+        run: |
+          sshpass -e ssh -p "$NAMECHEAP_PORT" \
+            -o StrictHostKeyChecking=yes \
+            "$NAMECHEAP_USERNAME@$NAMECHEAP_HOST" \
+            "test -d '$NAMECHEAP_DEPLOY_PATH'"
+
+      - name: Deploy to Namecheap
+        env:
+          SSHPASS: ${{ secrets.NAMECHEAP_PASSWORD }}
+          NAMECHEAP_HOST: ${{ secrets.NAMECHEAP_HOST }}
+          NAMECHEAP_USERNAME: ${{ secrets.NAMECHEAP_USERNAME }}
+          NAMECHEAP_PORT: ${{ secrets.NAMECHEAP_PORT }}
+          NAMECHEAP_DEPLOY_PATH: ${{ secrets.NAMECHEAP_DEPLOY_PATH }}
+        run: |
+          sshpass -e rsync -az --delete \
+            --exclude='api/config.local.php' \
+            --exclude='api/cache/' \
+            --exclude='*.log' \
+            -e "ssh -p $NAMECHEAP_PORT -o StrictHostKeyChecking=yes" \
+            dist/ \
+            "$NAMECHEAP_USERNAME@$NAMECHEAP_HOST:$NAMECHEAP_DEPLOY_PATH/"
+
+      - name: Verify production health
+        run: |
+          curl --fail --silent --show-error --retry 3 --retry-delay 3 \
+            "https://trains.nytnetwork.work/api/index.php?action=health"
