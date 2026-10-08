@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### UI iteration 7
+- Make carriage crowding understandable for first-time commuters: label cars as Car 1, Car 2, etc., add a short explanation, and hide the whole-train crowding summary when carriage-level data is available. TfNSW carriage codes remain available only as secondary metadata.
+
 ### UI iteration 6
 - After the fast core journey appears, show a subtle “Checking live service details…” status in the existing last-checked area while disruption, crowding, and departure details load in the background.
 
