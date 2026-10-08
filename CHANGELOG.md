@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### Regression hardening
+- Add a production regression smoke suite that runs after successful deployments. It checks production health, direct Sydney Trains and Metro journeys, one- and two-interchange routes, the 5-second core-journey target, rail-only legs, and the full live enrichment response shape.
+
 ### UI iteration 12
 - Simplify carriage crowding further by removing visible Car 1–Car 8 labels. The coloured carriage bars now stay on a single row and size themselves evenly to the detected train length, while screen-reader labels retain carriage number and crowding status.
 
