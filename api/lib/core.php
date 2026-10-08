@@ -363,7 +363,7 @@ function alert_affected_scope(array $raw):array{
     if($v!=='')$lines[$v]=true;
    }
    $lineTrips=val($line,'trips',[]);
-   foreach(alert_scope_values($lineTrips,['id','tripId','realtimeTripId','RealtimeTripId','AVMSTripID','gtfsTripId','tripCode','trainNumber','name','number']) as $v)$trips[strtolower($v)]=true;
+   foreach(alert_scope_values($lineTrips,['id','tripId','realtimeTripId','RealtimeTripId','AVMSTripID','gtfsTripId','tripCode','trainNumber','name','number']) as $v)$trips[strtolower((string)$v)]=true;
   }
  }
 
