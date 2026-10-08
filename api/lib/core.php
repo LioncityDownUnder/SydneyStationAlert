@@ -216,6 +216,24 @@ function rail_transfer_candidates(array $body,array $origin,array $destination,i
  usort($ranked,fn($a,$b)=>$b['score']<=>$a['score'] ?: strnatcasecmp((string)$a['station']['name'],(string)$b['station']['name']));
  return array_map(fn($x)=>$x['station'],array_slice($ranked,0,$limit));
 }
+function prioritized_transfer_candidates(?array $route,array $body,array $origin,array $destination,int $limit=2):array{
+ $out=[];$seen=[];
+ if(is_array($route)){
+  foreach(val($route,'transfers',[]) as $transfer){
+   if(!is_array($transfer))continue;
+   $name=strtolower(clean_station_name((string)val($transfer,'name','')));$id=strtolower(trim((string)val($transfer,'id','')));
+   $key=$id!==''?$id:$name;if($key===''||isset($seen[$key]))continue;
+   $seen[$key]=true;$out[]=['id'=>(string)val($transfer,'id',''),'name'=>(string)val($transfer,'name',''),'mode'=>(string)val($transfer,'mode','train'),'lat'=>(float)val($transfer,'lat',0.0),'lon'=>(float)val($transfer,'lon',0.0)];
+   if(count($out)>=$limit)return $out;
+  }
+ }
+ foreach(rail_transfer_candidates($body,$origin,$destination,$limit*2) as $transfer){
+  $name=strtolower(clean_station_name((string)val($transfer,'name','')));$id=strtolower(trim((string)val($transfer,'id','')));
+  $key=$id!==''?$id:$name;if($key===''||isset($seen[$key]))continue;
+  $seen[$key]=true;$out[]=$transfer;if(count($out)>=$limit)break;
+ }
+ return $out;
+}
 function stitch_routes(array $first,array $second,array $origin,array $destination):?array{
  $legs1=val($first,'legs',[]);$legs2=val($second,'legs',[]);if(!is_array($legs1)||!$legs1||!is_array($legs2)||!$legs2)return null;
  $end1=$legs1[count($legs1)-1]['destination'];$start2=$legs2[0]['origin'];if(!same_station($end1,$start2))return null;
