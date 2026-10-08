@@ -611,28 +611,33 @@ function upstream_binary_optional(string $url,int $ttl=15):?string{
  if($status>=200&&$status<300&&is_string($body)&&$body!==''){@file_put_contents($cache,$body,LOCK_EX);return $body;}
  error_log('Sydney Station Alert optional vehicle feed failed: '.$status);return null;
 }
-function journey_crowding_status(array $route):array{
- $modes=[];foreach(val($route,'legs',[]) as $leg){if(is_array($leg))$modes[(string)val($leg,'mode','')]=true;}
- $feeds=[];
- if(isset($modes['train'])){$body=upstream_binary_optional('https://api.transport.nsw.gov.au/v2/gtfs/vehiclepos/sydneytrains',15);if(is_string($body))$feeds['train']=parse_vehicle_positions_feed($body);}
- if(isset($modes['metro'])){$body=upstream_binary_optional('https://api.transport.nsw.gov.au/v2/gtfs/vehiclepos/metro',15);if(is_string($body))$feeds['metro']=parse_vehicle_positions_feed($body);}
+function journey_crowding_from_feeds(array $route,array $feeds):array{
  $legs=[];$available=false;$overall='unknown';$overallRank=-1;$latest=0;
  foreach(val($route,'legs',[]) as $leg){
   if(!is_array($leg))continue;$mode=(string)val($leg,'mode','');$match=null;$matchedTrip=null;
   $tripIds=val($leg,'tripIds',[]);if(!is_array($tripIds))$tripIds=[];
   foreach($tripIds as $tripId){$key=strtolower(trim((string)$tripId));if($key!==''&&isset($feeds[$mode][$key])){$match=$feeds[$mode][$key];$matchedTrip=$key;break;}}
-  if($match){$available=true;$rank=crowding_rank($match['level']);if($rank>$overallRank){$overallRank=$rank;$overall=$match['level'];}$latest=max($latest,(int)$match['timestamp']);}
+  $level=$match['level']??'unknown';$rank=crowding_rank($level);
+  if($match){$latest=max($latest,(int)($match['timestamp']??0));if($rank>=0)$available=true;if($rank>$overallRank){$overallRank=$rank;$overall=$level;}}
   $legs[]=[
    'legId'=>(string)val($leg,'id',''),
    'mode'=>$mode,
+   'vehicleMatched'=>$match!==null,
    'tripId'=>$matchedTrip,
    'vehicleId'=>$match['vehicleId']??null,
-   'level'=>$match['level']??'unknown',
+   'level'=>$level,
    'updatedAt'=>isset($match['timestamp'])&&$match['timestamp']>0?gmdate('c',(int)$match['timestamp']):null,
    'carriages'=>$match['carriages']??[]
   ];
  }
  return ['available'=>$available,'level'=>$overall,'updatedAt'=>$latest>0?gmdate('c',$latest):gmdate('c'),'legs'=>$legs];
+}
+function journey_crowding_status(array $route):array{
+ $modes=[];foreach(val($route,'legs',[]) as $leg){if(is_array($leg))$modes[(string)val($leg,'mode','')]=true;}
+ $feeds=[];
+ if(isset($modes['train'])){$body=upstream_binary_optional('https://api.transport.nsw.gov.au/v2/gtfs/vehiclepos/sydneytrains',15);if(is_string($body))$feeds['train']=parse_vehicle_positions_feed($body);}
+ if(isset($modes['metro'])){$body=upstream_binary_optional('https://api.transport.nsw.gov.au/v2/gtfs/vehiclepos/metro',15);if(is_string($body))$feeds['metro']=parse_vehicle_positions_feed($body);}
+ return journey_crowding_from_feeds($route,$feeds);
 }
 function upstream_optional(string $endpoint,array $params,int $ttl=60):?array{
  $key=source_key();if($key==='')return null;
