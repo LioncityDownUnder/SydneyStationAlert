@@ -42,3 +42,28 @@ $thirdRoute['legs'][0]['tripIds']=['unaffected-live-trip','555'];
 $thirdRoute['legs'][0]['arrival']='2026-10-08T03:10:00Z';
 $replacement=best_unaffected_route([$affectedRoute,$clearRoute,$thirdRoute],$alertBody);
 assertit($replacement!==null&&$replacement['id']==='third-route','revalidation selects the earliest unaffected route');
+
+
+function test_pb_varint(int $value):string{
+ $out='';do{$byte=$value&0x7f;$value>>=7;if($value>0)$byte|=0x80;$out.=chr($byte);}while($value>0);return $out;
+}
+function test_pb_int(int $field,int $value):string{return test_pb_varint(($field<<3)|0).test_pb_varint($value);}
+function test_pb_msg(int $field,string $value):string{return test_pb_varint(($field<<3)|2).test_pb_varint(strlen($value)).$value;}
+function test_pb_string(int $field,string $value):string{return test_pb_msg($field,$value);}
+
+$tripMsg=test_pb_string(1,'3001.nsw-2-T4.1.TA.1432.sj2');
+$vehicleDescriptor=test_pb_string(1,'train-123');
+$carriage1=test_pb_string(1,'D1234').test_pb_int(2,1).test_pb_int(3,1).test_pb_int(4,1).test_pb_int(5,2).test_pb_int(6,1);
+$carriage2=test_pb_string(1,'N5678').test_pb_int(2,2).test_pb_int(3,3).test_pb_int(4,0).test_pb_int(5,0).test_pb_int(6,0);
+$vehicleMsg=test_pb_msg(1,$tripMsg).test_pb_int(5,1760000000).test_pb_string(7,'2000344').test_pb_msg(8,$vehicleDescriptor).test_pb_int(9,2).test_pb_msg(1007,$carriage1).test_pb_msg(1007,$carriage2);
+$entityMsg=test_pb_string(1,'entity-1').test_pb_msg(4,$vehicleMsg);
+$feedMsg=test_pb_msg(2,$entityMsg);
+$parsedVehicles=parse_vehicle_positions_feed($feedMsg);
+$parsedVehicle=$parsedVehicles['3001.nsw-2-t4.1.ta.1432.sj2']??null;
+assertit(is_array($parsedVehicle),'GTFS realtime vehicle feed parser extracts trip');
+assertit($parsedVehicle['vehicleId']==='train-123','vehicle id is retained');
+assertit($parsedVehicle['level']==='moderate','whole-train occupancy is normalized');
+assertit(count($parsedVehicle['carriages'])===2,'carriage occupancy records are retained');
+assertit($parsedVehicle['carriages'][0]['level']==='quiet'&&$parsedVehicle['carriages'][0]['quietCarriage']===true,'quiet carriage occupancy is normalized');
+assertit($parsedVehicle['carriages'][1]['level']==='busy','standing-room carriage is normalized as busy');
+assertit(crowding_level_from_occupancy(4)==='very_busy'&&crowding_level_from_occupancy(7)==='unknown','occupancy enum mapping is conservative');
