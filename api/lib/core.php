@@ -31,6 +31,16 @@ function journey_perf_phase(string $phase):void{
  $p['durations']['phase_'.$prev]=($p['durations']['phase_'.$prev]??0)+($now-$p['phaseStart']);
  $p['phase']=$phase;$p['phaseStart']=$now;
 }
+function journey_search_qa_diagnostics_header(array $diagnostics):void{
+ if(headers_sent()||!str_contains((string)($_SERVER['SCRIPT_NAME']??''),'/qatest/api/'))return;
+ $fields=['initial_route_found','additional_probes','additional_route_probe','additional_prefetch_count','interchange_checks'];
+ $parts=[];
+ foreach($fields as $field){
+  $value=$diagnostics[$field]??0;
+  $parts[]=$field.'='.($value===true?'1':($value===false?'0':(int)$value));
+ }
+ header('X-QA-Journey-Search: '.implode('; ',$parts));
+}
 function journey_perf_qa_header():void{
  if(!isset($GLOBALS['journey_perf'])||headers_sent())return;
  if(!str_contains((string)($_SERVER['SCRIPT_NAME']??''),'/qatest/api/'))return;
