@@ -51,13 +51,14 @@ jobs:
                   'title' => $raw['title'] ?? null,
                   'priority' => $raw['priority'] ?? null,
               ];
-              foreach (['affectedLines','affectedStops','lines','stops'] as $k) {
+              foreach (['affected','affectedLines','affectedStops','lines','stops'] as $k) {
                   if (array_key_exists($k, $raw)) {
                       $v = $raw[$k];
                       $entry[$k.'_type'] = gettype($v);
                       $entry[$k.'_count'] = is_array($v) ? count($v) : null;
                       if (is_array($v) && isset($v[0]) && is_array($v[0])) {
                           $entry[$k.'_first_keys'] = array_keys($v[0]);
+                          $entry[$k.'_first'] = $v[0];
                       }
                   }
               }
