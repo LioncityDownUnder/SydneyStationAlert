@@ -31,6 +31,19 @@ function journey_perf_phase(string $phase):void{
  $p['durations']['phase_'.$prev]=($p['durations']['phase_'.$prev]??0)+($now-$p['phaseStart']);
  $p['phase']=$phase;$p['phaseStart']=$now;
 }
+function journey_perf_qa_header():void{
+ if(!isset($GLOBALS['journey_perf'])||headers_sent())return;
+ if(!str_contains((string)($_SERVER['SCRIPT_NAME']??''),'/qatest/api/'))return;
+ journey_perf_phase('response');
+ $p=$GLOBALS['journey_perf'];
+ $durations=$p['durations'];
+ $durations['total']=microtime(true)-$p['start'];
+ $parts=[];
+ foreach(['total','phase_initial_parallel_search','phase_parallel_fallback','phase_additional_search','phase_enrichment','parallel_trip','upstream_trip','normalize','transfer_candidates'] as $name){
+  if(isset($durations[$name]))$parts[]=$name.';dur='.round($durations[$name]*1000);
+ }
+ header('Server-Timing: '.implode(', ',$parts));
+}
 function journey_perf_finish():void{
  if(!isset($GLOBALS['journey_perf']))return;
  journey_perf_phase('complete');
