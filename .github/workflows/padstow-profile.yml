@@ -19,6 +19,10 @@ jobs:
           }
           FROM="$(station_id Hurstville)"
           TO="$(station_id Padstow)"
-          TMP="$(mktemp)"
-          curl --fail --silent --show-error --get "$API"             --data-urlencode "action=journey"             --data-urlencode "from=$FROM"             --data-urlencode "to=$TO"             --data-urlencode "fromName=Hurstville"             --data-urlencode "toName=Padstow"             --data-urlencode "coreOnly=1"             --data-urlencode "debugTiming=1"             -o "$TMP" -w 'total=%{time_total}\n'
-          jq '{source:.data.source,lines:[.data.legs[].line],transfers:[.data.transfers[].name],timing:.data._debugTiming}' "$TMP"
+          for COUNT in 10 14 18 22; do
+            echo "== trip count $COUNT =="
+            TMP="$(mktemp)"
+            curl --fail --silent --show-error --get "$API"               --data-urlencode "action=journey"               --data-urlencode "from=$FROM"               --data-urlencode "to=$TO"               --data-urlencode "fromName=Hurstville"               --data-urlencode "toName=Padstow"               --data-urlencode "coreOnly=1"               --data-urlencode "debugTiming=1"               --data-urlencode "debugTripCount=$COUNT"               -o "$TMP" -w 'total=%{time_total}\n'
+            jq '{source:.data.source,lines:[.data.legs[].line],transfers:[.data.transfers[].name],timing:.data._debugTiming}' "$TMP"
+            rm -f "$TMP"
+          done
