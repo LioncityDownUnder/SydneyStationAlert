@@ -26,6 +26,16 @@ try {
   }
   echo json_encode(['data'=>['available'=>true,'alerts'=>$out]],JSON_INVALID_UTF8_SUBSTITUTE);exit;
  }
+ if($action==='debug-trip-shape'){
+  $now=new DateTimeImmutable('now',new DateTimeZone('Australia/Sydney'));
+  $body=upstream('trip',['depArrMacro'=>'dep','itdDate'=>$now->format('Ymd'),'itdTime'=>$now->format('Hi'),'type_origin'=>'stop','name_origin'=>'222010','type_destination'=>'stop','name_destination'=>'200060','calcNumberOfTrips'=>3,'TfNSWTR'=>'true'],25);
+  $out=[];
+  foreach(val($body,'journeys',[]) as $journey){
+   $legs=[];foreach(val($journey,'legs',[]) as $leg){if(!is_array($leg))continue;$legs[]=['transportation'=>val($leg,'transportation',[]),'origin'=>val($leg,'origin',[]),'destination'=>val($leg,'destination',[])];}
+   $out[]=['legs'=>$legs];if(count($out)>=2)break;
+  }
+  echo json_encode(['data'=>$out],JSON_INVALID_UTF8_SUBSTITUTE);exit;
+ }
  if($action==='station-index'){$data=station_index();echo json_encode(['data'=>$data],JSON_INVALID_UTF8_SUBSTITUTE);exit;}
  if($action==='stations'){$q=trim((string)($_GET['q']??''));if(mb_strlen($q)<2||mb_strlen($q)>70)fail('BAD_REQUEST','Enter at least two station-name characters.');$data=station_search($q);echo json_encode(['data'=>$data]);exit;}
  if($action==='nearby'){$lat=filter_var($_GET['lat']??null,FILTER_VALIDATE_FLOAT);$lon=filter_var($_GET['lon']??null,FILTER_VALIDATE_FLOAT);if($lat===false||$lon===false||$lat< -38||$lat> -31||$lon<149||$lon>153)fail('BAD_REQUEST','Location is outside the supported NSW area.');
