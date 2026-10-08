@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### UI iteration 1
+- Surface relevant service disruptions and automatic reroute notices using the existing alert treatment only; no layout, spacing, typography, or crowding UI changes.
+
 ### Crowding backend
 - Live production verification confirmed exact-trip crowding matching works for both Sydney Trains and Metro. A live T4 service exposed an 8-car vehicle with occupancy currently unknown, while a live M1 Metro service exposed six carriage occupancy values with moderate/busy levels.
 - `available` now means usable occupancy data is actually present; a matched vehicle whose occupancy is unknown is reported with `vehicleMatched: true` but does not falsely claim crowding availability.
