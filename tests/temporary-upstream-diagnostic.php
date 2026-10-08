@@ -16,6 +16,10 @@ foreach($routes as [$fromName,$toName]){
  $out['journeys']=count($b['journeys']??[]);
  $out['systemMessages']=array_map(fn($x)=>['module'=>$x['module']??null,'code'=>$x['code']??null],array_slice($b['systemMessages']??[],0,4));
  $out['normalized']=count(normalized_journeys($b,$o,$d));
+ $parallel=upstream_parallel_trip([$p],0);
+ $out['parallelJourneys']=count($parallel[0]['journeys']??[]);
+ $out['parallelNormalized']=isset($parallel[0])&&is_array($parallel[0])?count(normalized_journeys($parallel[0],$o,$d)):0;
+ $h=curl_init('https://trains.nytnetwork.work/api/index.php?'.http_build_query(['action'=>'journey','from'=>$o['id'],'to'=>$d['id'],'fromName'=>$fromName,'toName'=>$toName,'coreOnly'=>'1']));curl_setopt_array($h,[CURLOPT_RETURNTRANSFER=>true,CURLOPT_TIMEOUT=>30]);$raw=curl_exec($h);$out['publicHttp']=curl_getinfo($h,CURLINFO_RESPONSE_CODE);curl_close($h);$public=json_decode((string)$raw,true);$out['publicCode']=$public['error']['code']??null;
  $reasons=['nonRail'=>0,'unrecognizedTransport'=>0,'missingStop'=>0,'endpointMismatch'=>0];
  foreach($b['journeys']??[] as $j){
   $legs=$j['legs']??[];$rail=[];$nonRail=false;
