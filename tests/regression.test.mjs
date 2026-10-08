@@ -55,3 +55,12 @@ test('core journey fast path includes sixth probe without repeating it serially'
  assert.match(api,/array_slice\(\$searchTimes,0,6\)/);
  assert.match(api,/array_slice\(\$searchTimes,6\)/);
 });
+
+test('additional journey prefetch is bounded and preserves sequential fallback',()=>{
+ const api=fs.readFileSync('api/index.php','utf8');
+ assert.match(api,/if\(\$coreOnly&&!\$route&&count\(\$remainingSearchTimes\)>=2\)/);
+ assert.match(api,/array_slice\(\$remainingSearchTimes,0,2\)/);
+ assert.match(api,/\$prefetchedBodies=timed_parallel_trip\(\$prefetchParams,25\)/);
+ assert.match(api,/array_key_exists\(\$probeIndex,\$prefetchedBodies\)/);
+ assert.match(api,/:timed_upstream\('trip',/);
+});
