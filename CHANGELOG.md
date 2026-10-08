@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### UI iteration 2
+- Show a single journey-level crowding line when TfNSW provides usable occupancy data: Quiet, Moderate, Busy, or Very busy. Unknown crowding remains hidden, with no carriage breakdown or CSS/layout changes.
+
 ### UI iteration 1
 - Surface relevant service disruptions and automatic reroute notices using the existing alert treatment only; no layout, spacing, typography, or crowding UI changes.
 
