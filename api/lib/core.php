@@ -246,6 +246,17 @@ function normalized_journeys(array $body,array $origin,array $destination):array
  return array_map(fn($c)=>$c['route'],$candidates);
 }
 function normalized_journey(array $body,array $origin,array $destination):?array{$routes=normalized_journeys($body,$origin,$destination);return $routes[0]??null;}
+function best_connecting_route(array $firstRoutes,array $secondRoutes,array $origin,array $destination,int $earliestDeparture):?array{
+ $best=null;
+ foreach(array_slice($firstRoutes,0,12) as $first){
+  $depart=route_departure_ts($first);if($depart<$earliestDeparture||$depart===PHP_INT_MAX)continue;
+  foreach(array_slice($secondRoutes,0,16) as $second){
+   $candidate=stitch_routes($first,$second,$origin,$destination);
+   if($candidate)$best=better_route($best,$candidate);
+  }
+ }
+ return $best;
+}
 function route_arrival_ts(array $route):int{$legs=val($route,'legs',[]);if(!is_array($legs)||!$legs)return PHP_INT_MAX;return iso_ts(val($legs[count($legs)-1],'arrival'))??PHP_INT_MAX;}
 function route_departure_ts(array $route):int{$legs=val($route,'legs',[]);if(!is_array($legs)||!$legs)return PHP_INT_MAX;return iso_ts(val($legs[0],'departure'))??PHP_INT_MAX;}
 function route_rank(array $route):array{
