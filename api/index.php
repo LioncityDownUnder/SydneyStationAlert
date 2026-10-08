@@ -61,6 +61,7 @@ try {
     }
    }
   }
+  $qaSearchDiagnostics=['initial_route_found'=>$route!==null,'additional_probes'=>0,'additional_route_probe'=>0,'additional_prefetch_count'=>0,'interchange_checks'=>0];
   journey_perf_phase('additional_search');
   $remainingSearchTimes=($coreOnly&&count($searchTimes)>=6)?array_slice($searchTimes,6):$searchTimes;
   // Prefetch the next two probes together only when the initial batch found no route.
@@ -71,14 +72,17 @@ try {
    foreach(array_slice($remainingSearchTimes,0,2) as $probe){
     $prefetchParams[]=['depArrMacro'=>'dep','itdDate'=>$probe->format('Ymd'),'itdTime'=>$probe->format('Hi'),'type_origin'=>'stop','name_origin'=>$from,'type_destination'=>'stop','name_destination'=>$to,'calcNumberOfTrips'=>$tripCount,'TfNSWTR'=>'true'];
    }
+   $qaSearchDiagnostics['additional_prefetch_count']=count($prefetchParams);
    $prefetchedBodies=timed_parallel_trip($prefetchParams,25);
   }
   foreach($remainingSearchTimes as $probeIndex=>$probe){
+   $qaSearchDiagnostics['additional_probes']++;
    $body=array_key_exists($probeIndex,$prefetchedBodies)&&is_array($prefetchedBodies[$probeIndex])
     ?$prefetchedBodies[$probeIndex]
     :timed_upstream('trip',['depArrMacro'=>'dep','itdDate'=>$probe->format('Ymd'),'itdTime'=>$probe->format('Hi'),'type_origin'=>'stop','name_origin'=>$from,'type_destination'=>'stop','name_destination'=>$to,'calcNumberOfTrips'=>$tripCount,'TfNSWTR'=>'true'],25);
    $route=better_route($route,timed_normalized_journey($body,$originSeed,$destinationSeed));
    $needsInterchangeCheck=!$route;
+   if($needsInterchangeCheck)$qaSearchDiagnostics['interchange_checks']++;
    $candidateList=$needsInterchangeCheck?timed_transfer_candidates($route,$body,$originSeed,$destinationSeed,1):[];
    foreach($candidateList as $transfer){
     $firstBody=timed_upstream('trip',['depArrMacro'=>'dep','itdDate'=>$probe->format('Ymd'),'itdTime'=>$probe->format('Hi'),'type_origin'=>'stop','name_origin'=>$from,'type_destination'=>'stop','name_destination'=>$transfer['id'],'calcNumberOfTrips'=>$fallbackTripCount,'TfNSWTR'=>'true'],25);
@@ -90,7 +94,7 @@ try {
     $secondRoute=timed_normalized_journey($secondBody,$transfer,$destinationSeed);if(!$secondRoute)continue;
     $route=better_route($route,stitch_routes($firstRoute,$secondRoute,$originSeed,$destinationSeed));
    }
-   if($route)break;
+   if($route){$qaSearchDiagnostics['additional_route_probe']=$probeIndex+1;break;}
   }
   if(!$route)fail('NO_ROUTE','No verified train-only journey could be found from '.$fromName.' to '.$toName.' in the next 24 hours. Train services may still be running; please retry or check TripView.',404);
   if($coreOnly){
@@ -99,6 +103,7 @@ try {
    $route['crowding']=['available'=>false,'level'=>'unknown','updatedAt'=>gmdate('c'),'legs'=>[]];
    $route['nextDepartures']=[];
    journey_perf_qa_header();
+   journey_search_qa_diagnostics_header($qaSearchDiagnostics);
   echo json_encode(['data'=>$route],JSON_INVALID_UTF8_SUBSTITUTE);exit;
   }
   journey_perf_phase('enrichment');
@@ -151,6 +156,7 @@ try {
   $times=[];foreach(val($dep,'stopEvents',[]) as $evt){if(!mode(val($evt,'transportation',[])))continue;$t=val($evt,'departureTimeEstimated',val($evt,'departureTimePlanned'));if(is_string($t)&&strtotime($t)!==false)$times[]=$t;if(count($times)>=2)break;}$route['nextDepartures']=$times;
   journey_perf_phase('response');
   journey_perf_qa_header();
+  journey_search_qa_diagnostics_header($qaSearchDiagnostics);
   echo json_encode(['data'=>$route],JSON_INVALID_UTF8_SUBSTITUTE);exit;
  }
  fail('BAD_REQUEST','Unknown API action.',404);
