@@ -15,7 +15,10 @@ $alertRoute=[
  'legs'=>[['id'=>'leg-0','line'=>'T4 Eastern Suburbs & Illawarra Line']]
 ];
 $status=journey_service_status($alertRoute,$alertBody);
-assertit(count($status['alerts'])===2,'journey filters unrelated service alerts');
+assertit(count($status['alerts'])===2,'journey filters unrelated bus and other-line service alerts');
 assertit($status['level']==='major','material stopping-pattern alert is major');
 assertit($status['hasMaterialChange']===true,'material service change triggers revalidation flag');
 assertit($status['alerts'][0]['materialChange']===true,'not-stopping alert is marked material');
+
+assertit($status['alerts'][0]['affectedLines'][0] !== '970','bus line is not exposed as a rail disruption');
+assertit(!in_array('T1 North Shore & Western Line',$status['alerts'][0]['affectedLines'],true),'other rail lines do not match merely through a shared station');
