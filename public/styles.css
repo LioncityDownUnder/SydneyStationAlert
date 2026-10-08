@@ -240,3 +240,6 @@ button:disabled { cursor: not-allowed; }
 @keyframes route-map-pulse { 0% { opacity: .85; stroke-width: 2; } 75%,100% { opacity: 0; stroke-width: 9; } }
 .map-active-pulse { animation: route-map-pulse 1.9s ease-out infinite; }
 @media (prefers-reduced-motion: reduce) { .stop.current:before, .map-active-pulse { animation: none; } .map-active-pulse { opacity: .4; } }
+
+/* Recover a missed interchange without abandoning the completed leg. */
+.route .missed-connection-action { display:block; margin-top: 12px; max-width:100%; white-space:normal; text-align:left; }
