@@ -409,7 +409,7 @@ function journey_alert_terms(array $route):array{
 function alert_matches_terms(array $alert,array $terms):bool{
  $haystack=strtolower($alert['title'].' '.$alert['description'].' '.implode(' ',$alert['affectedLines']).' '.implode(' ',$alert['affectedStations']).' '.implode(' ',$alert['affectedTrips']));
  foreach(array_merge($terms['stationIds'],$terms['stationNames'],$terms['lines'],$terms['tripIds']) as $term){
-  if($term!==''&&str_contains($haystack,strtolower($term)))return true;
+  if((string)$term!==''&&str_contains($haystack,strtolower((string)$term)))return true;
  }
  return false;
 }
