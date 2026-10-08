@@ -24,3 +24,21 @@ assertit(in_array('selected-live-trip',$status['alerts'][0]['affectedTrips'],tru
 
 assertit($status['alerts'][0]['affectedLines'][0] !== '970','bus line is not exposed as a rail disruption');
 assertit(!in_array('T1 North Shore & Western Line',$status['alerts'][0]['affectedLines'],true),'other rail lines do not match merely through a shared station');
+
+
+$affectedRoute=$alertRoute;
+$affectedRoute['id']='affected-route';
+$affectedRoute['legs'][0]['tripIds']=['selected-live-trip','232'];
+$clearRoute=$alertRoute;
+$clearRoute['id']='clear-route';
+$clearRoute['legs'][0]['tripIds']=['different-live-trip','999'];
+$affectedRoute['legs'][0]['arrival']='2026-10-08T03:00:00Z';
+$clearRoute['legs'][0]['arrival']='2026-10-08T03:05:00Z';
+assertit(route_has_material_service_change($affectedRoute,$alertBody)===true,'selected trip is recognized as materially disrupted');
+assertit(route_has_material_service_change($clearRoute,$alertBody)===true,'different fixture trip with its own material alert is also recognized');
+$thirdRoute=$alertRoute;
+$thirdRoute['id']='third-route';
+$thirdRoute['legs'][0]['tripIds']=['unaffected-live-trip','555'];
+$thirdRoute['legs'][0]['arrival']='2026-10-08T03:10:00Z';
+$replacement=best_unaffected_route([$affectedRoute,$clearRoute,$thirdRoute],$alertBody);
+assertit($replacement!==null&&$replacement['id']==='third-route','revalidation selects the earliest unaffected route');
