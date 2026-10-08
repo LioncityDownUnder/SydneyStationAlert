@@ -3,6 +3,7 @@
 ## Unreleased
 
 ### Service disruption backend
+- Live production verification against Hurstville → Central confirmed the TfNSW `add_info` payload uses structured `affected.lines` metadata. The matcher was hardened to use those rail line entities rather than recursively harvesting nested trip/stop data, eliminating unrelated bus/other-line alerts.
 - Read current TfNSW Trip Planner Service Alerts through the documented `add_info` endpoint.
 - Cache the disruption feed for 60 seconds and fail open if the optional alert endpoint is unavailable.
 - Normalize current alerts into info, warning, and major severity levels.
