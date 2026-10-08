@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### UI iteration 5
+- When a disrupted journey is automatically replaced, explain that the original service was affected and show the replacement route's interchange station(s) when available.
+
 ### UI iteration 4
 - Add an expandable disruption-details section under the existing service alert, using the current notice styling. It distinguishes a selected-service impact from a broader line/station notice and shows the TfNSW description when available.
 
