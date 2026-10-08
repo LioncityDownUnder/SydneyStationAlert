@@ -3,6 +3,9 @@
 ## Unreleased
 
 ### Reliability
+- Reduce TfNSW journey result volume for the fast core route request so difficult journeys are less likely to exceed the client timeout while preserving the fuller 30-trip search for background enrichment and disruption revalidation.
+
+### Reliability
 - Increase the fast core-journey client timeout from 8 seconds to 20 seconds so a slow but still valid TfNSW response is not aborted before the server-side request can finish. The production regression smoke still enforces the normal 5-second performance target.
 
 ### UI iteration 17
