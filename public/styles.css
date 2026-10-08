@@ -119,6 +119,13 @@ button:disabled { cursor: not-allowed; }
 .map { width: 100%; height: auto; max-height: 360px; border-radius: 9px; background: #f2f3ef; border: 1px solid #e2e5df; display: block; }
 .maplabel { font: 12px -apple-system, BlinkMacSystemFont, sans-serif; fill: #49514d; }
 .stateline { font-size: .9375rem; line-height: 1.5; color: #747d76; margin: 10px 0; overflow-wrap: anywhere; }
+.carriages { display: flex; flex-wrap: wrap; gap: 7px; margin: 8px 0 10px; }
+.carriage { min-width: 48px; border: 1px solid #dfe3df; border-radius: 8px; padding: 5px 7px; background: #f7f8f5; text-align: center; line-height: 1.15; }
+.carriage strong { display: block; font-size: .8rem; font-weight: 760; }
+.carriage small { display: block; margin-top: 3px; font-size: .68rem; color: #68716c; }
+.carriage-quiet { background: #f3f7f2; }
+.carriage-moderate { background: #f7f5ed; }
+.carriage-busy, .carriage-very_busy { background: #fff1e6; border-color: #f0cfb4; }
 .alarm { background: #fff1e6; border: 1px solid #f0cfb4; color: #843f16; border-radius: 11px; padding: 17px; margin-bottom: 18px; font-size: 1rem; font-weight: 680; line-height: 1.5; overflow-wrap: anywhere; }
 .offline { position: fixed; bottom: 12px; left: 12px; right: 12px; text-align: center; background: #232825; color: white; padding: 12px 14px; border-radius: 8px; font-size: .875rem; line-height: 1.45; z-index: 50; overflow-wrap: anywhere; }
 .checking:after { content: ' · checking…'; color: #bd5820; }
