@@ -1,0 +1,93 @@
+name: Deploy QA Staging
+
+on:
+  push:
+    branches: [develop]
+  workflow_dispatch:
+
+concurrency:
+  group: qa-staging-deploy
+  cancel-in-progress: false
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: npm install --no-save typescript@5.9.3
+      - run: npm run check
+      - run: |
+          php -l api/index.php
+          php -l api/lib/core.php
+          php tests/backend-test.php
+      - uses: actions/upload-artifact@v4
+        with:
+          name: qa-dist
+          path: dist/
+          if-no-files-found: error
+
+  deploy-qa:
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: qa-dist
+          path: dist
+      - name: Validate deployment secrets
+        env:
+          NAMECHEAP_HOST: ${{ secrets.NAMECHEAP_HOST }}
+          NAMECHEAP_USERNAME: ${{ secrets.NAMECHEAP_USERNAME }}
+          NAMECHEAP_PASSWORD: ${{ secrets.NAMECHEAP_PASSWORD }}
+          NAMECHEAP_PORT: ${{ secrets.NAMECHEAP_PORT }}
+          NAMECHEAP_DEPLOY_PATH: ${{ secrets.NAMECHEAP_DEPLOY_PATH }}
+        run: |
+          test -n "$NAMECHEAP_HOST"
+          test -n "$NAMECHEAP_USERNAME"
+          test -n "$NAMECHEAP_PASSWORD"
+          test -n "$NAMECHEAP_PORT"
+          test -n "$NAMECHEAP_DEPLOY_PATH"
+      - run: sudo apt-get update && sudo apt-get install -y sshpass rsync
+      - name: Trust hosting SSH key
+        env:
+          NAMECHEAP_HOST: ${{ secrets.NAMECHEAP_HOST }}
+          NAMECHEAP_PORT: ${{ secrets.NAMECHEAP_PORT }}
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          ssh-keyscan -p "$NAMECHEAP_PORT" "$NAMECHEAP_HOST" >> ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+      - name: Prepare isolated QA directory and API key reference
+        env:
+          SSHPASS: ${{ secrets.NAMECHEAP_PASSWORD }}
+          NAMECHEAP_HOST: ${{ secrets.NAMECHEAP_HOST }}
+          NAMECHEAP_USERNAME: ${{ secrets.NAMECHEAP_USERNAME }}
+          NAMECHEAP_PORT: ${{ secrets.NAMECHEAP_PORT }}
+          NAMECHEAP_DEPLOY_PATH: ${{ secrets.NAMECHEAP_DEPLOY_PATH }}
+        run: |
+          sshpass -e ssh -p "$NAMECHEAP_PORT" -o StrictHostKeyChecking=yes \
+            "$NAMECHEAP_USERNAME@$NAMECHEAP_HOST" \
+            "test -f '$NAMECHEAP_DEPLOY_PATH/api/config.local.php' && mkdir -p '$NAMECHEAP_DEPLOY_PATH/qatest/api' && ln -sfn ../../api/config.local.php '$NAMECHEAP_DEPLOY_PATH/qatest/api/config.local.php'"
+      - name: Deploy only into QA subdirectory
+        env:
+          SSHPASS: ${{ secrets.NAMECHEAP_PASSWORD }}
+          NAMECHEAP_HOST: ${{ secrets.NAMECHEAP_HOST }}
+          NAMECHEAP_USERNAME: ${{ secrets.NAMECHEAP_USERNAME }}
+          NAMECHEAP_PORT: ${{ secrets.NAMECHEAP_PORT }}
+          NAMECHEAP_DEPLOY_PATH: ${{ secrets.NAMECHEAP_DEPLOY_PATH }}
+        run: |
+          sshpass -e rsync -az --delete \
+            --exclude='api/config.local.php' \
+            --exclude='api/cache/' \
+            --exclude='*.log' \
+            -e "ssh -p $NAMECHEAP_PORT -o StrictHostKeyChecking=yes" \
+            dist/ "$NAMECHEAP_USERNAME@$NAMECHEAP_HOST:$NAMECHEAP_DEPLOY_PATH/qatest/"
+      - name: Verify QA API and page
+        run: |
+          curl --fail --silent --show-error --retry 3 --retry-delay 3 \
+            "https://trains.nytnetwork.work/qatest/api/index.php?action=health" | tee /tmp/qa-health.json
+          php -r '$v=json_decode(file_get_contents("/tmp/qa-health.json"),true); if(($v["data"]["ok"]??false)!==true || ($v["data"]["configured"]??false)!==true)exit(1);'
+          curl --fail --silent --show-error "https://trains.nytnetwork.work/qatest/" -o /dev/null
