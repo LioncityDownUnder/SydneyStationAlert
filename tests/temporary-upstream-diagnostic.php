@@ -15,7 +15,9 @@ foreach($routes as [$fromName,$toName]){
  $out['ms']=(int)round((microtime(true)-$start)*1000);
  $out['journeys']=count($b['journeys']??[]);
  $out['systemMessages']=array_map(fn($x)=>['module'=>$x['module']??null,'code'=>$x['code']??null],array_slice($b['systemMessages']??[],0,4));
- $out['normalized']=count(normalized_journeys($b,$o,$d));
+ $routes=normalized_journeys($b,$o,$d);
+ $out['normalized']=count($routes);
+ $out['serverNow']=date('c');$out['departureExamples']=array_slice(array_map(fn($r)=>['departure'=>$r['legs'][0]['departure']??null,'arrival'=>$r['legs'][count($r['legs'])-1]['arrival']??null],$routes),0,4);
  $parallel=upstream_parallel_trip([$p],0);
  $out['parallelJourneys']=count($parallel[0]['journeys']??[]);
  $out['parallelNormalized']=isset($parallel[0])&&is_array($parallel[0])?count(normalized_journeys($parallel[0],$o,$d)):0;
