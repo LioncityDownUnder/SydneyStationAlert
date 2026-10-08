@@ -3,6 +3,9 @@
 ## Unreleased
 
 ### Crowding backend
+- Live production verification confirmed exact-trip crowding matching works for both Sydney Trains and Metro. A live T4 service exposed an 8-car vehicle with occupancy currently unknown, while a live M1 Metro service exposed six carriage occupancy values with moderate/busy levels.
+- `available` now means usable occupancy data is actually present; a matched vehicle whose occupancy is unknown is reported with `vehicleMatched: true` but does not falsely claim crowding availability.
+- Added transfer, unknown-occupancy, and trip-ID mismatch regression coverage before UI work.
 - Read TfNSW GTFS-realtime v2 vehicle-position feeds for Sydney Trains and Metro using the existing server-side API key.
 - Parse whole-train and carriage occupancy, including carriage position, quiet-carriage flag, accessible/normal toilet metadata, and luggage-rack availability.
 - Match crowding to the exact selected trip using GTFS trip identifiers already retained by the journey engine.
