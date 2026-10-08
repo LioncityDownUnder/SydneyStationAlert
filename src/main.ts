@@ -3,7 +3,7 @@ import { searchStations, preloadStations, nearbyStations, getJourney, ApiRequest
 import { GEO, REFRESH_MS, SEARCH_DEBOUNCE_MS, STATION_CACHE_MS } from './constants.js';
 import { nearestStation, progress, alertKeys, fmtTime, escapeHTML as esc } from './logic.js';
 const root = document.getElementById('app');
-const state = { origin: null, destination: null, detected: false, manual: false, locating: false, location: null, locationCheckedAt: 0, journey: null, onboard: false, paused: false, busy: false, checking: false, recoveringConnection: false, enriching: false, message: '', alert: '', searchResults: [], activeField: null, searchLoading: false, searchQuery: '', searchError: '', highlightedIndex: -1, lastChecked: null, offline: !navigator.onLine, noRoute: false };
+const state = { origin: null, destination: null, detected: false, manual: false, locating: false, location: null, locationCheckedAt: 0, journey: null, onboard: false, paused: false, busy: false, checking: false, recoveringConnection: false, suggestedConnection: null, suggestingConnection: false, enriching: false, message: '', alert: '', searchResults: [], activeField: null, searchLoading: false, searchQuery: '', searchError: '', highlightedIndex: -1, lastChecked: null, offline: !navigator.onLine, noRoute: false };
 let queryController = null;
 let debounce;
 let watchId = null;
@@ -36,7 +36,7 @@ function adoptJourneyUpdate(updated){
   return true;
  }
  if(!sameService(state.journey,updated))return false;
- state.journey=updated;saveActiveTrip();updateDelayConnectionWarning();return true;
+ state.journey=updated;saveActiveTrip();updateDelayConnectionWarning();void suggestOnwardConnection();return true;
 }
 
 function loadStationCache() { try {
@@ -88,7 +88,7 @@ function syncButton(){const button=document.getElementById('set');if(button)butt
 async function locate(){state.locating=true;state.message='';state.noRoute=false;setup();if(!navigator.geolocation){state.locating=false;state.manual=true;state.message='Location is not available in this browser. Choose your boarding station manually.';return setup();}navigator.geolocation.getCurrentPosition(async p=>{try{state.location={lat:p.coords.latitude,lon:p.coords.longitude};const stations=await nearbyStations(state.location);const nearest=nearestStation(stations,state.location);state.locating=false;if(nearest){state.origin=nearest;state.detected=true;state.manual=false;state.message='';}else{state.manual=true;state.message='We could not find a supported train or metro station nearby. Choose your boarding station manually.';}}catch{state.locating=false;state.manual=true;state.message='We could not check nearby stations just now. You can still choose your boarding station manually.';}setup();},()=>{state.locating=false;state.manual=true;state.message='Location permission was not available. Choose your boarding station manually.';setup();},GEO.options);}
 function renderJourneyStable(){const x=window.scrollX,y=window.scrollY;renderJourney();requestAnimationFrame(()=>window.scrollTo(x,y));}
 async function enrichJourney(generation){if(!state.journey)return;state.enriching=true;renderJourneyStable();const statusTimer=window.setTimeout(()=>{if(generation===journeyGeneration&&state.enriching){state.enriching=false;renderJourneyStable();}},5000);try{const updated=await getJourney(state.journey.origin,state.journey.destination);if(generation!==journeyGeneration||!state.journey)return;adoptJourneyUpdate(updated);state.lastChecked=new Date();state.message='';checkAlerts();}catch{}finally{clearTimeout(statusTimer);if(generation===journeyGeneration){state.enriching=false;renderJourneyStable();}}}
-async function setJourney(){if(!state.origin||!state.destination||state.origin.id===state.destination.id)return;const generation=++journeyGeneration;state.busy=true;state.enriching=false;state.message='';state.noRoute=false;setup();try{const j=await getJourney(state.origin,state.destination,true);if(generation!==journeyGeneration)return;state.journey=j;state.onboard=false;clearActiveTrip();state.busy=false;state.paused=false;state.lastChecked=new Date();state.alert='';fired.clear();startTracking();startPolling();renderJourney();void enrichJourney(generation);}catch(e){if(generation!==journeyGeneration)return;state.busy=false;state.enriching=false;state.journey=null;state.noRoute=e instanceof ApiRequestError&&e.code==='NO_ROUTE';state.message=e.message;setup();}}
+async function setJourney(){if(!state.origin||!state.destination||state.origin.id===state.destination.id)return;const generation=++journeyGeneration;state.busy=true;state.enriching=false;state.message='';state.noRoute=false;setup();try{const j=await getJourney(state.origin,state.destination,true);if(generation!==journeyGeneration)return;state.journey=j;state.suggestedConnection=null;state.onboard=false;clearActiveTrip();state.busy=false;state.paused=false;state.lastChecked=new Date();state.alert='';fired.clear();startTracking();startPolling();renderJourney();void enrichJourney(generation);}catch(e){if(generation!==journeyGeneration)return;state.busy=false;state.enriching=false;state.journey=null;state.noRoute=e instanceof ApiRequestError&&e.code==='NO_ROUTE';state.message=e.message;setup();}}
 function stopTracking(){if(watchId!==null&&navigator.geolocation)navigator.geolocation.clearWatch(watchId);watchId=null;clearInterval(pollId);pollId=undefined;}
 function startTracking(){if(watchId!==null||!navigator.geolocation||state.paused)return;try{watchId=navigator.geolocation.watchPosition(p=>{state.location={lat:p.coords.latitude,lon:p.coords.longitude};state.locationCheckedAt=Date.now();checkAlerts();renderJourneyStable();},()=>{},{...GEO.options,maximumAge:20000});}catch{}}
 function startPolling(){clearInterval(pollId);if(!state.paused)pollId=window.setInterval(()=>{if(!document.hidden&&navigator.onLine)void refresh();},REFRESH_MS);}
@@ -125,6 +125,22 @@ function connectionAtRisk(j){
    return {index:i,name:next.origin?.name||'the interchange',arrival,departure};
  }
  return null;
+}
+async function suggestOnwardConnection(){
+ const risk=connectionAtRisk(state.journey);
+ if(!risk||state.suggestingConnection||state.checking||!navigator.onLine)return;
+ const original=state.journey,generation=journeyGeneration;
+ const transfer=original.legs[risk.index]?.origin;
+ if(!transfer)return;
+ state.suggestingConnection=true;
+ try{
+  const onward=await getJourney(transfer,original.destination,true);
+  if(generation!==journeyGeneration||state.journey!==original||!state.onboard)return;
+  const departure=Date.parse(onward.legs?.[0]?.departure||onward.legs?.[0]?.origin?.departure||'');
+  if(!Number.isFinite(departure)||departure<risk.arrival+3*60000)return;
+  state.suggestedConnection={index:risk.index,departure,transfer:transfer.name,journeyId:original.id};
+  state.alert='Connection at risk at '+transfer.name+'. A later onward service departing at '+fmtTime(new Date(departure).toISOString())+' is available. Use “I missed my connection” to update your route.';
+ }catch{}finally{state.suggestingConnection=false;if(generation===journeyGeneration)renderJourneyStable();}
 }
 function updateDelayConnectionWarning(){
  const risk=connectionAtRisk(state.journey);
@@ -175,7 +191,7 @@ async function recoverMissedConnection(legIndex){
   const legs=[...prior,...onward.legs];
   const stops=[];for(const leg of legs)for(const station of leg.stops||[leg.origin,leg.destination]){if(!station)continue;const last=stops[stops.length-1];if(last&&(last.id===station.id||last.name===station.name)){stops[stops.length-1]={...last,...station,arrival:last.arrival||station.arrival,departure:station.departure||last.departure};}else stops.push(station);}
   const transfers=[];for(let i=1;i<legs.length;i++){const previous=legs[i-1].destination,current=legs[i].origin;transfers.push({id:current.id,name:current.name,mode:current.mode,lat:current.lat,lon:current.lon,arrivalPlatform:previous.platform,departurePlatform:current.platform});}
-  state.journey={...original,legs,stops,transfers,id:original.id+'-recovered-'+Date.now(),fetchedAt:new Date().toISOString()};
+  state.suggestedConnection=null;state.journey={...original,legs,stops,transfers,id:original.id+'-recovered-'+Date.now(),fetchedAt:new Date().toISOString()};
   state.lastChecked=new Date();state.alert='New connection found from '+transfer.name+'. Check the updated boarding time and platform.';state.message='';fired.clear();saveActiveTrip();
  }catch(e){if(generation===journeyGeneration)state.message='Unable to find a replacement connection: '+(e?.message||'Please try again.');}
  finally{if(generation===journeyGeneration){state.checking=false;state.recoveringConnection=false;renderJourneyStable();}}
