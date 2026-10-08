@@ -1,0 +1,75 @@
+name: Live Crowding Verify
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify live Sydney Trains and Metro journey metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          API="https://trains.nytnetwork.work/api/index.php"
+
+          station_id() {
+            local name="$1"
+            curl --fail --silent --show-error --get "$API"               --data-urlencode "action=stations"               --data-urlencode "q=$name" |
+              jq -r --arg name "$name" '.data[] | select((.name|ascii_downcase)==($name|ascii_downcase)) | .id' |
+              head -n1
+          }
+
+          verify() {
+            local from="$1"
+            local to="$2"
+            local from_id to_id out status
+            from_id="$(station_id "$from")"
+            to_id="$(station_id "$to")"
+            test -n "$from_id" && test -n "$to_id"
+
+            out="$(mktemp)"
+            status="$(curl --silent --show-error --output "$out" --write-out '%{http_code}' --get "$API"               --data-urlencode "action=journey"               --data-urlencode "from=$from_id"               --data-urlencode "to=$to_id"               --data-urlencode "fromName=$from"               --data-urlencode "toName=$to")"
+
+            echo "=== $from -> $to (HTTP $status) ==="
+            test "$status" = "200"
+
+            jq '{
+              source: .data.source,
+              legCount: (.data.legs|length),
+              legs: [.data.legs[] | {
+                mode,
+                line,
+                tripIds,
+                departure,
+                arrival
+              }],
+              serviceStatus: {
+                level: .data.serviceStatus.level,
+                hasMaterialChange: .data.serviceStatus.hasMaterialChange,
+                revalidationAttempted: .data.serviceStatus.revalidationAttempted,
+                replacementFound: .data.serviceStatus.replacementFound,
+                alertCount: (.data.serviceStatus.alerts|length)
+              },
+              crowding: {
+                available: .data.crowding.available,
+                level: .data.crowding.level,
+                updatedAt: .data.crowding.updatedAt,
+                legs: [.data.crowding.legs[] | {
+                  legId,
+                  mode,
+                  tripId,
+                  vehicleId,
+                  level,
+                  updatedAt,
+                  carriageCount: (.carriages|length),
+                  carriageLevels: [.carriages[].level]
+                }]
+              }
+            }' "$out"
+            rm -f "$out"
+          }
+
+          verify "Hurstville" "Central"
+          verify "Chatswood" "Sydenham"
