@@ -116,3 +116,11 @@ $prioritized=prioritized_transfer_candidates($routeWithKnownTransfer,$transferBo
  ['id'=>'221810','name'=>'Padstow','mode'=>'train','lat'=>-33.953,'lon'=>151.031],1);
 assertit(count($prioritized)<=1,'transfer validation fanout is capped');
 assertit(($prioritized[0]['name']??'')==='Wolli Creek','selected route transfer is validated first');
+
+$GLOBALS['journey_perf']=['start'=>microtime(true),'phase'=>'setup','phaseStart'=>microtime(true),'durations'=>[],'counts'=>[],'coreOnly'=>true,'route'=>'test'];
+$value=journey_perf_track('normalize',fn()=>42);
+journey_perf_phase('initial_parallel_search');
+assertit($value===42,'timed callback returns its original value');
+assertit(($GLOBALS['journey_perf']['counts']['normalize']??0)===1,'performance tracker records phase calls');
+assertit(isset($GLOBALS['journey_perf']['durations']['phase_setup']),'performance tracker measures stage durations');
+unset($GLOBALS['journey_perf']);
