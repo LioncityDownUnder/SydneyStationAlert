@@ -14,6 +14,7 @@ export type CarriageCrowding = {
 export type LegCrowding = {
   legId:string;
   mode:'train'|'metro';
+  vehicleMatched:boolean;
   tripId:string|null;
   vehicleId:string|null;
   level:CrowdingLevel;
