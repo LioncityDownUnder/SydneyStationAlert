@@ -1,0 +1,29 @@
+name: Temporary Route Latency Probe
+on:
+  push:
+    paths:
+      - '.github/workflows/temporary-route-latency.yml'
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Probe live core journey
+        shell: bash
+        run: |
+          set -euo pipefail
+          API="https://trains.nytnetwork.work/api/index.php"
+          station_id() {
+            curl -fsSG "$API" --data-urlencode "action=stations" --data-urlencode "q=$1" | jq -r --arg n "$1" '.data[]|select((.name|ascii_downcase)==($n|ascii_downcase))|.id'|head -1
+          }
+          FROM="$(station_id Hurstville)"
+          for DEST in Padstow Casula Kogarah; do
+            TO="$(station_id "$DEST")"
+            echo "==== Hurstville to $DEST ===="
+            for repeat in 1 2; do
+              tmp="$(mktemp)"
+              curl --silent --show-error --max-time 35 -G "$API" --data-urlencode "action=journey" --data-urlencode "from=$FROM" --data-urlencode "to=$TO" --data-urlencode "fromName=Hurstville" --data-urlencode "toName=$DEST" --data-urlencode "coreOnly=1" -o "$tmp" -w 'run=%{http_code} seconds=%{time_total} ttfb=%{time_starttransfer}\n'
+              jq -c '{error:.error,legs:[.data.legs[]?|{line,mode,origin:.origin.name,destination:.destination.name}],transfers:[.data.transfers[]?.name]}' "$tmp"
+              rm -f "$tmp"
+            done
+          done
