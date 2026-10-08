@@ -1,0 +1,50 @@
+name: Live Journey Performance
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Measure Hurstville transfer journeys
+        shell: bash
+        run: |
+          set -euo pipefail
+          API="https://trains.nytnetwork.work/api/index.php"
+
+          station_id() {
+            local name="$1"
+            curl --fail --silent --show-error --get "$API"               --data-urlencode "action=stations"               --data-urlencode "q=$name" |
+              jq -r --arg name "$name" '.data[] | select((.name|ascii_downcase)==($name|ascii_downcase)) | .id' |
+              head -n1
+          }
+
+          verify() {
+            local from="$1"
+            local to="$2"
+            local from_id to_id out meta
+            from_id="$(station_id "$from")"
+            to_id="$(station_id "$to")"
+            test -n "$from_id" && test -n "$to_id"
+            out="$(mktemp)"
+            meta="$(curl --max-time 65 --silent --show-error --output "$out"               --write-out 'http=%{http_code} total=%{time_total} start=%{time_starttransfer}\n'               --get "$API"               --data-urlencode "action=journey"               --data-urlencode "from=$from_id"               --data-urlencode "to=$to_id"               --data-urlencode "fromName=$from"               --data-urlencode "toName=$to")"
+            echo "=== $from -> $to ==="
+            echo "$meta"
+            jq 'if .data then {
+              source:.data.source,
+              legs:[.data.legs[]|{mode,line,origin:.origin.name,destination:.destination.name}],
+              transfers:[.data.transfers[]?.name],
+              serviceStatus:{
+                level:.data.serviceStatus.level,
+                material:.data.serviceStatus.hasMaterialChange,
+                revalidationAttempted:.data.serviceStatus.revalidationAttempted,
+                replacementFound:.data.serviceStatus.replacementFound
+              }
+            } else {error:.error} end' "$out"
+            rm -f "$out"
+          }
+
+          verify "Hurstville" "Padstow"
+          verify "Hurstville" "Casula"
