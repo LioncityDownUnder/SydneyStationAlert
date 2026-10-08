@@ -71,3 +71,12 @@ test('verified core-only route skips redundant additional timetable probes',()=>
  assert.match(api,/foreach\(\$remainingSearchTimes as \$probeIndex=>\$probe\)/);
  assert.match(api,/if\(\$coreOnly&&!\$route&&count\(\$remainingSearchTimes\)>=2\)/);
 });
+
+test('unboarded departed service advances only to an upcoming journey',()=>{
+ const main=fs.readFileSync('src/main.ts','utf8');
+ assert.match(main,/if\(!state\.onboard\)\{/);
+ assert.match(main,/oldDeparted&&!replacementIsUpcoming\)return false/);
+ assert.match(main,/oldDeparted&&replacementIsUpcoming&&!sameService\(previous,updated\)/);
+ assert.match(main,/if\(!sameService\(state\.journey,updated\)\)return false/);
+ assert.match(main,/state\.alert='Your previous train has departed/);
+});
