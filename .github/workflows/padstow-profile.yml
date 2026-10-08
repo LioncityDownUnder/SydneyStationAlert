@@ -20,6 +20,7 @@ jobs:
           FROM="$(station_id Hurstville)"
           TO="$(station_id Padstow)"
           COUNT=22
+          # candidate-ranking pass
           echo "== cold-ish trip count $COUNT =="
           sleep 30
           TMP="$(mktemp)"
