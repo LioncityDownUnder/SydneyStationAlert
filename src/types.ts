@@ -1,7 +1,7 @@
 export type Point = { lat: number; lon: number };
 export type Station = Point & { id: string; name: string; mode: 'train'|'metro' };
 export type Stop = Station & { platform: string|null; arrival: string|null; departure: string|null };
-export type RailLeg = { id:string; mode:'train'|'metro'; line:string; origin:Stop; destination:Stop; stops:Stop[]; path:Point[]; departure:string|null; arrival:string|null; platform:string|null };
+export type RailLeg = { id:string; mode:'train'|'metro'; line:string; tripIds?:string[]; origin:Stop; destination:Stop; stops:Stop[]; path:Point[]; departure:string|null; arrival:string|null; platform:string|null };
 export type ServiceAlertSeverity = 'info'|'warning'|'major';
 export type ServiceAlert = {
   id:string;
