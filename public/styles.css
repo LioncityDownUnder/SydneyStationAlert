@@ -233,3 +233,10 @@ button:disabled { cursor: not-allowed; }
  .journey-spinner, .journey-search-pulse span { animation: none; }
  .journey-search-pulse span { opacity: .8; }
 }
+
+/* Selected journey marker pulses until boarded, then follows active stops. */
+@keyframes station-active-pulse { 0% { box-shadow: 0 0 0 5px rgba(230,118,45,.22); } 70% { box-shadow: 0 0 0 13px rgba(230,118,45,0); } 100% { box-shadow: 0 0 0 5px rgba(230,118,45,0); } }
+.stop.current:before { animation: station-active-pulse 1.9s ease-out infinite; }
+@keyframes route-map-pulse { 0% { opacity: .85; stroke-width: 2; } 75%,100% { opacity: 0; stroke-width: 9; } }
+.map-active-pulse { animation: route-map-pulse 1.9s ease-out infinite; }
+@media (prefers-reduced-motion: reduce) { .stop.current:before, .map-active-pulse { animation: none; } .map-active-pulse { opacity: .4; } }
