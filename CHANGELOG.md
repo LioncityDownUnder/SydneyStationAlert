@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### UI iteration 3
+- Show a compact carriage-by-carriage crowding row when TfNSW provides usable carriage occupancy. Unknown carriage occupancy stays hidden; no new card or navigation is introduced.
+
 ### Journey performance
 - Live timing showed Hurstville → Padstow at ~18.9s and Hurstville → Casula at ~17.1s. Transfer validation now checks only the selected primary interchange, and optional service-alert/crowding feeds fail fast so advisory data cannot hold up the core journey response.
 - Post-deploy timing improved Hurstville → Padstow to ~7.4s and Hurstville → Casula to ~3.2s while retaining the expected T4 → T8 and T4 → T8 → T2 rail legs.
