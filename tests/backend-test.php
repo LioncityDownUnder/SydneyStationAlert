@@ -134,3 +134,17 @@ $secondLate=['legs'=>[['origin'=>$transferBoard,'destination'=>$destinationLate,
 $stitchedLate=stitch_routes($firstLate,$secondLate,$originLate,$destinationLate);
 assertit($stitchedLate!==null&&count($stitchedLate['transfers'])===1,'late T4 to T8 connection with 17-minute interchange remains valid');
 assertit($stitchedLate['transfers'][0]['arrivalPlatform']==='3'&&$stitchedLate['transfers'][0]['departurePlatform']==='2','interchange preserves separate arrival and boarding platforms');
+
+$earlyFirst=$firstLate;
+$earlyFirst['legs'][0]['departure']='2026-10-08T22:36:00+11:00';
+$earlySecond=$secondLate;
+$earlySecond['legs'][0]['departure']='2026-10-08T23:05:00+11:00';
+$laterFirst=$firstLate;
+$laterFirst['legs'][0]['departure']='2026-10-08T22:51:00+11:00';
+$laterFirst['legs'][0]['arrival']='2026-10-08T23:06:00+11:00';
+$laterSecond=$secondLate;
+$laterSecond['legs'][0]['departure']='2026-10-08T23:20:00+11:00';
+$laterSecond['legs'][0]['arrival']='2026-10-08T23:40:00+11:00';
+$foundLate=best_connecting_route([$earlyFirst,$laterFirst],[$earlySecond,$laterSecond],$originLate,$destinationLate,strtotime('2026-10-08T22:42:00+11:00'));
+assertit($foundLate!==null,'later train is found even when first candidate has departed');
+assertit($foundLate['legs'][0]['departure']==='2026-10-08T22:51:00+11:00'&&$foundLate['legs'][1]['departure']==='2026-10-08T23:20:00+11:00','late interchange uses a valid subsequent T8 service');
