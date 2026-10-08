@@ -24,6 +24,7 @@ try {
   $debugTiming=$coreOnly&&(string)($_GET['debugTiming']??'')==='1';
   $timings=[];
   $tripCount=$coreOnly?10:30;
+  if($debugTiming&&isset($_GET['debugTripCount']))$tripCount=max(4,min(30,(int)$_GET['debugTripCount']));
   $route=null;
   $searchTimes=[$now];
   $offsets=[30,60,90,120,180,240,300,360,480,600,720,840,960,1080,1200,1320,1440];
