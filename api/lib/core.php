@@ -420,6 +420,25 @@ function journey_service_status(array $route,array $alertBody):array{
  $level='ok';foreach($alerts as $alert){if($alert['severity']==='major'){$level='major';break;}if($alert['severity']==='warning')$level='warning';elseif($level==='ok')$level='info';}
  return ['level'=>$level,'hasMaterialChange'=>(bool)array_filter($alerts,fn($a)=>$a['materialChange']===true),'updatedAt'=>gmdate('c'),'alerts'=>$alerts];
 }
-function fetch_current_service_alerts(DateTimeImmutable $when):array{
- return upstream('add_info',['filterDateValid'=>$when->format('d-m-Y'),'filterPublicationStatus'=>'current'],60);
+function upstream_optional(string $endpoint,array $params,int $ttl=60):?array{
+ $key=source_key();if($key==='')return null;
+ $base=rtrim((string)(getenv('TFNSW_API_BASE')?:'https://api.transport.nsw.gov.au/v1/tp'),'/');
+ if(!str_starts_with($base,'https://api.transport.nsw.gov.au/'))return null;
+ $params=['outputFormat'=>'rapidJSON','coordOutputFormat'=>'EPSG:4326']+$params;
+ $url=$base.'/'.$endpoint.'?'.http_build_query($params,'','&',PHP_QUERY_RFC3986);
+ $cacheDir=sys_get_temp_dir().'/sydney_station_alert_'.substr(hash('sha256',__DIR__),0,8);
+ if(!is_dir($cacheDir))@mkdir($cacheDir,0700,true);
+ $cache=$cacheDir.'/'.hash('sha256',$url).'.json';
+ if(is_file($cache)&&filemtime($cache)>time()-$ttl){
+  $data=json_decode((string)file_get_contents($cache),true);if(is_array($data))return $data;
+ }
+ $h=curl_init($url);curl_setopt_array($h,[CURLOPT_RETURNTRANSFER=>true,CURLOPT_TIMEOUT=>7,CURLOPT_CONNECTTIMEOUT=>3,CURLOPT_HTTPHEADER=>['Authorization: apikey '.$key,'Accept: application/json'],CURLOPT_FOLLOWLOCATION=>false]);
+ $body=curl_exec($h);$status=(int)curl_getinfo($h,CURLINFO_RESPONSE_CODE);curl_close($h);
+ $json=is_string($body)?json_decode($body,true):null;
+ if($status>=200&&$status<300&&is_array($json)){@file_put_contents($cache,json_encode($json),LOCK_EX);return $json;}
+ error_log('Sydney Station Alert optional TfNSW endpoint failed: '.$endpoint.' status '.$status);
+ return null;
+}
+function fetch_current_service_alerts(DateTimeImmutable $when):?array{
+ return upstream_optional('add_info',['filterDateValid'=>$when->format('d-m-Y'),'filterPublicationStatus'=>'current'],60);
 }
