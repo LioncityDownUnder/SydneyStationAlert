@@ -138,6 +138,15 @@ function leg_stop_sequence(array $leg,string $transportMode,array $originStop,ar
  else {foreach(['platform','arrival'] as $k){if(empty($last[$k])&&!empty($destStop[$k]))$last[$k]=$destStop[$k];}$stops[count($stops)-1]=$last;}
  return $stops;
 }
+function transportation_trip_ids(array $transport):array{
+ $out=[];
+ $properties=val($transport,'properties',[]);if(!is_array($properties))$properties=[];
+ foreach(['RealtimeTripId','realtimeTripId','AVMSTripID','avmsTripId','gtfsTripId','tripId','serviceId','tripCode','trainNumber'] as $key){
+  $v=val($properties,$key,'');
+  if(is_string($v)||is_int($v)){ $v=strtolower(trim((string)$v));if($v!=='')$out[$v]=true; }
+ }
+ return array_keys($out);
+}
 function normalized_journeys(array $body,array $origin,array $destination):array{
  $journeys=val($body,'journeys',[]);if(!is_array($journeys))return [];
  $candidates=[];
@@ -152,7 +161,7 @@ function normalized_journeys(array $body,array $origin,array $destination):array
    if(!$originStop||!$destStop)continue;
    $stops=leg_stop_sequence($leg,$m,$originStop,$destStop);
    $path=parse_path(val($leg,'path',[]));if(!$path)$path=parse_path($leg);
-   $legs[]=['id'=>'leg-'.count($legs),'mode'=>$m,'line'=>(string)val($transport,'disassembledName',val($transport,'number',strtoupper($m))),'origin'=>$originStop,'destination'=>$destStop,'stops'=>$stops,'path'=>$path,'departure'=>$originStop['departure'],'arrival'=>$destStop['arrival'],'platform'=>$originStop['platform']];
+   $legs[]=['id'=>'leg-'.count($legs),'mode'=>$m,'line'=>(string)val($transport,'disassembledName',val($transport,'number',strtoupper($m))),'tripIds'=>transportation_trip_ids($transport),'origin'=>$originStop,'destination'=>$destStop,'stops'=>$stops,'path'=>$path,'departure'=>$originStop['departure'],'arrival'=>$destStop['arrival'],'platform'=>$originStop['platform']];
    foreach($stops as $s)append_unique_station($all,$s);
   }
   if($hasNonRail||!$legs)continue;
@@ -354,7 +363,7 @@ function alert_affected_scope(array $raw):array{
     if($v!=='')$lines[$v]=true;
    }
    $lineTrips=val($line,'trips',[]);
-   foreach(alert_scope_values($lineTrips,['id','tripId','name','number']) as $v)$trips[$v]=true;
+   foreach(alert_scope_values($lineTrips,['id','tripId','realtimeTripId','RealtimeTripId','AVMSTripID','gtfsTripId','tripCode','trainNumber','name','number']) as $v)$trips[strtolower($v)]=true;
   }
  }
 
@@ -452,6 +461,7 @@ function journey_alert_terms(array $route):array{
  foreach(val($route,'legs',[]) as $leg){
   if(!is_array($leg))continue;
   foreach(alert_line_tokens((string)val($leg,'line','')) as $token)$lineTokens[$token]=true;
+  $legTripIds=val($leg,'tripIds',[]);if(is_array($legTripIds))foreach($legTripIds as $id){$id=strtolower(trim((string)$id));if($id!=='')$tripIds[$id]=true;}
   foreach(['tripId','trip','serviceId'] as $key){
    $id=strtolower(trim((string)val($leg,$key,'')));if($id!=='')$tripIds[$id]=true;
   }
@@ -482,6 +492,8 @@ function alert_trip_matches(array $alert,array $terms):bool{
 function alert_matches_terms(array $alert,array $terms):bool{
  if(($alert['_lineScoped']??false)===true){
   if(($alert['_railScoped']??false)!==true)return false;
+  $tripScoped=!empty($alert['affectedTrips']);
+  if(($alert['materialChange']??false)===true&&$tripScoped)return alert_trip_matches($alert,$terms);
   return alert_line_matches($alert,$terms)||alert_trip_matches($alert,$terms);
  }
  if(alert_station_matches($alert,$terms)||alert_trip_matches($alert,$terms))return true;
