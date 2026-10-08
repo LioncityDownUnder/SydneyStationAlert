@@ -90,3 +90,12 @@ test('missed connection detection requires fresh nearby GPS and a departure grac
  assert.match(main,/use “I missed my connection”/);
  assert.match(main,/if\(!state\.onboard\|\|state\.checking\|\|!state\.journey\|\|legIndex<1\)return/);
 });
+
+test('onboard delay-aware connection warning uses arrival and departure with interchange buffer',()=>{
+ const main=fs.readFileSync('src/main.ts','utf8');
+ assert.match(main,/function connectionAtRisk\(j\)/);
+ assert.match(main,/if\(!state\.onboard\|\|state\.paused/);
+ assert.match(main,/arrival\+3\*60000>departure/);
+ assert.match(main,/updateDelayConnectionWarning\(\);return true/);
+ assert.match(main,/Connection at risk at /);
+});
