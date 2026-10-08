@@ -517,6 +517,17 @@ function journey_service_status(array $route,array $alertBody):array{
  $level='ok';foreach($alerts as $alert){if($alert['severity']==='major'){$level='major';break;}if($alert['severity']==='warning')$level='warning';elseif($level==='ok')$level='info';}
  return ['level'=>$level,'hasMaterialChange'=>(bool)array_filter($alerts,fn($a)=>$a['materialChange']===true),'updatedAt'=>gmdate('c'),'alerts'=>$alerts];
 }
+function route_has_material_service_change(array $route,array $alertBody):bool{
+ return journey_service_status($route,$alertBody)['hasMaterialChange']===true;
+}
+function best_unaffected_route(array $routes,array $alertBody):?array{
+ $best=null;
+ foreach($routes as $route){
+  if(!is_array($route)||route_has_material_service_change($route,$alertBody))continue;
+  $best=better_route($best,$route);
+ }
+ return $best;
+}
 function upstream_optional(string $endpoint,array $params,int $ttl=60):?array{
  $key=source_key();if($key==='')return null;
  $base=rtrim((string)(getenv('TFNSW_API_BASE')?:'https://api.transport.nsw.gov.au/v1/tp'),'/');
