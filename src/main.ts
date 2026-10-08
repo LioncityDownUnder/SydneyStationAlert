@@ -19,7 +19,25 @@ function saveActiveTrip(){if(!state.onboard||!state.journey)return;try{localStor
 function clearActiveTrip(){try{localStorage.removeItem(ACTIVE_TRIP_KEY);}catch{}}
 function loadActiveTrip(){try{const raw=localStorage.getItem(ACTIVE_TRIP_KEY);if(!raw)return null;const p=JSON.parse(raw);if(!p||p.version!==1||!p.journey||!Array.isArray(p.journey.legs)||!Array.isArray(p.journey.stops)||Number(p.expiresAt)<=Date.now()){clearActiveTrip();return null;}return p.journey;}catch{clearActiveTrip();return null;}}
 function sameService(a,b){if(!a||!b||!Array.isArray(a.legs)||!Array.isArray(b.legs)||a.legs.length!==b.legs.length)return false;return a.legs.every((leg,i)=>{const other=b.legs[i];const ids=(leg.tripIds||[]).map(x=>String(x).toLowerCase());const otherIds=(other?.tripIds||[]).map(x=>String(x).toLowerCase());if(ids.length&&otherIds.length)return ids.some(id=>otherIds.includes(id));return leg.line===other?.line&&leg.origin?.id===other?.origin?.id&&leg.destination?.id===other?.destination?.id;});}
-function adoptJourneyUpdate(updated){if(!state.onboard){state.journey=updated;return true;}if(!sameService(state.journey,updated))return false;state.journey=updated;saveActiveTrip();return true;}
+function firstDepartureTime(j){return Date.parse(j?.legs?.[0]?.departure||j?.legs?.[0]?.origin?.departure||'');}
+function adoptJourneyUpdate(updated){
+ if(!state.onboard){
+  const previous=state.journey;
+  const oldDeparture=firstDepartureTime(previous),newDeparture=firstDepartureTime(updated);
+  const oldDeparted=Number.isFinite(oldDeparture)&&oldDeparture<Date.now()-60000;
+  const replacementIsUpcoming=Number.isFinite(newDeparture)&&newDeparture>=Date.now()-60000;
+  // Never replace a displayed service with another service that has already left.
+  if(oldDeparted&&!replacementIsUpcoming)return false;
+  state.journey=updated;
+  if(oldDeparted&&replacementIsUpcoming&&!sameService(previous,updated)){
+   state.alert='Your previous train has departed. Showing the next available journey; confirm boarding only when on the displayed train.';
+   fired.clear();
+  }
+  return true;
+ }
+ if(!sameService(state.journey,updated))return false;
+ state.journey=updated;saveActiveTrip();return true;
+}
 
 function loadStationCache() { try {
     const raw = localStorage.getItem(STATION_CACHE_KEY);
