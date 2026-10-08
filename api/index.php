@@ -34,20 +34,25 @@ try {
    if($probe->format('Ymd')!==$now->format('Ymd'))break;
    $searchTimes[]=$probe;
   }
-  if($coreOnly&&count($searchTimes)>=2){
-   $fastProbes=array_slice($searchTimes,0,2);$fastParams=[];
-   foreach($fastProbes as $probe)$fastParams[]=['depArrMacro'=>'dep','itdDate'=>$probe->format('Ymd'),'itdTime'=>$probe->format('Hi'),'type_origin'=>'stop','name_origin'=>$from,'type_destination'=>'stop','name_destination'=>$to,'calcNumberOfTrips'=>$tripCount,'TfNSWTR'=>'true'];
-   $t0=microtime(true);$fastBodies=upstream_parallel_trip($fastParams,25);if($debugTiming)$timings[]=['step'=>'parallel-whole-trip','seconds'=>round(microtime(true)-$t0,4)];
-   foreach($fastBodies as $i=>$body){if(!is_array($body))continue;$candidate=normalized_journey($body,$originSeed,$destinationSeed);if($candidate){$route=better_route($route,$candidate);break;}}
+  if($coreOnly&&count($searchTimes)>=3){
+   $firstProbe=$searchTimes[0];$t0=microtime(true);$firstBody=upstream('trip',['depArrMacro'=>'dep','itdDate'=>$firstProbe->format('Ymd'),'itdTime'=>$firstProbe->format('Hi'),'type_origin'=>'stop','name_origin'=>$from,'type_destination'=>'stop','name_destination'=>$to,'calcNumberOfTrips'=>$tripCount,'TfNSWTR'=>'true'],25);if($debugTiming)$timings[]=['step'=>'current-whole-trip','seconds'=>round(microtime(true)-$t0,4)];
+   $route=normalized_journey($firstBody,$originSeed,$destinationSeed);
+   $fastBodies=[$firstBody];$fastProbes=[$firstProbe];
+   if(!$route){
+    $futureProbes=array_slice($searchTimes,1,2);$futureParams=[];
+    foreach($futureProbes as $probe)$futureParams[]=['depArrMacro'=>'dep','itdDate'=>$probe->format('Ymd'),'itdTime'=>$probe->format('Hi'),'type_origin'=>'stop','name_origin'=>$from,'type_destination'=>'stop','name_destination'=>$to,'calcNumberOfTrips'=>$tripCount,'TfNSWTR'=>'true'];
+    $t0=microtime(true);$futureBodies=upstream_parallel_trip($futureParams,25);if($debugTiming)$timings[]=['step'=>'parallel-future-whole-trip','seconds'=>round(microtime(true)-$t0,4)];
+    foreach($futureBodies as $i=>$body){$fastBodies[]=$body;$fastProbes[]=$futureProbes[$i];if(!is_array($body))continue;$candidate=normalized_journey($body,$originSeed,$destinationSeed);if($candidate&&!$route)$route=$candidate;}
+   }
    if(!$route){
     $fallbackMeta=[];$firstParams=[];
     foreach($fastBodies as $i=>$body){if(!is_array($body))continue;$probe=$fastProbes[$i];$candidates=prioritized_transfer_candidates(null,$body,$originSeed,$destinationSeed,1);if(!$candidates)continue;$transfer=$candidates[0];$fallbackMeta[]=['probe'=>$probe,'transfer'=>$transfer];$firstParams[]=['depArrMacro'=>'dep','itdDate'=>$probe->format('Ymd'),'itdTime'=>$probe->format('Hi'),'type_origin'=>'stop','name_origin'=>$from,'type_destination'=>'stop','name_destination'=>$transfer['id'],'calcNumberOfTrips'=>$fallbackTripCount,'TfNSWTR'=>'true'];}
     if($firstParams){$t0=microtime(true);$firstBodies=upstream_parallel_trip($firstParams,25);if($debugTiming)$timings[]=['step'=>'parallel-fallback-first','seconds'=>round(microtime(true)-$t0,4)];
-     foreach($firstBodies as $i=>$firstBody){if(!is_array($firstBody)||!isset($fallbackMeta[$i]))continue;$transfer=$fallbackMeta[$i]['transfer'];$firstRoute=normalized_journey($firstBody,$originSeed,$transfer);if(!$firstRoute)continue;$arrival=route_arrival_ts($firstRoute);if($arrival===PHP_INT_MAX)continue;$onward=(new DateTimeImmutable('@'.($arrival+120)))->setTimezone(new DateTimeZone('Australia/Sydney'));if($onward->format('Ymd')!==$now->format('Ymd'))continue;$secondBody=upstream('trip',['depArrMacro'=>'dep','itdDate'=>$onward->format('Ymd'),'itdTime'=>$onward->format('Hi'),'type_origin'=>'stop','name_origin'=>$transfer['id'],'type_destination'=>'stop','name_destination'=>$to,'calcNumberOfTrips'=>$fallbackTripCount,'TfNSWTR'=>'true'],25);$secondRoute=normalized_journey($secondBody,$transfer,$destinationSeed);if(!$secondRoute)continue;$stitched=stitch_routes($firstRoute,$secondRoute,$originSeed,$destinationSeed);if($stitched){$route=better_route($route,$stitched);break;}}
+     foreach($firstBodies as $i=>$fb){if(!is_array($fb)||!isset($fallbackMeta[$i]))continue;$transfer=$fallbackMeta[$i]['transfer'];$firstRoute=normalized_journey($fb,$originSeed,$transfer);if(!$firstRoute)continue;$arrival=route_arrival_ts($firstRoute);if($arrival===PHP_INT_MAX)continue;$onward=(new DateTimeImmutable('@'.($arrival+120)))->setTimezone(new DateTimeZone('Australia/Sydney'));if($onward->format('Ymd')!==$now->format('Ymd'))continue;$secondBody=upstream('trip',['depArrMacro'=>'dep','itdDate'=>$onward->format('Ymd'),'itdTime'=>$onward->format('Hi'),'type_origin'=>'stop','name_origin'=>$transfer['id'],'type_destination'=>'stop','name_destination'=>$to,'calcNumberOfTrips'=>$fallbackTripCount,'TfNSWTR'=>'true'],25);$secondRoute=normalized_journey($secondBody,$transfer,$destinationSeed);if(!$secondRoute)continue;$stitched=stitch_routes($firstRoute,$secondRoute,$originSeed,$destinationSeed);if($stitched){$route=$stitched;break;}}
     }
    }
   }
-  $remainingSearchTimes=$coreOnly?array_slice($searchTimes,2):$searchTimes;
+  $remainingSearchTimes=$coreOnly?array_slice($searchTimes,3):$searchTimes;
   foreach($remainingSearchTimes as $probe){
    $t0=microtime(true);$body=upstream('trip',['depArrMacro'=>'dep','itdDate'=>$probe->format('Ymd'),'itdTime'=>$probe->format('Hi'),'type_origin'=>'stop','name_origin'=>$from,'type_destination'=>'stop','name_destination'=>$to,'calcNumberOfTrips'=>$tripCount,'TfNSWTR'=>'true'],25);if($debugTiming)$timings[]=['step'=>'whole-trip','seconds'=>round(microtime(true)-$t0,4),'probe'=>$probe->format('Hi')];
    $t0=microtime(true);$route=better_route($route,normalized_journey($body,$originSeed,$destinationSeed));if($debugTiming)$timings[]=['step'=>'normalize-whole','seconds'=>round(microtime(true)-$t0,4),'found'=>$route!==null];
