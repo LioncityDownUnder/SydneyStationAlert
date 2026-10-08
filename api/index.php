@@ -48,7 +48,7 @@ try {
    }
   }
   journey_perf_phase('additional_search');
-  $remainingSearchTimes=$coreOnly?array_slice($searchTimes,5):$searchTimes;
+  $remainingSearchTimes=($coreOnly&&count($searchTimes)>=5)?array_slice($searchTimes,5):$searchTimes;
   foreach($remainingSearchTimes as $probe){
    $body=timed_upstream('trip',['depArrMacro'=>'dep','itdDate'=>$probe->format('Ymd'),'itdTime'=>$probe->format('Hi'),'type_origin'=>'stop','name_origin'=>$from,'type_destination'=>'stop','name_destination'=>$to,'calcNumberOfTrips'=>$tripCount,'TfNSWTR'=>'true'],25);
    $route=better_route($route,timed_normalized_journey($body,$originSeed,$destinationSeed));
