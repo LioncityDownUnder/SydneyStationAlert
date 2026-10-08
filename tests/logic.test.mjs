@@ -26,3 +26,19 @@ test('bypassed stations do not count as remaining stops',()=>{
   assert.equal(p.remaining,2);
   assert.deepEqual(alertKeys(j,0),['destination-two']);
 });
+
+test('QA and production storage keys remain isolated and legacy-compatible',()=>{
+ const main=fs.readFileSync('src/main.ts','utf8');
+ const qaPattern=/^\/qatest(?:\/|$)/;
+ const keys=path=>{const qa=qaPattern.test(path);return {trip:qa?'sydstnalert:qa:active-trip:v1':'sydney-station-alert:active-trip:v1',stations:qa?'sydstnalert:qa:stations:v1':'sydney-station-alert:stations:v1'};};
+ assert.match(main,/const isQaEnvironment = \/\^\\\/qatest/);
+ assert.match(main,/const ACTIVE_TRIP_KEY = isQaEnvironment/);
+ assert.match(main,/const STATION_CACHE_KEY = isQaEnvironment/);
+ assert.deepEqual(keys('/'),keys('/other'));
+ assert.notDeepEqual(keys('/qatest/'),keys('/'));
+ assert.deepEqual(keys('/qatest/'),keys('/qatest'));
+ assert.deepEqual(keys('/qatest/journey'),keys('/qatest/'));
+ assert.deepEqual(keys('/qatesting'),keys('/'));
+ assert.equal(keys('/').trip,'sydney-station-alert:active-trip:v1');
+ assert.equal(keys('/').stations,'sydney-station-alert:stations:v1');
+});
