@@ -37,7 +37,27 @@ try {
     $fallbackMeta=[];$firstParams=[];
     foreach($fastBodies as $i=>$body){if(!is_array($body))continue;$probe=$fastProbes[$i];$candidates=timed_transfer_candidates(null,$body,$originSeed,$destinationSeed,1);if(!$candidates)continue;$transfer=$candidates[0];$fallbackMeta[]=['probe'=>$probe,'transfer'=>$transfer];$firstParams[]=['depArrMacro'=>'dep','itdDate'=>$probe->format('Ymd'),'itdTime'=>$probe->format('Hi'),'type_origin'=>'stop','name_origin'=>$from,'type_destination'=>'stop','name_destination'=>$transfer['id'],'calcNumberOfTrips'=>$fallbackTripCount,'TfNSWTR'=>'true'];}
     if($firstParams){$firstBodies=timed_parallel_trip($firstParams,25);
-     foreach($firstBodies as $i=>$fb){if(!is_array($fb)||!isset($fallbackMeta[$i]))continue;$transfer=$fallbackMeta[$i]['transfer'];$firstRoute=timed_normalized_journey($fb,$originSeed,$transfer);if(!$firstRoute)continue;$arrival=route_arrival_ts($firstRoute);if($arrival===PHP_INT_MAX)continue;$onward=(new DateTimeImmutable('@'.($arrival+120)))->setTimezone(new DateTimeZone('Australia/Sydney'));$secondBody=timed_upstream('trip',['depArrMacro'=>'dep','itdDate'=>$onward->format('Ymd'),'itdTime'=>$onward->format('Hi'),'type_origin'=>'stop','name_origin'=>$transfer['id'],'type_destination'=>'stop','name_destination'=>$to,'calcNumberOfTrips'=>$fallbackTripCount,'TfNSWTR'=>'true'],25);$secondRoute=timed_normalized_journey($secondBody,$transfer,$destinationSeed);if(!$secondRoute)continue;$stitched=stitch_routes($firstRoute,$secondRoute,$originSeed,$destinationSeed);if($stitched){$route=$stitched;break;}}
+     $secondParams=[];$secondMeta=[];
+     foreach($firstBodies as $i=>$fb){
+      if(!is_array($fb)||!isset($fallbackMeta[$i]))continue;
+      $transfer=$fallbackMeta[$i]['transfer'];
+      $firstRoute=timed_normalized_journey($fb,$originSeed,$transfer);
+      if(!$firstRoute)continue;
+      $arrival=route_arrival_ts($firstRoute);if($arrival===PHP_INT_MAX)continue;
+      $onward=(new DateTimeImmutable('@'.($arrival+120)))->setTimezone(new DateTimeZone('Australia/Sydney'));
+      $secondMeta[]=['first'=>$firstRoute,'transfer'=>$transfer];
+      $secondParams[]=['depArrMacro'=>'dep','itdDate'=>$onward->format('Ymd'),'itdTime'=>$onward->format('Hi'),'type_origin'=>'stop','name_origin'=>$transfer['id'],'type_destination'=>'stop','name_destination'=>$to,'calcNumberOfTrips'=>$fallbackTripCount,'TfNSWTR'=>'true'];
+     }
+     // Batch onward TfNSW calls: do not wait on each alternative interchange serially.
+     if($secondParams){
+      $secondBodies=timed_parallel_trip($secondParams,25);
+      foreach($secondBodies as $i=>$secondBody){
+       if(!is_array($secondBody))continue;
+       $meta=$secondMeta[$i];$secondRoute=timed_normalized_journey($secondBody,$meta['transfer'],$destinationSeed);
+       if(!$secondRoute)continue;
+       $route=better_route($route,stitch_routes($meta['first'],$secondRoute,$originSeed,$destinationSeed));
+      }
+     }
     }
    }
   }
