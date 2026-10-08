@@ -4,6 +4,7 @@
 
 ### Journey performance
 - Live timing showed Hurstville → Padstow at ~18.9s and Hurstville → Casula at ~17.1s. Transfer validation now checks only the selected primary interchange, and optional service-alert/crowding feeds fail fast so advisory data cannot hold up the core journey response.
+- Post-deploy timing improved Hurstville → Padstow to ~7.4s and Hurstville → Casula to ~3.2s while retaining the expected T4 → T8 and T4 → T8 → T2 rail legs.
 - Prioritize the selected route's known interchange and cap transfer validation to two candidates, reducing slow multi-call searches such as Hurstville → Padstow while preserving validated interchange routing.
 - Journey requests now fail with a friendly timeout message instead of exposing the browser AbortError.
 
