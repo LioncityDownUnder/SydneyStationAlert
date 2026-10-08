@@ -109,3 +109,12 @@ test('proactive onward lookup is bounded and preserves confirmed journey',()=>{
  assert.match(main,/void suggestOnwardConnection\(\)/);
  assert.match(main,/Use “I missed my connection” to update your route/);
 });
+
+test('background alert limitations are disclosed and foreground checks resume',()=>{
+ const main=fs.readFileSync('src/main.ts','utf8');
+ assert.match(main,/function notificationReliabilityNotice\(\)/);
+ assert.match(main,/Location and timetable checks may stop when your phone is locked/);
+ assert.match(main,/\$\{notificationReliabilityNotice\(\)\}/);
+ assert.match(main,/visibilitychange.*startTracking\(\);checkAlerts\(\);renderJourneyStable\(\);void refresh\(\)/);
+ assert.match(main,/addEventListener\('pageshow'/);
+});
