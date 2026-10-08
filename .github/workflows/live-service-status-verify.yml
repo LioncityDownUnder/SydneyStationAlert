@@ -1,0 +1,60 @@
+name: Live Service Status Verify
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve stations and verify journeys
+        shell: bash
+        run: |
+          set -euo pipefail
+          API="https://trains.nytnetwork.work/api/index.php"
+
+          station_id() {
+            curl --fail --silent --show-error --get "$API"               --data-urlencode "action=stations"               --data-urlencode "q=$1" | jq -r '.data[0].id'
+          }
+
+          HURSTVILLE="$(station_id Hurstville)"
+          CENTRAL="$(station_id Central)"
+          PADSTOW="$(station_id Padstow)"
+
+          test -n "$HURSTVILLE" && test "$HURSTVILLE" != "null"
+          test -n "$CENTRAL" && test "$CENTRAL" != "null"
+          test -n "$PADSTOW" && test "$PADSTOW" != "null"
+
+          echo "Resolved station IDs successfully."
+
+          verify_journey() {
+            local from_id="$1"
+            local from_name="$2"
+            local to_id="$3"
+            local to_name="$4"
+
+            echo "=== $from_name -> $to_name ==="
+            curl --fail --silent --show-error --get "$API"               --data-urlencode "action=journey"               --data-urlencode "from=$from_id"               --data-urlencode "to=$to_id"               --data-urlencode "fromName=$from_name"               --data-urlencode "toName=$to_name" |
+              jq '{
+                source: .data.source,
+                legs: (.data.legs | length),
+                stops: [.data.stops[].name],
+                serviceStatus: {
+                  level: .data.serviceStatus.level,
+                  hasMaterialChange: .data.serviceStatus.hasMaterialChange,
+                  updatedAt: .data.serviceStatus.updatedAt,
+                  alertCount: (.data.serviceStatus.alerts | length),
+                  alerts: [.data.serviceStatus.alerts[] | {
+                    severity,
+                    title,
+                    materialChange,
+                    affectedLines,
+                    affectedStations
+                  }]
+                }
+              }'
+          }
+
+          verify_journey "$HURSTVILLE" "Hurstville" "$CENTRAL" "Central"
+          verify_journey "$HURSTVILLE" "Hurstville" "$PADSTOW" "Padstow"
