@@ -45,14 +45,52 @@ try {
    if($route)break;
   }
   if(!$route)fail('NO_RAIL_TODAY','No more train services are available today from '.$fromName.' to '.$toName.'.',404);
-  $first=$route['legs'][0];$dep=upstream('departure_mon',['mode'=>'direct','type_dm'=>'stop','name_dm'=>$first['origin']['id'],'depArrMacro'=>'dep','itdDate'=>$now->format('Ymd'),'itdTime'=>$now->format('Hi'),'TfNSWDM'=>'true'],25);
-  $times=[];foreach(val($dep,'stopEvents',[]) as $evt){if(!mode(val($evt,'transportation',[])))continue;$t=val($evt,'departureTimeEstimated',val($evt,'departureTimePlanned'));if(is_string($t)&&strtotime($t)!==false)$times[]=$t;if(count($times)>=2)break;}$route['nextDepartures']=$times;
   $alertBody=fetch_current_service_alerts($now);
   if(is_array($alertBody)){
-   $route['serviceStatus']=journey_service_status($route,$alertBody);
+   $initialStatus=journey_service_status($route,$alertBody);
+   $initialRouteId=(string)$route['id'];
+   if($initialStatus['hasMaterialChange']===true){
+    $replacement=null;
+    foreach($searchTimes as $probe){
+     $body=upstream('trip',['depArrMacro'=>'dep','itdDate'=>$probe->format('Ymd'),'itdTime'=>$probe->format('Hi'),'type_origin'=>'stop','name_origin'=>$from,'type_destination'=>'stop','name_destination'=>$to,'calcNumberOfTrips'=>30,'TfNSWTR'=>'true'],25);
+     $replacement=better_route($replacement,best_unaffected_route(normalized_journeys($body,$originSeed,$destinationSeed),$alertBody));
+     $needsInterchangeCheck=!$replacement||count(val($replacement,'legs',[]))>1;
+     foreach($needsInterchangeCheck?rail_transfer_candidates($body,$originSeed,$destinationSeed,4):[] as $transfer){
+      $firstBody=upstream('trip',['depArrMacro'=>'dep','itdDate'=>$probe->format('Ymd'),'itdTime'=>$probe->format('Hi'),'type_origin'=>'stop','name_origin'=>$from,'type_destination'=>'stop','name_destination'=>$transfer['id'],'calcNumberOfTrips'=>16,'TfNSWTR'=>'true'],25);
+      $firstRoute=best_unaffected_route(normalized_journeys($firstBody,$originSeed,$transfer),$alertBody);if(!$firstRoute)continue;
+      $arrival=route_arrival_ts($firstRoute);if($arrival===PHP_INT_MAX)continue;
+      $onward=(new DateTimeImmutable('@'.($arrival+120)))->setTimezone(new DateTimeZone('Australia/Sydney'));
+      if($onward->format('Ymd')!==$now->format('Ymd'))continue;
+      $secondBody=upstream('trip',['depArrMacro'=>'dep','itdDate'=>$onward->format('Ymd'),'itdTime'=>$onward->format('Hi'),'type_origin'=>'stop','name_origin'=>$transfer['id'],'type_destination'=>'stop','name_destination'=>$to,'calcNumberOfTrips'=>16,'TfNSWTR'=>'true'],25);
+      $secondRoute=best_unaffected_route(normalized_journeys($secondBody,$transfer,$destinationSeed),$alertBody);if(!$secondRoute)continue;
+      $stitched=stitch_routes($firstRoute,$secondRoute,$originSeed,$destinationSeed);
+      if($stitched&&!route_has_material_service_change($stitched,$alertBody))$replacement=better_route($replacement,$stitched);
+     }
+     if($replacement)break;
+    }
+    if($replacement){
+     $replacement['source']='validated';
+     $route=$replacement;
+     $route['serviceStatus']=journey_service_status($route,$alertBody);
+     $route['serviceStatus']['revalidationAttempted']=true;
+     $route['serviceStatus']['replacementFound']=true;
+     $route['serviceStatus']['originalJourneyId']=$initialRouteId;
+    }else{
+     $route['serviceStatus']=$initialStatus;
+     $route['serviceStatus']['revalidationAttempted']=true;
+     $route['serviceStatus']['replacementFound']=false;
+     $route['serviceStatus']['originalJourneyId']=$initialRouteId;
+    }
+   }else{
+    $route['serviceStatus']=$initialStatus;
+    $route['serviceStatus']['revalidationAttempted']=false;
+    $route['serviceStatus']['replacementFound']=false;
+   }
   }else{
-   $route['serviceStatus']=['level'=>'unavailable','hasMaterialChange'=>false,'updatedAt'=>gmdate('c'),'alerts'=>[]];
+   $route['serviceStatus']=['level'=>'unavailable','hasMaterialChange'=>false,'updatedAt'=>gmdate('c'),'alerts'=>[],'revalidationAttempted'=>false,'replacementFound'=>false];
   }
+  $first=$route['legs'][0];$dep=upstream('departure_mon',['mode'=>'direct','type_dm'=>'stop','name_dm'=>$first['origin']['id'],'depArrMacro'=>'dep','itdDate'=>$now->format('Ymd'),'itdTime'=>$now->format('Hi'),'TfNSWDM'=>'true'],25);
+  $times=[];foreach(val($dep,'stopEvents',[]) as $evt){if(!mode(val($evt,'transportation',[])))continue;$t=val($evt,'departureTimeEstimated',val($evt,'departureTimePlanned'));if(is_string($t)&&strtotime($t)!==false)$times[]=$t;if(count($times)>=2)break;}$route['nextDepartures']=$times;
   echo json_encode(['data'=>$route],JSON_INVALID_UTF8_SUBSTITUTE);exit;
  }
  fail('BAD_REQUEST','Unknown API action.',404);
