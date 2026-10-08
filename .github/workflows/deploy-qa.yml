@@ -91,3 +91,29 @@ jobs:
             "https://trains.nytnetwork.work/qatest/api/index.php?action=health" | tee /tmp/qa-health.json
           php -r '$v=json_decode(file_get_contents("/tmp/qa-health.json"),true); if(($v["data"]["ok"]??false)!==true || ($v["data"]["configured"]??false)!==true)exit(1);'
           curl --fail --silent --show-error "https://trains.nytnetwork.work/qatest/" -o /dev/null
+
+      - name: Record QA core journey performance
+        shell: bash
+        run: |
+          set -euo pipefail
+          API="https://trains.nytnetwork.work/qatest/api/index.php"
+          station_id() {
+            curl --fail --silent --show-error --get "$API" --data-urlencode "action=stations" --data-urlencode "q=$1" |
+              jq -r --arg n "$1" '.data[] | select((.name|ascii_downcase)==($n|ascii_downcase)) | .id' | head -n1
+          }
+          check_route() {
+            local from="$1" to="$2" a b tmp time
+            a="$(station_id "$from")"; b="$(station_id "$to")"; test -n "$a"; test -n "$b"
+            tmp="$(mktemp)"
+            time="$(curl --fail --silent --show-error --max-time 35 --get "$API" \
+              --data-urlencode "action=journey" --data-urlencode "from=$a" --data-urlencode "to=$b" \
+              --data-urlencode "fromName=$from" --data-urlencode "toName=$to" \
+              --data-urlencode "coreOnly=1" -o "$tmp" -w '%{time_total}')"
+            jq -e '.data.legs|length>=1' "$tmp" >/dev/null
+            echo "$from to $to: ${time}s (5s target)"
+            rm -f "$tmp"
+          }
+          check_route Hurstville Kogarah
+          check_route Chatswood Gadigal
+          check_route Hurstville Padstow
+          check_route Hurstville Casula
