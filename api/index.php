@@ -17,6 +17,7 @@ try {
   $fromName=trim((string)($_GET['fromName']??''));$toName=trim((string)($_GET['toName']??''));
   if($fromName===''||mb_strlen($fromName)>100||preg_match('/[\x00-\x1F\x7F]/u',$fromName))$fromName=$from;
   if($toName===''||mb_strlen($toName)>100||preg_match('/[\x00-\x1F\x7F]/u',$toName))$toName=$to;
+  journey_perf_begin($from,$to,(string)($_GET['coreOnly']??'')==='1');
   $originSeed=['id'=>$from,'name'=>$fromName,'lat'=>0.0,'lon'=>0.0,'mode'=>'train'];
   $destinationSeed=['id'=>$to,'name'=>$toName,'lat'=>0.0,'lon'=>0.0,'mode'=>'train'];
   $now=new DateTimeImmutable('now',new DateTimeZone('Australia/Sydney'));
@@ -31,44 +32,49 @@ try {
    if($probe->format('Ymd')!==$now->format('Ymd'))break;
    $searchTimes[]=$probe;
   }
+  journey_perf_phase('initial_parallel_search');
   if($coreOnly&&count($searchTimes)>=5){
    $fastProbes=array_slice($searchTimes,0,5);$fastParams=[];
    foreach($fastProbes as $probe)$fastParams[]=['depArrMacro'=>'dep','itdDate'=>$probe->format('Ymd'),'itdTime'=>$probe->format('Hi'),'type_origin'=>'stop','name_origin'=>$from,'type_destination'=>'stop','name_destination'=>$to,'calcNumberOfTrips'=>$tripCount,'TfNSWTR'=>'true'];
-   $fastBodies=upstream_parallel_trip($fastParams,25);
-   foreach($fastBodies as $i=>$body){if(!is_array($body))continue;$candidate=normalized_journey($body,$originSeed,$destinationSeed);if($candidate){$route=$candidate;break;}}
+   $fastBodies=timed_parallel_trip($fastParams,25);
+   foreach($fastBodies as $i=>$body){if(!is_array($body))continue;$candidate=timed_normalized_journey($body,$originSeed,$destinationSeed);if($candidate){$route=$candidate;break;}}
    if(!$route){
+    journey_perf_phase('parallel_fallback');
     $fallbackMeta=[];$firstParams=[];
-    foreach($fastBodies as $i=>$body){if(!is_array($body))continue;$probe=$fastProbes[$i];$candidates=prioritized_transfer_candidates(null,$body,$originSeed,$destinationSeed,1);if(!$candidates)continue;$transfer=$candidates[0];$fallbackMeta[]=['probe'=>$probe,'transfer'=>$transfer];$firstParams[]=['depArrMacro'=>'dep','itdDate'=>$probe->format('Ymd'),'itdTime'=>$probe->format('Hi'),'type_origin'=>'stop','name_origin'=>$from,'type_destination'=>'stop','name_destination'=>$transfer['id'],'calcNumberOfTrips'=>$fallbackTripCount,'TfNSWTR'=>'true'];}
-    if($firstParams){$firstBodies=upstream_parallel_trip($firstParams,25);
-     foreach($firstBodies as $i=>$fb){if(!is_array($fb)||!isset($fallbackMeta[$i]))continue;$transfer=$fallbackMeta[$i]['transfer'];$firstRoute=normalized_journey($fb,$originSeed,$transfer);if(!$firstRoute)continue;$arrival=route_arrival_ts($firstRoute);if($arrival===PHP_INT_MAX)continue;$onward=(new DateTimeImmutable('@'.($arrival+120)))->setTimezone(new DateTimeZone('Australia/Sydney'));if($onward->format('Ymd')!==$now->format('Ymd'))continue;$secondBody=upstream('trip',['depArrMacro'=>'dep','itdDate'=>$onward->format('Ymd'),'itdTime'=>$onward->format('Hi'),'type_origin'=>'stop','name_origin'=>$transfer['id'],'type_destination'=>'stop','name_destination'=>$to,'calcNumberOfTrips'=>$fallbackTripCount,'TfNSWTR'=>'true'],25);$secondRoute=normalized_journey($secondBody,$transfer,$destinationSeed);if(!$secondRoute)continue;$stitched=stitch_routes($firstRoute,$secondRoute,$originSeed,$destinationSeed);if($stitched){$route=$stitched;break;}}
+    foreach($fastBodies as $i=>$body){if(!is_array($body))continue;$probe=$fastProbes[$i];$candidates=timed_transfer_candidates(null,$body,$originSeed,$destinationSeed,1);if(!$candidates)continue;$transfer=$candidates[0];$fallbackMeta[]=['probe'=>$probe,'transfer'=>$transfer];$firstParams[]=['depArrMacro'=>'dep','itdDate'=>$probe->format('Ymd'),'itdTime'=>$probe->format('Hi'),'type_origin'=>'stop','name_origin'=>$from,'type_destination'=>'stop','name_destination'=>$transfer['id'],'calcNumberOfTrips'=>$fallbackTripCount,'TfNSWTR'=>'true'];}
+    if($firstParams){$firstBodies=timed_parallel_trip($firstParams,25);
+     foreach($firstBodies as $i=>$fb){if(!is_array($fb)||!isset($fallbackMeta[$i]))continue;$transfer=$fallbackMeta[$i]['transfer'];$firstRoute=timed_normalized_journey($fb,$originSeed,$transfer);if(!$firstRoute)continue;$arrival=route_arrival_ts($firstRoute);if($arrival===PHP_INT_MAX)continue;$onward=(new DateTimeImmutable('@'.($arrival+120)))->setTimezone(new DateTimeZone('Australia/Sydney'));if($onward->format('Ymd')!==$now->format('Ymd'))continue;$secondBody=timed_upstream('trip',['depArrMacro'=>'dep','itdDate'=>$onward->format('Ymd'),'itdTime'=>$onward->format('Hi'),'type_origin'=>'stop','name_origin'=>$transfer['id'],'type_destination'=>'stop','name_destination'=>$to,'calcNumberOfTrips'=>$fallbackTripCount,'TfNSWTR'=>'true'],25);$secondRoute=timed_normalized_journey($secondBody,$transfer,$destinationSeed);if(!$secondRoute)continue;$stitched=stitch_routes($firstRoute,$secondRoute,$originSeed,$destinationSeed);if($stitched){$route=$stitched;break;}}
     }
    }
   }
+  journey_perf_phase('additional_search');
   $remainingSearchTimes=$coreOnly?array_slice($searchTimes,5):$searchTimes;
   foreach($remainingSearchTimes as $probe){
-   $body=upstream('trip',['depArrMacro'=>'dep','itdDate'=>$probe->format('Ymd'),'itdTime'=>$probe->format('Hi'),'type_origin'=>'stop','name_origin'=>$from,'type_destination'=>'stop','name_destination'=>$to,'calcNumberOfTrips'=>$tripCount,'TfNSWTR'=>'true'],25);
-   $route=better_route($route,normalized_journey($body,$originSeed,$destinationSeed));
+   $body=timed_upstream('trip',['depArrMacro'=>'dep','itdDate'=>$probe->format('Ymd'),'itdTime'=>$probe->format('Hi'),'type_origin'=>'stop','name_origin'=>$from,'type_destination'=>'stop','name_destination'=>$to,'calcNumberOfTrips'=>$tripCount,'TfNSWTR'=>'true'],25);
+   $route=better_route($route,timed_normalized_journey($body,$originSeed,$destinationSeed));
    $needsInterchangeCheck=!$route;
-   $candidateList=$needsInterchangeCheck?prioritized_transfer_candidates($route,$body,$originSeed,$destinationSeed,1):[];
+   $candidateList=$needsInterchangeCheck?timed_transfer_candidates($route,$body,$originSeed,$destinationSeed,1):[];
    foreach($candidateList as $transfer){
-    $firstBody=upstream('trip',['depArrMacro'=>'dep','itdDate'=>$probe->format('Ymd'),'itdTime'=>$probe->format('Hi'),'type_origin'=>'stop','name_origin'=>$from,'type_destination'=>'stop','name_destination'=>$transfer['id'],'calcNumberOfTrips'=>$fallbackTripCount,'TfNSWTR'=>'true'],25);
-    $firstRoute=normalized_journey($firstBody,$originSeed,$transfer);if(!$firstRoute)continue;
+    $firstBody=timed_upstream('trip',['depArrMacro'=>'dep','itdDate'=>$probe->format('Ymd'),'itdTime'=>$probe->format('Hi'),'type_origin'=>'stop','name_origin'=>$from,'type_destination'=>'stop','name_destination'=>$transfer['id'],'calcNumberOfTrips'=>$fallbackTripCount,'TfNSWTR'=>'true'],25);
+    $firstRoute=timed_normalized_journey($firstBody,$originSeed,$transfer);if(!$firstRoute)continue;
     $arrival=route_arrival_ts($firstRoute);if($arrival===PHP_INT_MAX)continue;
     $onward=(new DateTimeImmutable('@'.($arrival+120)))->setTimezone(new DateTimeZone('Australia/Sydney'));
     if($onward->format('Ymd')!==$now->format('Ymd'))continue;
-    $secondBody=upstream('trip',['depArrMacro'=>'dep','itdDate'=>$onward->format('Ymd'),'itdTime'=>$onward->format('Hi'),'type_origin'=>'stop','name_origin'=>$transfer['id'],'type_destination'=>'stop','name_destination'=>$to,'calcNumberOfTrips'=>$fallbackTripCount,'TfNSWTR'=>'true'],25);
-    $secondRoute=normalized_journey($secondBody,$transfer,$destinationSeed);if(!$secondRoute)continue;
+    $secondBody=timed_upstream('trip',['depArrMacro'=>'dep','itdDate'=>$onward->format('Ymd'),'itdTime'=>$onward->format('Hi'),'type_origin'=>'stop','name_origin'=>$transfer['id'],'type_destination'=>'stop','name_destination'=>$to,'calcNumberOfTrips'=>$fallbackTripCount,'TfNSWTR'=>'true'],25);
+    $secondRoute=timed_normalized_journey($secondBody,$transfer,$destinationSeed);if(!$secondRoute)continue;
     $route=better_route($route,stitch_routes($firstRoute,$secondRoute,$originSeed,$destinationSeed));
    }
    if($route)break;
   }
   if(!$route)fail('NO_RAIL_TODAY','No more train services are available today from '.$fromName.' to '.$toName.'.',404);
   if($coreOnly){
+   journey_perf_phase('response');
    $route['serviceStatus']=['level'=>'unavailable','hasMaterialChange'=>false,'updatedAt'=>gmdate('c'),'alerts'=>[],'revalidationAttempted'=>false,'replacementFound'=>false];
    $route['crowding']=['available'=>false,'level'=>'unknown','updatedAt'=>gmdate('c'),'legs'=>[]];
    $route['nextDepartures']=[];
    echo json_encode(['data'=>$route],JSON_INVALID_UTF8_SUBSTITUTE);exit;
   }
+  journey_perf_phase('enrichment');
   $alertBody=fetch_current_service_alerts($now);
   if(is_array($alertBody)){
    $initialStatus=journey_service_status($route,$alertBody);
@@ -76,16 +82,16 @@ try {
    if($initialStatus['hasMaterialChange']===true){
     $replacement=null;
     foreach($searchTimes as $probe){
-     $body=upstream('trip',['depArrMacro'=>'dep','itdDate'=>$probe->format('Ymd'),'itdTime'=>$probe->format('Hi'),'type_origin'=>'stop','name_origin'=>$from,'type_destination'=>'stop','name_destination'=>$to,'calcNumberOfTrips'=>$tripCount,'TfNSWTR'=>'true'],25);
+     $body=timed_upstream('trip',['depArrMacro'=>'dep','itdDate'=>$probe->format('Ymd'),'itdTime'=>$probe->format('Hi'),'type_origin'=>'stop','name_origin'=>$from,'type_destination'=>'stop','name_destination'=>$to,'calcNumberOfTrips'=>$tripCount,'TfNSWTR'=>'true'],25);
      $replacement=better_route($replacement,best_unaffected_route(normalized_journeys($body,$originSeed,$destinationSeed),$alertBody));
      $needsInterchangeCheck=!$replacement;
-     foreach($needsInterchangeCheck?prioritized_transfer_candidates($replacement,$body,$originSeed,$destinationSeed,1):[] as $transfer){
-      $firstBody=upstream('trip',['depArrMacro'=>'dep','itdDate'=>$probe->format('Ymd'),'itdTime'=>$probe->format('Hi'),'type_origin'=>'stop','name_origin'=>$from,'type_destination'=>'stop','name_destination'=>$transfer['id'],'calcNumberOfTrips'=>$fallbackTripCount,'TfNSWTR'=>'true'],25);
+     foreach($needsInterchangeCheck?timed_transfer_candidates($replacement,$body,$originSeed,$destinationSeed,1):[] as $transfer){
+      $firstBody=timed_upstream('trip',['depArrMacro'=>'dep','itdDate'=>$probe->format('Ymd'),'itdTime'=>$probe->format('Hi'),'type_origin'=>'stop','name_origin'=>$from,'type_destination'=>'stop','name_destination'=>$transfer['id'],'calcNumberOfTrips'=>$fallbackTripCount,'TfNSWTR'=>'true'],25);
       $firstRoute=best_unaffected_route(normalized_journeys($firstBody,$originSeed,$transfer),$alertBody);if(!$firstRoute)continue;
       $arrival=route_arrival_ts($firstRoute);if($arrival===PHP_INT_MAX)continue;
       $onward=(new DateTimeImmutable('@'.($arrival+120)))->setTimezone(new DateTimeZone('Australia/Sydney'));
       if($onward->format('Ymd')!==$now->format('Ymd'))continue;
-      $secondBody=upstream('trip',['depArrMacro'=>'dep','itdDate'=>$onward->format('Ymd'),'itdTime'=>$onward->format('Hi'),'type_origin'=>'stop','name_origin'=>$transfer['id'],'type_destination'=>'stop','name_destination'=>$to,'calcNumberOfTrips'=>$fallbackTripCount,'TfNSWTR'=>'true'],25);
+      $secondBody=timed_upstream('trip',['depArrMacro'=>'dep','itdDate'=>$onward->format('Ymd'),'itdTime'=>$onward->format('Hi'),'type_origin'=>'stop','name_origin'=>$transfer['id'],'type_destination'=>'stop','name_destination'=>$to,'calcNumberOfTrips'=>$fallbackTripCount,'TfNSWTR'=>'true'],25);
       $secondRoute=best_unaffected_route(normalized_journeys($secondBody,$transfer,$destinationSeed),$alertBody);if(!$secondRoute)continue;
       $stitched=stitch_routes($firstRoute,$secondRoute,$originSeed,$destinationSeed);
       if($stitched&&!route_has_material_service_change($stitched,$alertBody))$replacement=better_route($replacement,$stitched);
@@ -116,6 +122,7 @@ try {
   $route['crowding']=journey_crowding_status($route);
   $first=$route['legs'][0];$dep=upstream('departure_mon',['mode'=>'direct','type_dm'=>'stop','name_dm'=>$first['origin']['id'],'depArrMacro'=>'dep','itdDate'=>$now->format('Ymd'),'itdTime'=>$now->format('Hi'),'TfNSWDM'=>'true'],25);
   $times=[];foreach(val($dep,'stopEvents',[]) as $evt){if(!mode(val($evt,'transportation',[])))continue;$t=val($evt,'departureTimeEstimated',val($evt,'departureTimePlanned'));if(is_string($t)&&strtotime($t)!==false)$times[]=$t;if(count($times)>=2)break;}$route['nextDepartures']=$times;
+  journey_perf_phase('response');
   echo json_encode(['data'=>$route],JSON_INVALID_UTF8_SUBSTITUTE);exit;
  }
  fail('BAD_REQUEST','Unknown API action.',404);
