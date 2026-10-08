@@ -4,6 +4,7 @@
 
 ### Performance pass
 - Return and render the core rail journey first, before optional disruption, crowding, and departure-monitor enrichment. Optional live details now load in the background so they do not block the initial journey result.
+- Trust a valid whole-trip TfNSW rail itinerary before attempting split-route validation. Live production checks after deployment returned the core journey in about 3.2 seconds for Hurstville → Padstow and Hurstville → Casula.
 
 ### UI iteration 5
 - When a disrupted journey is automatically replaced, explain that the original service was affected and show the replacement route's interchange station(s) when available.
