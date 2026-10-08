@@ -124,3 +124,13 @@ assertit($value===42,'timed callback returns its original value');
 assertit(($GLOBALS['journey_perf']['counts']['normalize']??0)===1,'performance tracker records phase calls');
 assertit(isset($GLOBALS['journey_perf']['durations']['phase_setup']),'performance tracker measures stage durations');
 unset($GLOBALS['journey_perf']);
+
+$transferPoint=['id'=>'220810','name'=>'Wolli Creek','lat'=>-33.928,'lon'=>151.154,'mode'=>'train','platform'=>'3','arrival'=>'2026-10-08T22:48:00+11:00'];
+$transferBoard=$transferPoint;$transferBoard['platform']='2';$transferBoard['arrival']=null;$transferBoard['departure']='2026-10-08T23:05:00+11:00';
+$originLate=['id'=>'222020','name'=>'Hurstville','lat'=>-33.967,'lon'=>151.102,'mode'=>'train','platform'=>'3','departure'=>'2026-10-08T22:36:00+11:00'];
+$destinationLate=['id'=>'221000','name'=>'Padstow','lat'=>-33.953,'lon'=>151.032,'mode'=>'train','platform'=>'2','arrival'=>'2026-10-08T23:25:00+11:00'];
+$firstLate=['legs'=>[['origin'=>$originLate,'destination'=>$transferPoint,'arrival'=>$transferPoint['arrival'],'departure'=>$originLate['departure'],'stops'=>[$originLate,$transferPoint]]]];
+$secondLate=['legs'=>[['origin'=>$transferBoard,'destination'=>$destinationLate,'arrival'=>$destinationLate['arrival'],'departure'=>$transferBoard['departure'],'stops'=>[$transferBoard,$destinationLate]]]];
+$stitchedLate=stitch_routes($firstLate,$secondLate,$originLate,$destinationLate);
+assertit($stitchedLate!==null&&count($stitchedLate['transfers'])===1,'late T4 to T8 connection with 17-minute interchange remains valid');
+assertit($stitchedLate['transfers'][0]['arrivalPlatform']==='3'&&$stitchedLate['transfers'][0]['departurePlatform']==='2','interchange preserves separate arrival and boarding platforms');
