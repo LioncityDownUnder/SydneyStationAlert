@@ -110,6 +110,9 @@ button:disabled { cursor: not-allowed; }
 .stop.current:before { background: #e6762d; border-color: #e6762d; box-shadow: 0 0 0 5px #e6762d22; }
 .stop.destination:before { background: #202421; border-color: #202421; }
 .stop.past { opacity: .46; }
+.stop.bypassed { opacity: .42; }
+.stop.bypassed:before { background: #eef0ed; border-color: #aab1ac; }
+.stop.bypassed strong { text-decoration: line-through; text-decoration-thickness: 1px; }
 .stop strong { display: block; font-size: 1.0625rem; line-height: 1.4; overflow-wrap: anywhere; }
 .stop small { display: block; color: #69746c; font-size: .875rem; line-height: 1.45; margin-top: 4px; overflow-wrap: anywhere; }
 .transfer { color: #a95120; font-size: .875rem; line-height: 1.45; font-weight: 750; display: block; margin-top: 7px; overflow-wrap: anywhere; }
