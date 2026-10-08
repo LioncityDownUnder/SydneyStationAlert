@@ -116,3 +116,12 @@ test('background alert limitations are disclosed and foreground checks resume',(
  assert.match(main,/visibilitychange.*startTracking\(\);checkAlerts\(\);renderJourneyStable\(\);void refresh\(\)/);
  assert.match(main,/addEventListener\('pageshow'/);
 });
+
+test('missed connection recovery remains available independently of journey progress',()=>{
+ const main=fs.readFileSync('src/main.ts','utf8');
+ assert.match(main,/const missedConnectionActions=state\.onboard&&j\.legs\.length>1/);
+ assert.match(main,/j\.legs\.slice\(1\)\.map/);
+ assert.match(main,/I missed my connection at/);
+ assert.match(main,/\$\{missedConnectionActions\}\$\{serviceUpdate\(j\)\}/);
+ assert.match(main,/data-recover-leg/);
+});
