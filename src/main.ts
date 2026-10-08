@@ -36,7 +36,7 @@ function adoptJourneyUpdate(updated){
   return true;
  }
  if(!sameService(state.journey,updated))return false;
- state.journey=updated;saveActiveTrip();return true;
+ state.journey=updated;saveActiveTrip();updateDelayConnectionWarning();return true;
 }
 
 function loadStationCache() { try {
@@ -113,7 +113,25 @@ function updateConnectionWarning(){
  const name=state.journey.legs[index].origin.name;
  state.alert='Possible missed connection at '+name+'. If you did not board the connecting train, use “I missed my connection” to find another service.';
 }
-function checkAlerts(){updateConnectionWarning();if(!state.journey||state.paused||!state.location)return;const p=progress(state.journey,state.location);if(!p.nearest)return;for(const key of alertKeys(state.journey,p.index)){if(fired.has(key))continue;fired.add(key);const text=key==='destination-two'?`2 stops to ${state.journey.destination.name}`:key==='destination-one'?`1 stop to ${state.journey.destination.name}`:`Change trains at ${state.journey.transfers.find(t=>'transfer-'+t.id===key)?.name??'the next interchange'}`;state.alert=text;if(Notification.permission==='granted')try{new Notification('Sydney Station Alert',{body:text,tag:state.journey.id+'-'+key});}catch{}}}
+function connectionAtRisk(j){
+ if(!state.onboard||state.paused||!j||!Array.isArray(j.legs))return null;
+ for(let i=1;i<j.legs.length;i++){
+  const previous=j.legs[i-1],next=j.legs[i];
+  const arrival=Date.parse(previous.destination?.arrival||previous.arrival||'');
+  const departure=Date.parse(next.origin?.departure||next.departure||'');
+  if(!Number.isFinite(arrival)||!Number.isFinite(departure))continue;
+  // Three minutes is a conservative planning buffer, not a platform guarantee.
+  if(arrival+3*60000>departure&&Date.now()<departure+45*60000)
+   return {index:i,name:next.origin?.name||'the interchange',arrival,departure};
+ }
+ return null;
+}
+function updateDelayConnectionWarning(){
+ const risk=connectionAtRisk(state.journey);
+ if(!risk)return;
+ state.alert='Connection at risk at '+risk.name+': the first train arrival leaves less than 3 minutes to change. Check the next onward service using “I missed my connection”.';
+}
+function checkAlerts(){updateDelayConnectionWarning();updateConnectionWarning();if(!state.journey||state.paused||!state.location)return;const p=progress(state.journey,state.location);if(!p.nearest)return;for(const key of alertKeys(state.journey,p.index)){if(fired.has(key))continue;fired.add(key);const text=key==='destination-two'?`2 stops to ${state.journey.destination.name}`:key==='destination-one'?`1 stop to ${state.journey.destination.name}`:`Change trains at ${state.journey.transfers.find(t=>'transfer-'+t.id===key)?.name??'the next interchange'}`;state.alert=text;if(Notification.permission==='granted')try{new Notification('Sydney Station Alert',{body:text,tag:state.journey.id+'-'+key});}catch{}}}
 function displayedProgress(j){
  const gps=progress(j,state.location);
  if(!state.onboard)return progress(j,null);
