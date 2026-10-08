@@ -12,7 +12,9 @@
               "id": "nsw:020T4: :H:",
               "name": "Sydney Trains Network T4 Eastern Suburbs & Illawarra Line",
               "number": "T4 Eastern Suburbs & Illawarra Line",
-              "product": {"class": 1}
+              "product": {
+                "class": 1
+              }
             }
           ]
         }
@@ -28,11 +30,16 @@
               "id": "nsw:970: :H:",
               "name": "Sydney Buses Network 970",
               "number": "970",
-              "product": {"class": 5}
+              "product": {
+                "class": 5
+              }
             }
           ],
           "stops": [
-            {"id": "200060", "name": "Central Station, Sydney"}
+            {
+              "id": "200060",
+              "name": "Central Station, Sydney"
+            }
           ]
         }
       },
@@ -47,11 +54,23 @@
               "id": "nsw:020T4: :H:",
               "name": "Sydney Trains Network T4 Eastern Suburbs & Illawarra Line",
               "number": "T4 Eastern Suburbs & Illawarra Line",
-              "product": {"class": 1}
+              "product": {
+                "class": 1
+              },
+              "trips": [
+                {
+                  "realtimeTripId": "selected-live-trip",
+                  "tripCode": 232,
+                  "trainNumber": "232"
+                }
+              ]
             }
           ],
           "stops": [
-            {"id": "220810", "name": "Wolli Creek Station, Wolli Creek"}
+            {
+              "id": "220810",
+              "name": "Wolli Creek Station, Wolli Creek"
+            }
           ]
         }
       },
@@ -65,11 +84,41 @@
               "id": "nsw:020T1:N:H:",
               "name": "Sydney Trains Network T1 North Shore & Western Line",
               "number": "T1 North Shore & Western Line",
-              "product": {"class": 1}
+              "product": {
+                "class": 1
+              }
             }
           ],
           "stops": [
-            {"id": "200060", "name": "Central Station, Sydney"}
+            {
+              "id": "200060",
+              "name": "Central Station, Sydney"
+            }
+          ]
+        }
+      },
+      {
+        "id": "alert-t4-other-trip-major",
+        "subtitle": "Cancelled",
+        "content": "Another T4 service is cancelled.",
+        "priority": "normal",
+        "affected": {
+          "lines": [
+            {
+              "id": "nsw:020T4: :H:",
+              "name": "Sydney Trains Network T4 Eastern Suburbs & Illawarra Line",
+              "number": "T4 Eastern Suburbs & Illawarra Line",
+              "product": {
+                "class": 1
+              },
+              "trips": [
+                {
+                  "realtimeTripId": "different-live-trip",
+                  "tripCode": 999,
+                  "trainNumber": "999"
+                }
+              ]
+            }
           ]
         }
       }
