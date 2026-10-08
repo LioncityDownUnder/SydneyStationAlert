@@ -20,6 +20,9 @@ export type ServiceStatus = {
   hasMaterialChange:boolean;
   updatedAt:string;
   alerts:ServiceAlert[];
+  revalidationAttempted?:boolean;
+  replacementFound?:boolean;
+  originalJourneyId?:string;
 };
 export type Journey = { id:string; origin:Station; destination:Station; legs:RailLeg[]; stops:Stop[]; transfers:Station[]; omittedNonRail:boolean; fetchedAt:string; source:'live'|'validated'|'demo'; nextDepartures:string[]; serviceStatus?:ServiceStatus };
 export type ApiErrorCode='CONFIG_MISSING'|'BAD_REQUEST'|'UPSTREAM_UNAVAILABLE'|'NO_ROUTE'|'NO_STATIONS'|'MALFORMED_RESPONSE'|'RATE_LIMITED';
