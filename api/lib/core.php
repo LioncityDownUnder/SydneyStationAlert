@@ -308,29 +308,77 @@ function alert_text_field(array $alert,array $keys):string{
  }
  return '';
 }
-function alert_scalar_values(mixed $value,array &$out):void{
- if(is_string($value)||is_int($value)||is_float($value)){
-  $text=trim((string)$value);
-  if($text!=='')$out[]=$text;
-  return;
+function alert_line_tokens(string $value):array{
+ $text=strtolower(trim(preg_replace('/\s+/',' ',$value) ?? $value));if($text==='')return [];
+ $tokens=[$text=>true];
+ if(preg_match_all('/\b(?:t|m)\d+\b/i',$value,$matches)){
+  foreach($matches[0] as $code)$tokens[strtolower($code)]=true;
  }
- if(!is_array($value))return;
- foreach($value as $item)alert_scalar_values($item,$out);
+ $clean=preg_replace('/^(?:sydney trains|intercity trains|sydney metro) network\s+/i','',$value) ?? $value;
+ $clean=strtolower(trim(preg_replace('/\s+/',' ',$clean) ?? $clean));
+ if($clean!=='')$tokens[$clean]=true;
+ return array_keys($tokens);
 }
-function alert_entity_values(array $alert,array $needles):array{
+function alert_station_match_name(string $value):string{
+ $first=trim(explode(',',$value,2)[0]);
+ return strtolower(clean_station_name($first));
+}
+function alert_scope_values(mixed $items,array $keys):array{
  $out=[];
- $walk=function(mixed $node,string $parent='') use (&$walk,&$out,$needles):void{
-  if(!is_array($node))return;
-  foreach($node as $key=>$value){
-   $name=strtolower((string)$key);
-   $matched=false;
-   foreach($needles as $needle){if(str_contains($name,$needle)){$matched=true;break;}}
-   if($matched){$values=[];alert_scalar_values($value,$values);foreach($values as $v)$out[$v]=true;}
-   if(is_array($value))$walk($value,$name);
+ if(!is_array($items))return [];
+ foreach($items as $item){
+  if(is_string($item)||is_int($item)){ $v=trim((string)$item);if($v!=='')$out[$v]=true;continue; }
+  if(!is_array($item))continue;
+  foreach($keys as $key){
+   $v=val($item,$key,'');
+   if(is_string($v)||is_int($v)){ $v=trim((string)$v);if($v!=='')$out[$v]=true; }
   }
- };
- $walk($alert);
+ }
  return array_keys($out);
+}
+function alert_affected_scope(array $raw):array{
+ $affected=val($raw,'affected',[]);if(!is_array($affected))$affected=[];
+ $lineScoped=false;$railScoped=false;$lines=[];$stations=[];$trips=[];
+
+ $lineItems=val($affected,'lines',[]);
+ if(is_array($lineItems)&&$lineItems){
+  $lineScoped=true;
+  foreach($lineItems as $line){
+   if(!is_array($line))continue;
+   $product=val($line,'product',[]);if(!is_array($product))$product=[];
+   $class=(int)val($product,'class',-1);
+   if($class!==1&&$class!==2)continue;
+   $railScoped=true;
+   foreach(['id','name','number','description'] as $key){
+    $v=trim((string)val($line,$key,''));
+    if($v!=='')$lines[$v]=true;
+   }
+   $lineTrips=val($line,'trips',[]);
+   foreach(alert_scope_values($lineTrips,['id','tripId','name','number']) as $v)$trips[$v]=true;
+  }
+ }
+
+ $stopItems=val($affected,'stops',val($affected,'stopPoints',[]));
+ foreach(alert_scope_values($stopItems,['id','stateless','name','disassembledName']) as $v)$stations[$v]=true;
+
+ // Backward-compatible fixture/older payload support without recursive harvesting.
+ if(!$lineScoped){
+  $legacyLines=val($raw,'affectedLines',[]);
+  if(is_array($legacyLines)&&$legacyLines){
+   $lineScoped=true;$railScoped=true;
+   foreach(alert_scope_values($legacyLines,['id','name','number']) as $v)$lines[$v]=true;
+  }
+ }
+ $legacyStops=val($raw,'affectedStops',[]);
+ foreach(alert_scope_values($legacyStops,['id','name','disassembledName']) as $v)$stations[$v]=true;
+
+ return [
+  'lineScoped'=>$lineScoped,
+  'railScoped'=>$railScoped,
+  'lines'=>array_keys($lines),
+  'stations'=>array_keys($stations),
+  'trips'=>array_keys($trips)
+ ];
 }
 function alert_severity(array $alert,string $title,string $description):string{
  $raw=strtolower(alert_text_field($alert,['severity','priority','type','status','level','messageType','messageTypeText']));
@@ -364,19 +412,23 @@ function normalize_service_alert(array $raw,int $index=0):array{
  if($description===$title)$description='';
  if($title==='')$title=$description!==''?$description:'Service information';
  $id=(string)val($raw,'id',val($raw,'infoId',val($raw,'identifier','alert-'.$index)));
- $starts=alert_text_field($raw,['validFrom','startTime','start','from']);
- $ends=alert_text_field($raw,['validTo','endTime','end','to']);
+ $timestamps=val($raw,'timestamps',[]);if(!is_array($timestamps))$timestamps=[];
+ $starts=alert_text_field($timestamps,['validFrom','startTime','start','from','publicationStart']);
+ $ends=alert_text_field($timestamps,['validTo','endTime','end','to','publicationEnd']);
+ $scope=alert_affected_scope($raw);
  return [
   'id'=>$id,
   'severity'=>alert_severity($raw,$title,$description),
   'title'=>$title,
   'description'=>$description,
-  'affectedLines'=>alert_entity_values($raw,['line','route']),
-  'affectedStations'=>alert_entity_values($raw,['stop','station']),
-  'affectedTrips'=>alert_entity_values($raw,['trip','journey']),
+  'affectedLines'=>$scope['lines'],
+  'affectedStations'=>$scope['stations'],
+  'affectedTrips'=>$scope['trips'],
   'startsAt'=>$starts!==''?$starts:null,
   'endsAt'=>$ends!==''?$ends:null,
-  'materialChange'=>alert_material_change($title,$description)
+  'materialChange'=>alert_material_change($title,$description),
+  '_lineScoped'=>$scope['lineScoped'],
+  '_railScoped'=>$scope['railScoped']
  ];
 }
 function normalized_service_alerts(array $body):array{
@@ -391,31 +443,64 @@ function normalized_service_alerts(array $body):array{
  return $out;
 }
 function journey_alert_terms(array $route):array{
- $stationIds=[];$stationNames=[];$lines=[];$tripIds=[];
+ $stationIds=[];$stationNames=[];$lineTokens=[];$tripIds=[];
  foreach(val($route,'stops',[]) as $stop){
   if(!is_array($stop))continue;
   $id=strtolower(trim((string)val($stop,'id','')));if($id!=='')$stationIds[$id]=true;
-  $name=strtolower(clean_station_name((string)val($stop,'name','')));if($name!=='')$stationNames[$name]=true;
+  $name=alert_station_match_name((string)val($stop,'name',''));if($name!=='')$stationNames[$name]=true;
  }
  foreach(val($route,'legs',[]) as $leg){
   if(!is_array($leg))continue;
-  $line=strtolower(trim((string)val($leg,'line','')));if($line!=='')$lines[$line]=true;
-  foreach(['tripId','trip','serviceId','id'] as $key){
+  foreach(alert_line_tokens((string)val($leg,'line','')) as $token)$lineTokens[$token]=true;
+  foreach(['tripId','trip','serviceId'] as $key){
    $id=strtolower(trim((string)val($leg,$key,'')));if($id!=='')$tripIds[$id]=true;
   }
  }
- return ['stationIds'=>array_keys($stationIds),'stationNames'=>array_keys($stationNames),'lines'=>array_keys($lines),'tripIds'=>array_keys($tripIds)];
+ return ['stationIds'=>array_keys($stationIds),'stationNames'=>array_keys($stationNames),'lineTokens'=>array_keys($lineTokens),'tripIds'=>array_keys($tripIds)];
+}
+function alert_line_matches(array $alert,array $terms):bool{
+ $journey=array_fill_keys($terms['lineTokens'],true);
+ foreach($alert['affectedLines'] as $line){
+  foreach(alert_line_tokens((string)$line) as $token){if(isset($journey[$token]))return true;}
+ }
+ return false;
+}
+function alert_station_matches(array $alert,array $terms):bool{
+ $ids=array_fill_keys($terms['stationIds'],true);$names=array_fill_keys($terms['stationNames'],true);
+ foreach($alert['affectedStations'] as $station){
+  $raw=strtolower(trim((string)$station));if($raw!==''&&isset($ids[$raw]))return true;
+  $name=alert_station_match_name((string)$station);if($name!==''&&isset($names[$name]))return true;
+ }
+ return false;
+}
+function alert_trip_matches(array $alert,array $terms):bool{
+ if(!$terms['tripIds'])return false;
+ $ids=array_fill_keys($terms['tripIds'],true);
+ foreach($alert['affectedTrips'] as $trip){$v=strtolower(trim((string)$trip));if($v!==''&&isset($ids[$v]))return true;}
+ return false;
 }
 function alert_matches_terms(array $alert,array $terms):bool{
- $haystack=strtolower($alert['title'].' '.$alert['description'].' '.implode(' ',$alert['affectedLines']).' '.implode(' ',$alert['affectedStations']).' '.implode(' ',$alert['affectedTrips']));
- foreach(array_merge($terms['stationIds'],$terms['stationNames'],$terms['lines'],$terms['tripIds']) as $term){
-  if((string)$term!==''&&str_contains($haystack,strtolower((string)$term)))return true;
+ if(($alert['_lineScoped']??false)===true){
+  if(($alert['_railScoped']??false)!==true)return false;
+  return alert_line_matches($alert,$terms)||alert_trip_matches($alert,$terms);
  }
+ if(alert_station_matches($alert,$terms)||alert_trip_matches($alert,$terms))return true;
+
+ // Conservative fallback only when TfNSW supplies no structured affected line.
+ $text=strtolower($alert['title'].' '.$alert['description']);
+ foreach($terms['lineTokens'] as $token){
+  if(preg_match('/^(?:t|m)\d+$/',$token)&&preg_match('/\b'.preg_quote($token,'/').'\b/i',$text))return true;
+ }
+ foreach($terms['stationNames'] as $name){if(strlen($name)>=5&&str_contains($text,$name))return true;}
  return false;
 }
 function journey_service_status(array $route,array $alertBody):array{
  $terms=journey_alert_terms($route);$alerts=[];
- foreach(normalized_service_alerts($alertBody) as $alert){if(alert_matches_terms($alert,$terms))$alerts[]=$alert;}
+ foreach(normalized_service_alerts($alertBody) as $alert){
+  if(!alert_matches_terms($alert,$terms))continue;
+  unset($alert['_lineScoped'],$alert['_railScoped']);
+  $alerts[]=$alert;
+ }
  usort($alerts,function($a,$b){$rank=['major'=>0,'warning'=>1,'info'=>2];return ($rank[$a['severity']]??3)<=>($rank[$b['severity']]??3);});
  $level='ok';foreach($alerts as $alert){if($alert['severity']==='major'){$level='major';break;}if($alert['severity']==='warning')$level='warning';elseif($level==='ok')$level='info';}
  return ['level'=>$level,'hasMaterialChange'=>(bool)array_filter($alerts,fn($a)=>$a['materialChange']===true),'updatedAt'=>gmdate('c'),'alerts'=>$alerts];
