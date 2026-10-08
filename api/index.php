@@ -45,6 +45,13 @@ try {
    if($route)break;
   }
   if(!$route)fail('NO_RAIL_TODAY','No more train services are available today from '.$fromName.' to '.$toName.'.',404);
+  $coreOnly=(string)($_GET['coreOnly']??'')==='1';
+  if($coreOnly){
+   $route['serviceStatus']=['level'=>'unavailable','hasMaterialChange'=>false,'updatedAt'=>gmdate('c'),'alerts'=>[],'revalidationAttempted'=>false,'replacementFound'=>false];
+   $route['crowding']=['available'=>false,'level'=>'unknown','updatedAt'=>gmdate('c'),'legs'=>[]];
+   $route['nextDepartures']=[];
+   echo json_encode(['data'=>$route],JSON_INVALID_UTF8_SUBSTITUTE);exit;
+  }
   $alertBody=fetch_current_service_alerts($now);
   if(is_array($alertBody)){
    $initialStatus=journey_service_status($route,$alertBody);
