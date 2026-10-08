@@ -40,7 +40,7 @@ function journey_perf_finish():void{
  $timings=[];foreach($p['durations'] as $k=>$v)$timings[$k]=(int)round($v*1000);
  $record=['time'=>gmdate('c'),'route_hash'=>$p['route'],'core_only'=>$p['coreOnly'],
   'total_ms'=>(int)round($total*1000),'status'=>http_response_code(),
-  'last_phase'=>$p['phase'],'durations_ms'=>$timings,'counts'=>$p['counts']];
+  'durations_ms'=>$timings,'counts'=>$p['counts']];
  $dir=sys_get_temp_dir().'/sydney_station_alert_perf_'.substr(hash('sha256',__DIR__),0,8);
  if(!is_dir($dir))@mkdir($dir,0700,true);
  if(!is_dir($dir))return;
