@@ -81,14 +81,12 @@ test('unboarded departed service advances only to an upcoming journey',()=>{
  assert.match(main,/state\.alert='Your previous train has departed/);
 });
 
-test('missed connection detection requires fresh nearby GPS and a departure grace period',()=>{
+test('GPS missed-connection inference is removed without removing manual recovery',()=>{
  const main=fs.readFileSync('src/main.ts','utf8');
- assert.match(main,/Date\.now\(\)-state\.locationCheckedAt>90000/);
- assert.match(main,/depart\+5\*60000/);
- assert.match(main,/Math\.hypot\(lat,lon\)<=250/);
- assert.match(main,/if\(index<1\)return;/);
- assert.match(main,/use “I missed my connection”/);
- assert.match(main,/if\(!state\.onboard\|\|state\.checking\|\|!state\.journey\|\|legIndex<1\)return/);
+ assert.doesNotMatch(main,/suspectedMissedConnection|updateConnectionWarning|locationCheckedAt/);
+ assert.match(main,/async function recoverMissedConnection\(legIndex\)/);
+ assert.match(main,/function connectionAtRisk\(j\)/);
+ assert.match(main,/function checkAlerts\(\)\{updateDelayConnectionWarning\(\);/);
 });
 
 test('onboard delay-aware connection warning uses arrival and departure with interchange buffer',()=>{
