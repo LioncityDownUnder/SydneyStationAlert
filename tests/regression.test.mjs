@@ -99,3 +99,13 @@ test('onboard delay-aware connection warning uses arrival and departure with int
  assert.match(main,/updateDelayConnectionWarning\(\);return true/);
  assert.match(main,/Connection at risk at /);
 });
+
+test('proactive onward lookup is bounded and preserves confirmed journey',()=>{
+ const main=fs.readFileSync('src/main.ts','utf8');
+ assert.match(main,/async function suggestOnwardConnection\(\)/);
+ assert.match(main,/Date\.now\(\)-state\.lastSuggestionCheck<120000/);
+ assert.match(main,/departure<risk\.arrival\+3\*60000/);
+ assert.match(main,/state\.journey!==original\|\|!state\.onboard/);
+ assert.match(main,/void suggestOnwardConnection\(\)/);
+ assert.match(main,/Use “I missed my connection” to update your route/);
+});
