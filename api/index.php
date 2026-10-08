@@ -27,8 +27,8 @@ try {
   $route=null;
   $searchTimes=journey_search_probes($now);
   journey_perf_phase('initial_parallel_search');
-  if($coreOnly&&count($searchTimes)>=5){
-   $fastProbes=array_slice($searchTimes,0,5);$fastParams=[];
+  if($coreOnly&&count($searchTimes)>=6){
+   $fastProbes=array_slice($searchTimes,0,6);$fastParams=[];
    foreach($fastProbes as $probe)$fastParams[]=['depArrMacro'=>'dep','itdDate'=>$probe->format('Ymd'),'itdTime'=>$probe->format('Hi'),'type_origin'=>'stop','name_origin'=>$from,'type_destination'=>'stop','name_destination'=>$to,'calcNumberOfTrips'=>$tripCount,'TfNSWTR'=>'true'];
    $fastBodies=timed_parallel_trip($fastParams,25);
    foreach($fastBodies as $i=>$body){if(!is_array($body))continue;$candidate=timed_normalized_journey($body,$originSeed,$destinationSeed);if($candidate){$route=$candidate;break;}}
@@ -62,7 +62,7 @@ try {
    }
   }
   journey_perf_phase('additional_search');
-  $remainingSearchTimes=($coreOnly&&count($searchTimes)>=5)?array_slice($searchTimes,5):$searchTimes;
+  $remainingSearchTimes=($coreOnly&&count($searchTimes)>=6)?array_slice($searchTimes,6):$searchTimes;
   foreach($remainingSearchTimes as $probe){
    $body=timed_upstream('trip',['depArrMacro'=>'dep','itdDate'=>$probe->format('Ymd'),'itdTime'=>$probe->format('Hi'),'type_origin'=>'stop','name_origin'=>$from,'type_destination'=>'stop','name_destination'=>$to,'calcNumberOfTrips'=>$tripCount,'TfNSWTR'=>'true'],25);
    $route=better_route($route,timed_normalized_journey($body,$originSeed,$destinationSeed));
