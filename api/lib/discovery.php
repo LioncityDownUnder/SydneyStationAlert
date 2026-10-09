@@ -4,7 +4,7 @@ function qa_discover(array $from,array $to,DateTimeImmutable $now):array{
  $start=$now->getTimestamp();$windows=[[0,30],[30,60],[60,120]];$trace=[];$found=[];
  foreach($windows as $window){
   $at=(new DateTimeImmutable('@'.($start+$window[0]*60)))->setTimezone(new DateTimeZone('Australia/Sydney'));
-  $params=['depArrMacro'=>'dep','itdDate'=>$at->format('Ymd'),'itdTime'=>$at->format('Hi'),'type_origin'=>'stop','name_origin'=>$from['id'],'type_destination'=>'stop','name_destination'=>$to['id'],'calcNumberOfTrips'=>60,'TfNSWTR'=>'true'];
+  $params=['depArrMacro'=>'dep','itdDate'=>$at->format('Ymd'),'itdTime'=>$at->format('Hi'),'type_origin'=>'stop','name_origin'=>$from['id'],'type_destination'=>'stop','name_destination'=>$to['id'],'calcNumberOfTrips'=>60,'TfNSWTR'=>'true','excludedMeans'=>'checkbox','exclMOT_4'=>1,'exclMOT_5'=>1,'exclMOT_7'=>1,'exclMOT_9'=>1,'exclMOT_11'=>1];
   $body=timed_upstream('trip',$params,0);$entry=['stage'=>'discovery_window','window'=>implode('-',$window).' min','request'=>$params,'rawResponse'=>$body,'candidates'=>[]];
   foreach(val($body,'journeys',[]) as $index=>$journey){
    if(!is_array($journey))continue;
