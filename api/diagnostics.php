@@ -12,14 +12,34 @@ if(($_GET['action']??'')==='stations'){
  $q=trim((string)($_GET['q']??''));if(mb_strlen($q)<2||mb_strlen($q)>70)fail('BAD_REQUEST','Enter 2-70 characters');
  echo json_encode(['data'=>station_search($q)],JSON_INVALID_UTF8_SUBSTITUTE);exit;
 }
-if(in_array(($_GET['action']??''),['discover','validate','rank'],true)){
+if(in_array(($_GET['action']??''),['discover','stops','validate','rank'],true)){
  require __DIR__.'/lib/discovery.php';
  if(in_array(($_GET['action']??''),['validate','rank'],true))require __DIR__.'/lib/validation.php';
  $from=(string)($_GET['from']??'');$to=(string)($_GET['to']??'');
  if(!preg_match('/^[\\w:-]{3,50}$/',$from)||!preg_match('/^[\\w:-]{3,50}$/',$to)||$from===$to)fail('BAD_REQUEST','Select two different stations');
  $origin=['id'=>$from,'name'=>substr((string)($_GET['fromName']??$from),0,100)];
  $destination=['id'=>$to,'name'=>substr((string)($_GET['toName']??$to),0,100)];
- try{$data=qa_discover($origin,$destination,new DateTimeImmutable('now',new DateTimeZone('Australia/Sydney')));if(in_array(($_GET['action']??''),['validate','rank'],true)){$data=qa_validate_departures($data,$origin,$destination);if(($_GET['action']??'')==='rank')$data['mode']='Step 3 QA ranking';}echo json_encode(['data'=>$data],JSON_INVALID_UTF8_SUBSTITUTE|JSON_PARTIAL_OUTPUT_ON_ERROR);exit;}
+ try{$data=qa_discover($origin,$destination,new DateTimeImmutable('now',new DateTimeZone('Australia/Sydney')));if(($_GET['action']??'')==='stops'){
+ $rows=[];$started=microtime(true);
+ foreach(array_slice(val($data,'discovered',[]),0,25) as $candidate){
+  $event=val($candidate,'event',[]);$transport=val($event,'transportation',[]);
+  $rawSequence=val($event,'stopSequence',[]);
+  $destination=val($event,'destination',null);
+  $properties=val($transport,'properties',[]);
+  $rows[]=['identity'=>val($candidate,'identity'),'firstDeparture'=>val($candidate,'firstDeparture'),
+   'destination'=>$destination,'transportationProperties'=>$properties,
+   'eventKeys'=>array_keys(is_array($event)?$event:[]),
+   'stopSequence'=>is_array($rawSequence)?$rawSequence:[],
+   'status'=>is_array($rawSequence)&&count($rawSequence)>1?'SEQUENCE_PRESENT_UNVERIFIED':'STOPPING_PATTERN_UNAVAILABLE',
+   'reason'=>'Departure-monitor event inspection only; no service-level lookup performed',
+   'rawEvent'=>$event];
+ }
+ $data=['mode'=>'Step 2 stopping-pattern investigation','snapshotAt'=>$data['snapshotAt'],
+ 'candidateCount'=>$data['candidateCount'],'inspectedCount'=>count($rows),
+ 'elapsedMs'=>(int)((microtime(true)-$started)*1000),
+ 'note'=>'Read-only departure-monitor inspection. A missing sequence does not prove the service has no stops. No journey-planner request is made.',
+ 'results'=>$rows,'discovery'=>$data];}
+ if(in_array(($_GET['action']??''),['validate','rank'],true)){$data=qa_validate_departures($data,$origin,$destination);if(($_GET['action']??'')==='rank')$data['mode']='Step 3 QA ranking';}echo json_encode(['data'=>$data],JSON_INVALID_UTF8_SUBSTITUTE|JSON_PARTIAL_OUTPUT_ON_ERROR);exit;}
  catch(Throwable $e){error_log('QA discovery: '.$e->getMessage());fail('UPSTREAM_UNAVAILABLE','Discovery failed; retry shortly',502);}
 }
 if(($_GET['action']??'')!=='trace')fail('BAD_REQUEST','Unknown action',404);
