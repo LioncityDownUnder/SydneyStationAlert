@@ -36,7 +36,7 @@ try:
     if legacy == 0:
         check("Legacy route comparison inconclusive",False,"0 normalized journeys; raw="+str(data.get("legacyRawJourneyCount"))+"; investigate upstream response and normalization",advisory=True)
     check("Legacy probe diagnostics available",len(data.get("legacyProbes",[]))>=1,str(data.get("legacyProbes",[])))
-    rejected=[p for p in data.get("legacyProbes",[]) if p.get("rejectionReasons",{}).get("UNSUPPORTED_TRANSPORT",0)>0]
+    rejected=[p for p in data.get("legacyProbes",[]) if (p.get("rejectionReasons") if isinstance(p.get("rejectionReasons"),dict) else {}).get("UNSUPPORTED_TRANSPORT",0)>0]
     check("Unsupported transport class evidence",not rejected or all(p.get("unsupportedTransportSamples") for p in rejected),str([p.get("unsupportedTransportSamples",[]) for p in rejected]))
     rows=data.get("comparisons",[])
     check("Step 5E comparison classifications",all(row.get("matchStatus") in ("NO_LEGACY_CANDIDATE","DEPARTURE_NOT_COMPARABLE","ROUTE_STRUCTURE_DIFFERS","TIME_ALIGNED_STRUCTURE_MATCH") and "departureDifferenceSeconds" in row and "arrivalDifferenceSeconds" in row and "sameTransferStations" in row for row in rows),str([row.get("matchStatus") for row in rows]))
