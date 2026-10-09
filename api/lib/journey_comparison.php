@@ -85,10 +85,29 @@ function qa_compare_engines(array $discovery,array $origin,array $destination,Da
    $score=$gap+($sameStructure?0:86400);
    if($gap<=300&&$score<$bestScore){$nearest=$i;$distance=$gap;$bestScore=$score;}
   }
+  $closestLegacyIndex=null;$closestLegacyGap=null;
+  foreach($summary as $i=>$candidate){
+   $gap=abs($candidate['departureTimestamp']-$indDep);
+   if($closestLegacyGap===null||$gap<$closestLegacyGap){$closestLegacyGap=$gap;$closestLegacyIndex=$i;}
+  }
+  $closestLegacy=$closestLegacyIndex===null?null:$summary[$closestLegacyIndex];
+  $plannedTs=iso_ts($route['plannedOriginDeparture']??null);
+  $estimatedTs=iso_ts($route['estimatedOriginDeparture']??null);
+  $diagnostic=['plannedOriginDeparture'=>$route['plannedOriginDeparture']??null,
+   'estimatedOriginDeparture'=>$route['estimatedOriginDeparture']??null,
+   'originDelaySeconds'=>$route['originDelaySeconds']??null,
+   'plannedVsEstimatedSeconds'=>($plannedTs===null||$estimatedTs===null)?null:$estimatedTs-$plannedTs,
+   'closestLegacyIndex'=>$closestLegacyIndex,
+   'closestLegacyDeparture'=>$closestLegacy['departure']??null,
+   'closestLegacyGapSeconds'=>$closestLegacyGap,
+   'closestLegacyTransferStations'=>$closestLegacy['transferStations']??null,
+   'closestLegacyLines'=>$closestLegacy['lines']??null,
+   'independentLegs'=>array_map(static fn($leg)=>['from'=>$leg['from']??null,'to'=>$leg['to']??null,'departure'=>$leg['departure']??null,'arrival'=>$leg['arrival']??null],$route['legs']),
+   'diagnosis'=>$closestLegacy===null?'NO_RAIL_ONLY_LEGACY_REFERENCE':($closestLegacyGap>300?'DEPARTURE_WINDOW_MISMATCH':'WITHIN_FIVE_MINUTES_REVIEW_ROUTE')];
   $legacyMatch=$nearest!==null?$summary[$nearest]:null;
   $sameStations=$legacyMatch===null?null:array_map('strtolower',array_map('trim',$transferStations))===array_map('strtolower',array_map('trim',$legacyMatch['transferStations']));
   $matchStatus=$legacyMatch===null?'NO_LEGACY_CANDIDATE':($distance>300?'DEPARTURE_NOT_COMPARABLE':(($route['transfers']!==$legacyMatch['transfers']||!$sameStations)?'ROUTE_STRUCTURE_DIFFERS':'TIME_ALIGNED_STRUCTURE_MATCH'));
-  $comparisons[]=['matchStatus'=>$matchStatus,'sameTransferStations'=>$sameStations,'departureDifferenceSeconds'=>$legacyMatch===null?null:$indDep-$legacyMatch['departureTimestamp'],'arrivalDifferenceSeconds'=>$legacyMatch===null?null:$indArr-$legacyMatch['arrivalTimestamp'],'candidateIndex'=>$route['candidateIndex'],'independentEstimatedDeparture'=>$route['estimatedOriginDeparture']??null,
+  $comparisons[]=['departureDiagnostics'=>$diagnostic,'matchStatus'=>$matchStatus,'sameTransferStations'=>$sameStations,'departureDifferenceSeconds'=>$legacyMatch===null?null:$indDep-$legacyMatch['departureTimestamp'],'arrivalDifferenceSeconds'=>$legacyMatch===null?null:$indArr-$legacyMatch['arrivalTimestamp'],'candidateIndex'=>$route['candidateIndex'],'independentEstimatedDeparture'=>$route['estimatedOriginDeparture']??null,
    'independentStaticArrival'=>$route['legs'][count($route['legs'])-1]['arrival']??null,
    'independentTransferStations'=>$transferStations,'independentTransfers'=>$route['transfers'],
    'connectionRisk'=>$route['connectionRisk'],'nearestLegacyIndex'=>$nearest,
@@ -99,7 +118,7 @@ function qa_compare_engines(array $discovery,array $origin,array $destination,Da
    'similarDepartureWithinFiveMinutes'=>$nearest!==null&&$distance<=300,
    'sameTransferCount'=>$legacyMatch!==null&&$legacyMatch['transfers']===$route['transfers']];
  }
- return ['mode'=>'Step 5 independent versus legacy comparison','version'=>'5E',
+ return ['mode'=>'Step 5 independent versus legacy comparison','version'=>'5F',
   'snapshotAt'=>$discovery['snapshotAt']??$now->format(DATE_ATOM),
   'comparisonPolicy'=>'Bounded legacy probes near independent departures; only compare departures within five minutes, preferring identical transfer sequence and count. Time proximity does not prove train identity',
   'legacyStatus'=>count($legacy)>0?'LEGACY_JOURNEYS_AVAILABLE':($legacyError!==null?'LEGACY_PARTIAL_OR_UNAVAILABLE':'LEGACY_NO_USABLE_JOURNEYS'),
@@ -110,5 +129,5 @@ function qa_compare_engines(array $discovery,array $origin,array $destination,Da
   'legacyRawJourneyCount'=>$rawLegacyCount,'legacyResponseKeys'=>$legacyResponseKeys,
   'legacyNormalizationRejectedCount'=>max(0,$rawLegacyCount-count($legacy)),
   'independent'=>$independent,'comparisons'=>$comparisons,
-  'note'=>'Step 5E uses independent-departure-aligned legacy probes and rejects out-of-window comparisons. Step 5C inspects unsupported legacy transport classes without relaxing rail-only journey acceptance. QA-only up to three bounded /trip probes for legacy reference, not the full production fallback/probe search. Independent GTFS identity and downstream arrival remain unverified. No commuter state changes.'];
+  'note'=>'Step 5F reports closest unmatched rail-only legacy departure and realtime versus planned origin timing without claiming train identity. Step 5E uses independent-departure-aligned legacy probes and rejects out-of-window comparisons. Step 5C inspects unsupported legacy transport classes without relaxing rail-only journey acceptance. QA-only up to three bounded /trip probes for legacy reference, not the full production fallback/probe search. Independent GTFS identity and downstream arrival remain unverified. No commuter state changes.'];
 }
