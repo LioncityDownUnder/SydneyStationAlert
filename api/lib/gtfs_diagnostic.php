@@ -12,6 +12,21 @@ function qa_gtfs_rows(ZipArchive $zip,string $name):array{
  }
  fclose($stream);return $out;
 }
+function qa_gtfs_active_services(ZipArchive $zip,DateTimeImmutable $date):?array{
+ $calendar=$zip->locateName('calendar.txt')!==false?qa_gtfs_rows($zip,'calendar.txt'):[];
+ $exceptions=$zip->locateName('calendar_dates.txt')!==false?qa_gtfs_rows($zip,'calendar_dates.txt'):[];
+ if(!$calendar&&!$exceptions)return null;
+ $day=$date->format('Ymd');$weekday=strtolower($date->format('l'));$active=[];
+ foreach($calendar as $row){
+  if(($row['start_date']??'')<=$day&&($row['end_date']??'')>=$day&&($row[$weekday]??'0')==='1')$active[$row['service_id']??'']=true;
+ }
+ foreach($exceptions as $row){
+  if(($row['date']??'')!==$day)continue;
+  if(($row['exception_type']??'')==='1')$active[$row['service_id']??'']=true;
+  if(($row['exception_type']??'')==='2')unset($active[$row['service_id']]);
+ }
+ return $active;
+}
 function qa_gtfs_probe(array $candidate,array $origin):array{
  $path=(string)(getenv('QA_GTFS_STATIC_ZIP')?:'');
  if($path===''){$config=__DIR__.'/../gtfs-path.local.php';if(is_file($config)){$private=require $config;if(is_string($private))$path=$private;}}
@@ -24,14 +39,21 @@ function qa_gtfs_probe(array $candidate,array $origin):array{
  $zip=new ZipArchive();if($zip->open($path)!==true){$result['status']='GTFS_ZIP_UNREADABLE';return $result;}
  foreach(['trips.txt','stop_times.txt','stops.txt'] as $file)if($zip->locateName($file)===false){$result['status']='GTFS_MISSING_'.$file;$zip->close();return $result;}
  $trips=qa_gtfs_rows($zip,'trips.txt');$stops=qa_gtfs_rows($zip,'stops.txt');
+ $routes=$zip->locateName('routes.txt')!==false?qa_gtfs_rows($zip,'routes.txt'):[];
  if(!$trips||!$stops){$result['status']='GTFS_PARSE_OR_SIZE_LIMIT';$zip->close();return $result;}
  $stopMap=[];foreach($stops as $s)$stopMap[$s['stop_id']??'']=$s;
- $first=$candidate['firstDeparture']??[];$ids=array_map('strtolower',$first['tripIds']??[]);
+ $first=$candidate['firstDeparture']??[];
+ $plannedTs=iso_ts($first['planned']??null);$serviceDate=(new DateTimeImmutable('@'.($plannedTs??(int)($candidate['departureTimestamp']??0))))->setTimezone(new DateTimeZone('Australia/Sydney'));
+ $active=qa_gtfs_active_services($zip,$serviceDate);
+ $result['serviceDate']=$serviceDate->format('Y-m-d');$result['calendarAvailable']=$active!==null;
+ $tripMap=[];foreach($trips as $trip)$tripMap[$trip['trip_id']??'']=$trip;
+ $routeMap=[];foreach($routes as $route)$routeMap[$route['route_id']??'']=$route;$ids=array_map('strtolower',$first['tripIds']??[]);
  $exact=[];foreach($trips as $t)if(in_array(strtolower((string)($t['trip_id']??'')),$ids,true))$exact[$t['trip_id']]=$t;
  $originName=strtolower(clean_station_name((string)($origin['name']??'')));
  $ts=(int)($candidate['departureTimestamp']??0);
  $clock=(new DateTimeImmutable('@'.$ts))->setTimezone(new DateTimeZone('Australia/Sydney'));
- $seconds=(int)$clock->format('H')*3600+(int)$clock->format('i')*60+(int)$clock->format('s');
+ $plannedClock=(new DateTimeImmutable('@'.($plannedTs??$ts)))->setTimezone(new DateTimeZone('Australia/Sydney'));
+ $seconds=(int)$plannedClock->format('H')*3600+(int)$plannedClock->format('i')*60+(int)$plannedClock->format('s');
  $stream=$zip->getStream('stop_times.txt');if(!$stream){$zip->close();$result['status']='GTFS_STOP_TIMES_UNREADABLE';return $result;}
  $headers=fgetcsv($stream);$headers=array_map(fn($v)=>trim((string)$v,"\xEF\xBB\xBF \t"),$headers?:[]);
  $matched=[];$possible=[];$scanned=0;
@@ -58,13 +80,32 @@ function qa_gtfs_probe(array $candidate,array $origin):array{
   fclose($stream);
  }
  $zip->close();
+ $excluded=['inactive'=>0,'routeMismatch'=>0];$valid=[];
  foreach($matched as $id=>$rows){
+  $trip=$tripMap[$id]??[];$serviceId=(string)($trip['service_id']??'');
+  if($active!==null&&!isset($active[$serviceId])){$excluded['inactive']++;continue;}
+  $route=$routeMap[$trip['route_id']??'']??[];
+  $routeText=strtoupper(implode(' ',[$route['route_short_name']??'',$route['route_long_name']??'']));
+  $line=strtoupper(trim((string)($first['line']??'')));
+  $routeVerified=$line!==''&&$routeText!==''&&preg_match('/(?<![A-Z0-9])'.preg_quote($line,'/').'(?![A-Z0-9])/',$routeText)===1;
+  if($line!==''&&$routeText!==''&&!$routeVerified){$excluded['routeMismatch']++;continue;}
   usort($rows,fn($a,$b)=>(int)($a['stop_sequence']??0)<=>(int)($b['stop_sequence']??0));
-  $result['matches'][]=['tripId'=>$id,'confidence'=>isset($exact[$id])?'EXACT_GTFS_TRIP_ID':'STATION_TIME_ONLY_UNVERIFIED',
+  $originStops=[];foreach($rows as $v){
+   $name=strtolower(clean_station_name((string)($stopMap[$v['stop_id']??'']['stop_name']??'')));
+   if($name!==$originName)continue;
+   $parts=explode(':',(string)($v['departure_time']??''));
+   if(count($parts)!==3)continue;
+   $sec=(int)$parts[0]*3600+(int)$parts[1]*60+(int)$parts[2];
+   if(abs($sec-$seconds)<=120)$originStops[]=$v;
+  }
+  if(!$originStops)continue;
+  $valid[]=['tripId'=>$id,'confidence'=>isset($exact[$id])?'GTFS_ID_MATCH_CALENDAR_CHECKED':'CALENDAR_ROUTE_TIME_MATCH_UNVERIFIED',
+   'serviceId'=>$serviceId,'calendarActive'=>$active!==null,'routeName'=>$routeText,'routeVerified'=>$routeVerified,
    'stops'=>array_map(fn($v)=>['stopId'=>$v['stop_id']??null,'name'=>$stopMap[$v['stop_id']??'']['stop_name']??null,'arrival'=>$v['arrival_time']??null,'departure'=>$v['departure_time']??null,'sequence'=>$v['stop_sequence']??null],$rows)];
  }
- $result['status']=$result['matches']?'GTFS_CANDIDATES_FOUND_UNVERIFIED':'NO_GTFS_MATCH';
+ $result['matches']=$valid;$result['excluded']=$excluded;
+ $result['status']=!$result['calendarAvailable']?'GTFS_CALENDAR_UNAVAILABLE':(count($valid)===1&&$valid[0]['routeVerified']?'SINGLE_GTFS_SCHEDULE_MATCH_UNVERIFIED':($valid?'GTFS_CANDIDATES_FOUND_UNVERIFIED':'NO_GTFS_MATCH'));
  $result['scannedStopTimeRows']=$scanned;
- $result['note'].=' Static service-calendar validity, feed freshness, station identity and realtime identity must still be verified before using any result for routing.';
+ $result['note']='QA-only GTFS static matching using scheduled departure time, service date, calendar exceptions and route name when available. A single match is not proof of realtime trip identity. No /trip calls and no commuter routing changes.';
  return $result;
 }
