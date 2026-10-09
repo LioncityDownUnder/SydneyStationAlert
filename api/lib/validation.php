@@ -86,16 +86,44 @@ function qa_validate_departures(array $discovery,array $from,array $to):array{
   // Never invent a first leg or treat a neighbouring train as the candidate.
   if(!$matches){
    $diagnostic['recovery']=['status'=>'NOT_FOUND','attempts'=>[]];
-   $interchanges=[];
-   foreach($journeys as $j){
-    foreach(val($j,'legs',[]) as $leg){
-     if(!is_array($leg)||!mode(val($leg,'transportation',[])))continue;
-     $node=val($leg,'destination',[]);
-     $id=(string)val($node,'id','');
-     if($id!==''&&$id!==(string)$from['id']&&$id!==(string)$to['id'])$interchanges[$id]=['id'=>$id,'name'=>(string)val($node,'name',val($node,'disassembledName',$id)),'lat'=>0.0,'lon'=>0.0,'mode'=>'train'];
+   // Derive interchange options only from the missing service's own verified stop sequence.
+   $interchanges=[];$event=$item['event']??[];
+   $terminus=val($event,'destination',[]);
+   $terminusId=is_array($terminus)?(string)val($terminus,'id',''):'';
+   $diagnostic['recovery']['terminusId']=$terminusId;
+   $diagnostic['recovery']['serviceFound']=false;
+   if($terminusId!==''&&$terminusId!==(string)$from['id']){
+    $at=(new DateTimeImmutable('@'.max(0,$time-120)))->setTimezone(new DateTimeZone('Australia/Sydney'));
+    $serviceParams=['depArrMacro'=>'dep','itdDate'=>$at->format('Ymd'),'itdTime'=>$at->format('Hi'),'type_origin'=>'stop','name_origin'=>$from['id'],'type_destination'=>'stop','name_destination'=>$terminusId,'calcNumberOfTrips'=>60,'TfNSWTR'=>'true','excludedMeans'=>'checkbox','exclMOT_4'=>1,'exclMOT_5'=>1,'exclMOT_7'=>1,'exclMOT_9'=>1,'exclMOT_11'=>1];
+    $serviceBody=timed_upstream('trip',$serviceParams,0);
+    foreach(val($serviceBody,'journeys',[]) as $serviceJourney){
+     if(!is_array($serviceJourney))continue;
+     $serviceLeg=null;
+     foreach(val($serviceJourney,'legs',[]) as $leg)if(is_array($leg)&&mode(val($leg,'transportation',[]))){$serviceLeg=$leg;break;}
+     if(!$serviceLeg)continue;
+     $tr=val($serviceLeg,'transportation',[]);$node=val($serviceLeg,'origin',[]);
+     $otherIds=array_map('strval',transportation_trip_ids($tr));
+     $idMatch=(bool)($ids&&$otherIds&&array_intersect($ids,$otherIds));
+     $lineMatch=(string)val($tr,'disassembledName','')===(string)($first['line']??'');
+     $planned=iso_ts(val($node,'departureTimePlanned'));$estimated=iso_ts(val($node,'departureTimeEstimated'));
+     $cp=iso_ts($first['planned']??null);$ce=iso_ts($first['estimated']??null);
+     $timeMatch=($cp!==null&&$planned!==null&&abs($cp-$planned)<=120)||($ce!==null&&$estimated!==null&&abs($ce-$estimated)<=120);
+     if(!$idMatch&&!($lineMatch&&$timeMatch))continue;
+     $diagnostic['recovery']['serviceFound']=true;
+     $m=mode($tr);
+     $originStop=stop($node,$m);$destStop=stop(val($serviceLeg,'destination'),$m);
+     if(!$originStop||!$destStop)continue;
+     $stops=leg_stop_sequence($serviceLeg,$m,$originStop,$destStop);
+     foreach(array_slice($stops,1,-1) as $stop){
+      $id=(string)($stop['id']??'');$arr=iso_ts($stop['arrival']??null);
+      if($id===''||$arr===null||$arr<=$time||$id===(string)$to['id'])continue;
+      $interchanges[$id]=['id'=>$id,'name'=>(string)($stop['name']??$id),'lat'=>(float)($stop['lat']??0),'lon'=>(float)($stop['lon']??0),'mode'=>$m];
+     }
+     break;
     }
    }
-   $interchanges=array_slice(array_values($interchanges),0,2);
+   $diagnostic['recovery']['stoppingPatternInterchanges']=count($interchanges);
+   $interchanges=array_slice(array_values($interchanges),0,3);
    foreach($interchanges as $interchange){
     $at=(new DateTimeImmutable('@'.max(0,$time-120)))->setTimezone(new DateTimeZone('Australia/Sydney'));
     $params=['depArrMacro'=>'dep','itdDate'=>$at->format('Ymd'),'itdTime'=>$at->format('Hi'),'type_origin'=>'stop','name_origin'=>$from['id'],'type_destination'=>'stop','name_destination'=>$interchange['id'],'calcNumberOfTrips'=>30,'TfNSWTR'=>'true','excludedMeans'=>'checkbox','exclMOT_4'=>1,'exclMOT_5'=>1,'exclMOT_7'=>1,'exclMOT_9'=>1,'exclMOT_11'=>1];
@@ -141,7 +169,7 @@ function qa_validate_departures(array $discovery,array $from,array $to):array{
     $diagnostic['recovery']['attempts'][]=$attempt;
     if($matches){$diagnostic['recovery']['status']='RECOVERED';break;}
    }
-   if(!$interchanges)$diagnostic['recovery']['status']='NO_INTERCHANGE_CANDIDATES';
+   if(!$interchanges)$diagnostic['recovery']['status']=$diagnostic['recovery']['serviceFound']?'NO_VERIFIED_INTERCHANGE_STOPS':'SERVICE_STOPPING_PATTERN_UNAVAILABLE';
   }
   usort($matches,fn($a,$b)=>($a['matchMethod']==='TRIP_ID'?0:1)<=>($b['matchMethod']==='TRIP_ID'?0:1) ?: ($a['rank']<=>$b['rank']));
   $results[]=['identity'=>$item['identity'],'firstDeparture'=>$first,'departureTimestamp'=>$time,'window'=>$item['window'],'status'=>$matches?'VALID':'UNRESOLVED','reason'=>$matches?(($matches[0]['matchMethod']??'')==='RECOVERED_CONNECTION'?'RECOVERED_CONNECTION':'COMPLETE_RAIL_JOURNEY_FOUND'):($failed?'MATCHED_SERVICE_FAILED_VALIDATION':'NO_MATCHING_JOURNEY_RETURNED'),'matchingJourneys'=>count($matches),'matchDiagnostics'=>$diagnostic,'bestJourney'=>$matches[0]??null,'matchMethods'=>array_values(array_unique(array_column($matches,'matchMethod')))];
