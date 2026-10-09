@@ -9,7 +9,7 @@ function qa_compare_engines(array $discovery,array $origin,array $destination,Da
  $started=microtime(true);$legacyError=null;$legacy=[];$rawLegacyCount=0;$legacyResponseKeys=[];$probes=[];$probeTimes=array_slice(journey_search_probes($now),0,3);
  foreach($probeTimes as $probeIndex=>$probeTime){
   $request=$params;$request['itdDate']=$probeTime->format('Ymd');$request['itdTime']=$probeTime->format('Hi');
-  $probe=['probe'=>$probeIndex+1,'requestedAt'=>$probeTime->format(DATE_ATOM),'status'=>'PENDING','rawCount'=>null,'normalizedCount'=>0,'rejectionReasons'=>[]];
+  $probe=['probe'=>$probeIndex+1,'requestedAt'=>$probeTime->format(DATE_ATOM),'status'=>'PENDING','rawCount'=>null,'normalizedCount'=>0,'rejectionReasons'=>[],'unsupportedTransportSamples'=>[]];
   try{
    $body=timed_upstream('trip',$request,25);
    $keys=is_array($body)?array_keys($body):[];
@@ -28,7 +28,15 @@ function qa_compare_engines(array $discovery,array $origin,array $destination,Da
     else{
      foreach($legs as $leg){
       $transport=val($leg,'transportation',[]);
-      if(!mode($transport)&&!is_transfer_walk($transport)){$reason='UNSUPPORTED_TRANSPORT';break;}
+      if(!mode($transport)&&!is_transfer_walk($transport)){
+       $reason='UNSUPPORTED_TRANSPORT';
+       $product=val($transport,'product',[]);
+       $sample=['productClass'=>val($product,'class',null),'productName'=>substr((string)val($product,'name',''),0,70),'transportName'=>substr((string)val($transport,'name',''),0,70),'disassembledName'=>substr((string)val($transport,'disassembledName',''),0,70),'transportType'=>substr((string)val($transport,'type',''),0,40)];
+       $signature=json_encode($sample);
+       $seen=array_map('json_encode',$probe['unsupportedTransportSamples']);
+       if(!in_array($signature,$seen,true)&&count($seen)<8)$probe['unsupportedTransportSamples'][]=$sample;
+       break;
+      }
      }
     }
     $probe['rejectionReasons'][$reason]=($probe['rejectionReasons'][$reason]??0)+1;
@@ -77,7 +85,7 @@ function qa_compare_engines(array $discovery,array $origin,array $destination,Da
    'similarDepartureWithinFiveMinutes'=>$nearest!==null&&$distance<=300,
    'sameTransferCount'=>$legacyMatch!==null&&$legacyMatch['transfers']===$route['transfers']];
  }
- return ['mode'=>'Step 5 independent versus legacy comparison','version'=>'5B',
+ return ['mode'=>'Step 5 independent versus legacy comparison','version'=>'5C',
   'snapshotAt'=>$discovery['snapshotAt']??$now->format(DATE_ATOM),
   'comparisonPolicy'=>'Closest legacy departure by time; proximity does not prove same train identity or equivalent route',
   'legacyStatus'=>count($legacy)>0?'LEGACY_JOURNEYS_AVAILABLE':($legacyError!==null?'LEGACY_PARTIAL_OR_UNAVAILABLE':'LEGACY_NO_USABLE_JOURNEYS'),
@@ -88,5 +96,5 @@ function qa_compare_engines(array $discovery,array $origin,array $destination,Da
   'legacyRawJourneyCount'=>$rawLegacyCount,'legacyResponseKeys'=>$legacyResponseKeys,
   'legacyNormalizationRejectedCount'=>max(0,$rawLegacyCount-count($legacy)),
   'independent'=>$independent,'comparisons'=>$comparisons,
-  'note'=>'QA-only up to three bounded /trip probes for legacy reference, not the full production fallback/probe search. Independent GTFS identity and downstream arrival remain unverified. No commuter state changes.'];
+  'note'=>'Step 5C inspects unsupported legacy transport classes without relaxing rail-only journey acceptance. QA-only up to three bounded /trip probes for legacy reference, not the full production fallback/probe search. Independent GTFS identity and downstream arrival remain unverified. No commuter state changes.'];
 }
