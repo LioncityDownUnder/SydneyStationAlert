@@ -1,30 +1,43 @@
 <?php
 declare(strict_types=1);
+/** Step 1: station departures only. Destination is intentionally not a filter. */
 function qa_discover(array $from,array $to,DateTimeImmutable $now):array{
- $start=$now->getTimestamp();$windows=[[0,30],[30,60],[60,120]];$trace=[];$found=[];
+ $snapshot=$now->getTimestamp();$windows=[[0,30],[30,60],[60,120]];$trace=[];$found=[];
  foreach($windows as $window){
-  $at=(new DateTimeImmutable('@'.($start+$window[0]*60)))->setTimezone(new DateTimeZone('Australia/Sydney'));
-  $params=['depArrMacro'=>'dep','itdDate'=>$at->format('Ymd'),'itdTime'=>$at->format('Hi'),'type_origin'=>'stop','name_origin'=>$from['id'],'type_destination'=>'stop','name_destination'=>$to['id'],'calcNumberOfTrips'=>60,'TfNSWTR'=>'true','excludedMeans'=>'checkbox','exclMOT_4'=>1,'exclMOT_5'=>1,'exclMOT_7'=>1,'exclMOT_9'=>1,'exclMOT_11'=>1];
-  $body=timed_upstream('trip',$params,0);$entry=['stage'=>'discovery_window','window'=>implode('-',$window).' min','request'=>$params,'rawResponse'=>$body,'candidates'=>[]];
-  foreach(val($body,'journeys',[]) as $index=>$journey){
-   if(!is_array($journey))continue;
-   $first=null;$segments=val($journey,'legs',[]);
-   foreach($segments as $leg){$transport=val($leg,'transportation',[]);if(!mode($transport))continue;$node=val($leg,'origin',[]);$first=['station'=>['id'=>(string)val($node,'id',''),'name'=>(string)val($node,'name',val($node,'disassembledName',''))],'planned'=>val($node,'departureTimePlanned'),'estimated'=>val($node,'departureTimeEstimated'),'line'=>val($transport,'disassembledName',''),'tripIds'=>transportation_trip_ids($transport)];break;}
-   $time=$first?(iso_ts($first['estimated'])??iso_ts($first['planned'])):null;$reasons=[];
-   if(!$first)$reasons[]='NO_RAIL_LEG';
-   elseif(!same_station($first['station'],$from))$reasons[]='ORIGIN_MISMATCH';
-   if($time===null)$reasons[]='MISSING_TIME';
-   else{if($time<$start+120)$reasons[]='LESS_THAN_2_MINUTES';if($time<$start+$window[0]*60||$time>=$start+$window[1]*60)$reasons[]='OUTSIDE_WINDOW';}
-   $reaches=false;
-   foreach($segments as $leg){$node=val($leg,'destination',[]);if(is_array($node)&&same_station(['id'=>(string)val($node,'id',''),'name'=>(string)val($node,'name',val($node,'disassembledName',''))],$to)){$reaches=true;break;}}
-   if(!$reaches)$reasons[]='DESTINATION_NOT_PRESENT';
-   $identity=hash('sha256',($first['station']['id']??'').'|'.$time.'|'.implode(',',($first['tripIds']??[])).'|'.($first['line']??''));
-   if(!$reasons&&isset($found[$identity]))$reasons[]='DUPLICATE';
-   $entry['candidates'][]=['index'=>$index,'firstDeparture'=>$first,'departureTimestamp'=>$time,'status'=>$reasons?'excluded':'discovered','reasons'=>$reasons?:['AWAITING_VALIDATION'],'identity'=>$identity];
-   if(!$reasons)$found[$identity]=['firstDeparture'=>$first,'departureTimestamp'=>$time,'identity'=>$identity,'window'=>$entry['window'],'journey'=>$journey];
+  $start=$snapshot+$window[0]*60;$end=$snapshot+$window[1]*60;
+  $at=(new DateTimeImmutable('@'.$start))->setTimezone(new DateTimeZone('Australia/Sydney'));
+  $params=['type_dm'=>'stop','name_dm'=>$from['id'],'mode'=>'direct','itdDate'=>$at->format('Ymd'),'itdTime'=>$at->format('Hi'),'limit'=>100,'TfNSWDM'=>'true','excludedMeans'=>'checkbox','exclMOT_4'=>1,'exclMOT_5'=>1,'exclMOT_7'=>1,'exclMOT_9'=>1,'exclMOT_11'=>1];
+  $body=timed_upstream('departure_mon',$params,0);
+  $events=val($body,'stopEvents',[]);
+  $entry=['stage'=>'discovery_window','window'=>implode('-',$window).' min','request'=>$params,'rawResponse'=>$body,'candidates'=>[],'returnedCount'=>is_array($events)?count($events):0];
+  foreach(is_array($events)?$events:[] as $index=>$event){
+   if(!is_array($event))continue;
+   $transport=val($event,'transportation',[]);
+   $m=mode($transport);
+   $loc=val($event,'location',[]);
+   if(!is_array($loc))$loc=[];
+   $planned=val($event,'departureTimePlanned',val($loc,'departureTimePlanned'));
+   $estimated=val($event,'departureTimeEstimated',val($loc,'departureTimeEstimated'));
+   $time=iso_ts($estimated)??iso_ts($planned);
+   $first=['station'=>['id'=>(string)val($loc,'id',''),'name'=>(string)val($loc,'name',val($loc,'disassembledName',''))],'planned'=>$planned,'estimated'=>$estimated,'line'=>val($transport,'disassembledName',val($transport,'number','')),'tripIds'=>transportation_trip_ids($transport),'mode'=>$m];
+   $reasons=[];
+   if(!$m)$reasons[]='NOT_TRAIN_OR_METRO';
+   if($time===null)$reasons[]='MISSING_DEPARTURE_TIME';
+   else{
+    if($time<$snapshot+120)$reasons[]='LESS_THAN_2_MINUTES';
+    if($time<$start||$time>=$end)$reasons[]='OUTSIDE_WINDOW';
+   }
+   // Departure-monitor locations may be platform IDs, not the parent station ID.
+   // The requested stop ID is authoritative; platform names are not used to reject.
+   $identity=hash('sha256',implode('|',[$time,(string)$first['line'],implode(',',array_map('strval',$first['tripIds'])),(string)val($transport,'number','')]));
+   if(!$reasons&&isset($found[$identity]))$reasons[]='DUPLICATE_DEPARTURE';
+   $entry['candidates'][]=['index'=>$index,'firstDeparture'=>$first,'departureTimestamp'=>$time,'status'=>$reasons?'excluded':'discovered','reasons'=>$reasons?:['AWAITING_DESTINATION_VALIDATION'],'identity'=>$identity];
+   if(!$reasons)$found[$identity]=['firstDeparture'=>$first,'departureTimestamp'=>$time,'identity'=>$identity,'window'=>$entry['window'],'event'=>$event];
   }
-  $entry['decision']=$found?'Found candidates; stop expanding after full window':'No candidates; expand window';$trace[]=$entry;if($found)break;
+  $entry['decision']=$found?'Found eligible departures; destination feasibility deferred to Step 2':'No eligible departures; expand search window';
+  $trace[]=$entry;
+  if($found)break;
  }
  $ordered=array_values($found);usort($ordered,fn($a,$b)=>$a['departureTimestamp']<=>$b['departureTimestamp']);
- return ['snapshotAt'=>$now->format(DATE_ATOM),'mode'=>'Step 1 QA discovery','minimumLeadSeconds'=>120,'candidateCount'=>count($ordered),'discovered'=>$ordered,'selected'=>null,'trace'=>$trace,'note'=>'Discovery only, not final route validation. TfNSW result caps may limit completeness.'];
+ return ['snapshotAt'=>$now->format(DATE_ATOM),'mode'=>'Step 1 QA discovery','minimumLeadSeconds'=>120,'candidateCount'=>count($ordered),'discovered'=>$ordered,'selected'=>null,'trace'=>$trace,'note'=>'Origin station departures only. Destination '.$to['name'].' is not used to reject trains. Step 2 must establish onward route feasibility. TfNSW stop-event limits may constrain completeness.'];
 }
