@@ -25,6 +25,7 @@ jobs:
           php -l api/lib/gtfs_diagnostic.php
           php -l api/lib/journey_builder.php
           php -l api/lib/journey_ranking.php
+          php -l api/lib/journey_comparison.php
           php -l api/gtfs-update.php
           php -l api/gtfs-index.php
           php -l api/diagnostics.php
@@ -168,3 +169,28 @@ jobs:
           # Diagnostic only: keep a single slow TfNSW response from failing deployment.
           check_route Hurstville Padstow
           check_route Hurstville Padstow
+
+  verify-qa-diagnostics:
+    needs: deploy-qa
+    if: always() && needs.deploy-qa.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify deployed QA diagnostics
+        id: verify
+        continue-on-error: true
+        run: python3 scripts/qa-verify.py
+      - name: Upload QA diagnostic evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qa-diagnostic-evidence
+          path: qa-verification/
+          if-no-files-found: warn
+      - name: Add verification summary
+        if: always()
+        run: |
+          if test -f qa-verification/summary.md; then cat qa-verification/summary.md >> "$GITHUB_STEP_SUMMARY"; fi
+      - name: Fail workflow when verification fails
+        if: steps.verify.outcome == 'failure'
+        run: exit 1
