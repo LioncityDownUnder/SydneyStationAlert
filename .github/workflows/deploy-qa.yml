@@ -24,6 +24,7 @@ jobs:
           php -l api/lib/core.php
           php -l api/lib/gtfs_diagnostic.php
           php -l api/lib/journey_builder.php
+          php -l api/lib/journey_ranking.php
           php -l api/gtfs-update.php
           php -l api/gtfs-index.php
           php -l api/diagnostics.php
