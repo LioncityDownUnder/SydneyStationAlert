@@ -31,7 +31,7 @@ try {
    $fastProbes=array_slice($searchTimes,0,6);$fastParams=[];
    foreach($fastProbes as $probe)$fastParams[]=['depArrMacro'=>'dep','itdDate'=>$probe->format('Ymd'),'itdTime'=>$probe->format('Hi'),'type_origin'=>'stop','name_origin'=>$from,'type_destination'=>'stop','name_destination'=>$to,'calcNumberOfTrips'=>$tripCount,'TfNSWTR'=>'true'];
    $fastBodies=timed_parallel_trip($fastParams,25);
-   foreach($fastBodies as $i=>$body){if(!is_array($body))continue;$candidate=timed_normalized_journey($body,$originSeed,$destinationSeed);if($candidate){$route=$candidate;break;}}
+   foreach($fastBodies as $i=>$body){if(!is_array($body))continue;$candidate=timed_normalized_journey($body,$originSeed,$destinationSeed);$route=better_route($route,$candidate);}
    if(!$route){
     journey_perf_phase('parallel_fallback');
     $fallbackMeta=[];$firstParams=[];
