@@ -23,6 +23,8 @@ function qa_journey_build(array $candidate,array $origin,array $destination):arr
  $zip=new ZipArchive();if($zip->open($path)!==true)return $result;
  $date=new DateTimeImmutable($probe['serviceDate'],new DateTimeZone('Australia/Sydney'));
  $active=qa_gtfs_active_services($zip,$date);
+ $stopRows=qa_gtfs_rows($zip,'stops.txt');$stopNames=[];$stationStopIds=[];
+ foreach($stopRows as $stop){$id=(string)($stop['stop_id']??'');$key=qa_journey_station((string)($stop['stop_name']??''));if($id!==''&&$key!==''){$stopNames[$id]=$key;$stationStopIds[$key][]=$id;}}
  $trips=qa_gtfs_rows($zip,'trips.txt');$tripMap=[];
  foreach($trips as $trip)$tripMap[$trip['trip_id']??'']=$trip;
  $zip->close();
@@ -39,9 +41,11 @@ function qa_journey_build(array $candidate,array $origin,array $destination):arr
   if($station===$target)$found[]=['type'=>'direct','legs'=>[['tripId'=>$match['tripId'],'line'=>$candidate['firstDeparture']['line']??'','from'=>$origin['name'],'to'=>$destination['name'],'departure'=>$stops[$originIdx]['departure'],'arrival'=>$stop['arrival']]],'transfers'=>0,'arrivalSeconds'=>$arrival,'confidence'=>'STATIC_SCHEDULE_UNVERIFIED'];
   if($station!==$target&&count($interchanges)<18)$interchanges[]=['stop'=>$stop,'arrival'=>$arrival,'station'=>$station];
  }
- $seen=[];$checked=0;
+ $seen=[];$checked=0;$result['interchangeStationsConsidered']=count($interchanges);$result['destinationStopIds']=count($stationStopIds[$target]??[]);
  foreach($interchanges as $change){
-  $lookup->bindValue(':stop',$change['stop']['stopId'],SQLITE3_TEXT);$rs=$lookup->execute();$departures=[];
+  $departures=[];
+  foreach(($stationStopIds[$change['station']]??[]) as $platformStopId){
+  $lookup->bindValue(':stop',$platformStopId,SQLITE3_TEXT);$rs=$lookup->execute();
   while($row=$rs->fetchArray(SQLITE3_ASSOC)){
    $time=qa_journey_seconds((string)$row['departure']);
    if($time===null||$time<$change['arrival']+180||$time>$change['arrival']+5400)continue;
@@ -49,26 +53,25 @@ function qa_journey_build(array $candidate,array $origin,array $destination):arr
    $departures[]=$row;
   }
   $rs->finalize();
+  }
   usort($departures,fn($a,$b)=>qa_journey_seconds($a['departure'])<=>qa_journey_seconds($b['departure']));
   foreach(array_slice($departures,0,45) as $board){
    if(++$checked>400)break 2;
-   $tripId=$board['trip'];if(isset($seen[$tripId]))continue;$seen[$tripId]=true;
+   $tripId=$board['trip'];$seenKey=$tripId.'|'.$board['stop'];if(isset($seen[$seenKey]))continue;$seen[$seenKey]=true;
    $sequence->bindValue(':trip',$tripId,SQLITE3_TEXT);$sr=$sequence->execute();
    $boarded=false;$arrival=null;$lastName=null;
    while($leg=$sr->fetchArray(SQLITE3_ASSOC)){
     if(!$boarded){if($leg['stop']===$board['stop']&&(int)$leg['seq']===(int)$board['seq'])$boarded=true;continue;}
     // Destination stop identity is resolved from GTFS stops below.
-    $destStopIds[$leg['stop']][]=['trip'=>$tripId,'leg'=>$leg,'board'=>$board,'change'=>$change];
+    if(($stopNames[$leg['stop']]??'')===$target)$destStopIds[$leg['stop']][]=['trip'=>$tripId,'leg'=>$leg,'board'=>$board,'change'=>$change];
    }
    $sr->finalize();
   }
  }
  // Resolve station names using GTFS stops, preserving platform variants.
- $zip=new ZipArchive();if($zip->open($path)===true){
-  $stopRows=qa_gtfs_rows($zip,'stops.txt');$zip->close();$names=[];
-  foreach($stopRows as $row)$names[$row['stop_id']??'']=qa_journey_station((string)($row['stop_name']??''));
+ {
   foreach($destStopIds as $id=>$possibilities){
-   if(($names[$id]??'')!==$target)continue;
+   if(($stopNames[$id]??'')!==$target)continue;
    foreach($possibilities as $p){
     $arrival=qa_journey_seconds((string)$p['leg']['arrival']);if($arrival===null)continue;
     $key=$p['trip'].'|'.$p['board']['stop'];if(isset($found[$key]))continue;
@@ -83,6 +86,7 @@ function qa_journey_build(array $candidate,array $origin,array $destination):arr
  usort($found,fn($a,$b)=>($a['arrivalSeconds']<=>$b['arrivalSeconds'])?:($a['transfers']<=>$b['transfers']));
  $result['routes']=array_slice($found,0,12);$result['status']=$found?'STATIC_JOURNEYS_FOUND_UNVERIFIED':'NO_STATIC_JOURNEY_FOUND';
  $result['checkedConnectingTrips']=$checked;
- $result['note'].=' Only a single independently matched first train is accepted; interchange and destination matches use GTFS stop names. Scheduled times do not account for delays or platform transfer walking.';
+ $result['matchingDestinationEvents']=array_sum(array_map('count',$destStopIds));
+ $result['note'].=' Station-level transfers now search all GTFS platform stop IDs at an interchange. Three minutes is a provisional minimum, not a verified platform walking time. Static schedules do not account for delays.';
  return $result;
 }
