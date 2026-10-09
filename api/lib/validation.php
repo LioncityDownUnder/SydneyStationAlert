@@ -44,10 +44,12 @@ function qa_validate_departures(array $discovery,array $from,array $to):array{
  foreach($items as $item){
   $first=$item['firstDeparture'];$time=$item['departureTimestamp'];
   $ids=array_map('strval',$first['tripIds']??[]);$matches=[];$failed=0;
+  $diagnostic=['journeysReturned'=>count($journeys),'firstRailLegFound'=>0,'tripIdMatches'=>0,'plannedTimeMatches'=>0,'estimatedTimeMatches'=>0,'fallbackTimeMatches'=>0,'lineMatches'=>0,'firstLegMatches'=>0,'failedNormalization'=>0,'noRailFirstLeg'=>0];
   foreach($journeys as $j){
    $firstLeg=null;
    foreach(val($j,'legs',[]) as $leg){if(is_array($leg)&&mode(val($leg,'transportation',[]))){$firstLeg=$leg;break;}}
-   if(!$firstLeg)continue;
+   if(!$firstLeg){$diagnostic['noRailFirstLeg']++;continue;}
+   $diagnostic['firstRailLegFound']++;
    $node=val($firstLeg,'origin',[]);
    $journeyPlanned=iso_ts(val($node,'departureTimePlanned'));
    $journeyEstimated=iso_ts(val($node,'departureTimeEstimated'));
@@ -65,14 +67,20 @@ function qa_validate_departures(array $discovery,array $from,array $to):array{
     &&(($journeyEstimated??$journeyPlanned)!==null)
     &&abs(($journeyEstimated??$journeyPlanned)-$time)<=120;
    $lineMatch=(string)val($transport,'disassembledName','')===(string)($first['line']??'');
+   if($idMatch)$diagnostic['tripIdMatches']++;
+   if($lineMatch)$diagnostic['lineMatches']++;
+   if($lineMatch&&$plannedMatch)$diagnostic['plannedTimeMatches']++;
+   if($lineMatch&&$estimatedMatch)$diagnostic['estimatedTimeMatches']++;
+   if($lineMatch&&$fallbackMatch)$diagnostic['fallbackTimeMatches']++;
    if(!$idMatch&&!($lineMatch&&($plannedMatch||$estimatedMatch||$fallbackMatch)))continue;
+   $diagnostic['firstLegMatches']++;
    $matchMethod=$idMatch?'TRIP_ID':($plannedMatch?'PLANNED_TIME_AND_LINE':($estimatedMatch?'ESTIMATED_TIME_AND_LINE':'TIME_AND_LINE'));
    $valid=normalized_journeys(['journeys'=>[$j]],$origin,$destination);
-   if(!$valid){$failed++;continue;}
+   if(!$valid){$failed++;$diagnostic['failedNormalization']++;continue;}
    $route=$valid[0];$matches[]=['route'=>$route,'rank'=>route_rank($route),'matchMethod'=>$matchMethod];
   }
   usort($matches,fn($a,$b)=>($a['matchMethod']==='TRIP_ID'?0:1)<=>($b['matchMethod']==='TRIP_ID'?0:1) ?: ($a['rank']<=>$b['rank']));
-  $results[]=['identity'=>$item['identity'],'firstDeparture'=>$first,'departureTimestamp'=>$time,'window'=>$item['window'],'status'=>$matches?'VALID':'UNRESOLVED','reason'=>$matches?'COMPLETE_RAIL_JOURNEY_FOUND':($failed?'MATCHED_SERVICE_FAILED_VALIDATION':'NO_MATCHING_JOURNEY_RETURNED'),'matchingJourneys'=>count($matches),'bestJourney'=>$matches[0]??null,'matchMethods'=>array_values(array_unique(array_column($matches,'matchMethod')))];
+  $results[]=['identity'=>$item['identity'],'firstDeparture'=>$first,'departureTimestamp'=>$time,'window'=>$item['window'],'status'=>$matches?'VALID':'UNRESOLVED','reason'=>$matches?'COMPLETE_RAIL_JOURNEY_FOUND':($failed?'MATCHED_SERVICE_FAILED_VALIDATION':'NO_MATCHING_JOURNEY_RETURNED'),'matchingJourneys'=>count($matches),'matchDiagnostics'=>$diagnostic,'bestJourney'=>$matches[0]??null,'matchMethods'=>array_values(array_unique(array_column($matches,'matchMethod')))];
  }
  // Consolidate candidates only when their validated first-leg physical trip ID agrees.
  // Unresolved records remain visible and are never silently removed.
