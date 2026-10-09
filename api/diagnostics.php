@@ -12,14 +12,22 @@ if(($_GET['action']??'')==='stations'){
  $q=trim((string)($_GET['q']??''));if(mb_strlen($q)<2||mb_strlen($q)>70)fail('BAD_REQUEST','Enter 2-70 characters');
  echo json_encode(['data'=>station_search($q)],JSON_INVALID_UTF8_SUBSTITUTE);exit;
 }
-if(in_array(($_GET['action']??''),['discover','stops','service','validate','rank'],true)){
+if(in_array(($_GET['action']??''),['discover','stops','service','gtfs','validate','rank'],true)){
  require __DIR__.'/lib/discovery.php';
  if(in_array(($_GET['action']??''),['validate','rank'],true))require __DIR__.'/lib/validation.php';
  $from=(string)($_GET['from']??'');$to=(string)($_GET['to']??'');
  if(!preg_match('/^[\\w:-]{3,50}$/',$from)||!preg_match('/^[\\w:-]{3,50}$/',$to)||$from===$to)fail('BAD_REQUEST','Select two different stations');
  $origin=['id'=>$from,'name'=>substr((string)($_GET['fromName']??$from),0,100)];
  $destination=['id'=>$to,'name'=>substr((string)($_GET['toName']??$to),0,100)];
- try{$data=qa_discover($origin,$destination,new DateTimeImmutable('now',new DateTimeZone('Australia/Sydney')));if(($_GET['action']??'')==='service'){
+ try{$data=qa_discover($origin,$destination,new DateTimeImmutable('now',new DateTimeZone('Australia/Sydney')));if(($_GET['action']??'')==='gtfs'){
+ $index=filter_var($_GET['candidate']??'0',FILTER_VALIDATE_INT,['options'=>['min_range'=>0,'max_range'=>24]]);
+ if($index===false)fail('BAD_REQUEST','Candidate index must be 0–24');
+ $candidate=val($data,'discovered',[])[$index]??null;
+ if(!$candidate)fail('BAD_REQUEST','Candidate unavailable in current discovery snapshot');
+ require __DIR__.'/lib/gtfs_diagnostic.php';
+ $data=qa_gtfs_probe($candidate,$origin);
+ }
+ if(($_GET['action']??'')==='service'){
  $index=filter_var($_GET['candidate']??'0',FILTER_VALIDATE_INT,['options'=>['min_range'=>0,'max_range'=>24]]);
  if($index===false)fail('BAD_REQUEST','Candidate index must be 0–24');
  $candidate=val($data,'discovered',[])[$index]??null;
