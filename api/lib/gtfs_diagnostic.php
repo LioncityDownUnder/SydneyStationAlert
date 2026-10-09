@@ -104,30 +104,54 @@ function qa_gtfs_probe(array $candidate,array $origin):array{
  $clock=(new DateTimeImmutable('@'.$ts))->setTimezone(new DateTimeZone('Australia/Sydney'));
  $plannedClock=(new DateTimeImmutable('@'.($plannedTs??$ts)))->setTimezone(new DateTimeZone('Australia/Sydney'));
  $seconds=(int)$plannedClock->format('H')*3600+(int)$plannedClock->format('i')*60+(int)$plannedClock->format('s');
- $stream=$zip->getStream('stop_times.txt');if(!$stream){$zip->close();$result['status']='GTFS_STOP_TIMES_UNREADABLE';return $result;}
- $headers=fgetcsv($stream);$headers=array_map(fn($v)=>trim((string)$v,"\xEF\xBB\xBF \t"),$headers?:[]);
  $matched=[];$possible=[];$scanned=0;
- while(($line=fgetcsv($stream))!==false){
-  ++$scanned;
-  if(count($line)!==count($headers))continue;
-  $v=array_combine($headers,$line);$trip=(string)($v['trip_id']??'');
-  if(isset($exact[$trip])){$matched[$trip][]=$v;continue;}
-  $stop=$stopMap[$v['stop_id']??'']??[];
-  $name=strtolower(clean_station_name((string)($stop['stop_name']??'')));
-  if($originName===''||$name!==$originName)continue;
-  $departure=explode(':',(string)($v['departure_time']??''));if(count($departure)!==3)continue;
-  $sec=(int)$departure[0]*3600+(int)$departure[1]*60+(int)$departure[2];
-  if(abs($sec-$seconds)<=120)$possible[$trip]=true;
- }
- fclose($stream);
- if(!$exact&&$possible){
-  // Second streaming pass for stop sequences of bounded station/time candidates.
-  $possible=array_slice($possible,0,20,true);$stream=$zip->getStream('stop_times.txt');fgetcsv($stream);$n=0;
-  while(($line=fgetcsv($stream))!==false){++$n;
-   if(count($line)!==count($headers))continue;$v=array_combine($headers,$line);
-   if(isset($possible[$v['trip_id']??'']))$matched[$v['trip_id']][]=$v;
+ $indexPath=dirname($path).'/stop-times.sqlite';
+ $indexReady=class_exists('SQLite3')&&is_file($indexPath)&&filemtime($indexPath)>=filemtime($path);
+ $result['indexStatus']=$indexReady?'SQLITE_INDEX_USED':'FULL_ZIP_SCAN_FALLBACK';
+ if($indexReady){
+  $db=new SQLite3($indexPath,SQLITE3_OPEN_READONLY);
+  $stopIds=[];foreach($stopMap as $id=>$stop)if(strtolower(clean_station_name((string)($stop['stop_name']??'')))===$originName)$stopIds[]=$id;
+  $query=$db->prepare('SELECT trip,departure FROM times WHERE stop=:stop');
+  foreach($stopIds as $stopId){
+   $query->bindValue(':stop',$stopId,SQLITE3_TEXT);$rs=$query->execute();
+   while($row=$rs->fetchArray(SQLITE3_ASSOC)){
+    ++$scanned;$parts=explode(':',(string)$row['departure']);
+    if(count($parts)!==3)continue;
+    $sec=(int)$parts[0]*3600+(int)$parts[1]*60+(int)$parts[2];
+    if(abs($sec-$seconds)<=120)$possible[$row['trip']]=true;
+   }
+   $rs->finalize();
+  }
+  foreach($exact as $id=>$trip)$possible[$id]=true;
+  $fetch=$db->prepare('SELECT trip AS trip_id,stop AS stop_id,arrival AS arrival_time,departure AS departure_time,seq AS stop_sequence FROM times WHERE trip=:trip ORDER BY seq');
+  foreach(array_slice(array_keys($possible),0,40) as $id){
+   $fetch->bindValue(':trip',$id,SQLITE3_TEXT);$rs=$fetch->execute();
+   while($row=$rs->fetchArray(SQLITE3_ASSOC))$matched[$id][]=$row;
+   $rs->finalize();
+  }
+  $db->close();
+ }else{
+  $stream=$zip->getStream('stop_times.txt');if(!$stream){$zip->close();$result['status']='GTFS_STOP_TIMES_UNREADABLE';return $result;}
+  $headers=fgetcsv($stream);$headers=array_map(fn($v)=>trim((string)$v,"\\xEF\\xBB\\xBF \\t"),$headers?:[]);
+  while(($line=fgetcsv($stream))!==false){
+   ++$scanned;if(count($line)!==count($headers))continue;
+   $v=array_combine($headers,$line);$trip=(string)($v['trip_id']??'');
+   if(isset($exact[$trip])){$matched[$trip][]=$v;continue;}
+   $name=strtolower(clean_station_name((string)($stopMap[$v['stop_id']??'']['stop_name']??'')));
+   if($name!==$originName)continue;
+   $parts=explode(':',(string)($v['departure_time']??''));if(count($parts)!==3)continue;
+   $sec=(int)$parts[0]*3600+(int)$parts[1]*60+(int)$parts[2];
+   if(abs($sec-$seconds)<=120)$possible[$trip]=true;
   }
   fclose($stream);
+  if(!$exact&&$possible){
+   $possible=array_slice($possible,0,40,true);$stream=$zip->getStream('stop_times.txt');fgetcsv($stream);
+   while(($line=fgetcsv($stream))!==false){
+    if(count($line)!==count($headers))continue;$v=array_combine($headers,$line);
+    if(isset($possible[$v['trip_id']??'']))$matched[$v['trip_id']][]=$v;
+   }
+   fclose($stream);
+  }
  }
  $zip->close();
  $excluded=['inactive'=>0,'routeMismatch'=>0];$valid=[];
