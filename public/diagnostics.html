@@ -23,5 +23,12 @@ const candidates=(step.candidates||[]).map(c=>({identity:c.identity,departure:c.
 const section=document.createElement('div');section.innerHTML='<h3>All returned candidates and exclusions</h3>'+(candidates.length?table(candidates,true):'<p>No departures returned in this window.</p>')+'<details><summary>Request parameters</summary>'+raw(step.request)+'</details><details><summary>Raw TfNSW response</summary>'+raw(step.rawResponse)+'</details>';d.append(section);root.append(d);
 }
 }
+function renderValidation(data){
+const rows=data.results||[];
+document.getElementById('summary').innerHTML='<p><strong>Step 1 departures:</strong> '+esc(data.candidateCount)+' · <strong>Valid:</strong> '+rows.filter(x=>x.status==='VALID').length+' · <strong>Unresolved:</strong> '+rows.filter(x=>x.status==='UNRESOLVED').length+'</p><p>'+esc(data.note)+'</p><div style="overflow-x:auto"><table><thead><tr><th>Candidate ID</th><th>Departure</th><th>Line</th><th>Trip IDs</th><th>Status</th><th>Reason</th><th>Matches</th><th>Journey</th></tr></thead><tbody>'+rows.map(x=>'<tr><td><code>'+esc(x.identity?.slice(0,12))+'</code></td><td>'+esc(fmt(x.firstDeparture?.estimated||x.firstDeparture?.planned))+'</td><td>'+esc(x.firstDeparture?.line)+'</td><td>'+esc((x.firstDeparture?.tripIds||[]).join(', '))+'</td><td class="'+(x.status==='VALID'?'good':'bad')+'">'+esc(x.status)+'</td><td>'+esc(x.reason)+'</td><td>'+esc(x.matchingJourneys)+'</td><td>'+(x.bestJourney?'<details><summary>View route</summary>'+raw(x.bestJourney)+'</details>':'—')+'</td></tr>').join('')+'</tbody></table></div>';
+const root=document.getElementById('trace');root.replaceChildren();
+const first=document.createElement('details');first.innerHTML='<summary>Step 1 discovery details</summary>'+raw(data.discovery);root.append(first);
+for(const step of data.trace||[]){const d=document.createElement('details');d.innerHTML='<summary>Step 2 TfNSW request — '+esc(step.returnedCount)+' journeys</summary>'+raw(step.request)+'<details><summary>Raw TfNSW response</summary>'+raw(step.rawResponse)+'</details>';root.append(d);}
+}
 document.getElementById('download').onclick=()=>{if(!latest)return;const blob=new Blob([JSON.stringify(latest,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='sydney-route-diagnostic.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)};
 </script></body></html>
