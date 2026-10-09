@@ -22,6 +22,9 @@ jobs:
       - run: |
           php -l api/index.php
           php -l api/lib/core.php
+          php -l api/lib/gtfs_diagnostic.php
+          php -l api/gtfs-update.php
+          php -l api/diagnostics.php
           php tests/backend-test.php
       - uses: actions/upload-artifact@v4
         with:
@@ -85,6 +88,18 @@ jobs:
             --exclude='*.log' \
             -e "ssh -p $NAMECHEAP_PORT -o StrictHostKeyChecking=yes" \
             dist/ "$NAMECHEAP_USERNAME@$NAMECHEAP_HOST:$NAMECHEAP_DEPLOY_PATH/qatest/"
+      - name: Refresh private QA GTFS timetable
+        env:
+          SSHPASS: ${{ secrets.NAMECHEAP_PASSWORD }}
+          NAMECHEAP_HOST: ${{ secrets.NAMECHEAP_HOST }}
+          NAMECHEAP_USERNAME: ${{ secrets.NAMECHEAP_USERNAME }}
+          NAMECHEAP_PORT: ${{ secrets.NAMECHEAP_PORT }}
+          NAMECHEAP_DEPLOY_PATH: ${{ secrets.NAMECHEAP_DEPLOY_PATH }}
+        run: |
+          sshpass -e ssh -p "$NAMECHEAP_PORT" -o StrictHostKeyChecking=yes \
+            "$NAMECHEAP_USERNAME@$NAMECHEAP_HOST" \
+            "php '$NAMECHEAP_DEPLOY_PATH/qatest/api/gtfs-update.php'"
+
       - name: Verify QA API and page
         run: |
           curl --fail --silent --show-error --retry 3 --retry-delay 3 \
