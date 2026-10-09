@@ -12,13 +12,14 @@ if(($_GET['action']??'')==='stations'){
  $q=trim((string)($_GET['q']??''));if(mb_strlen($q)<2||mb_strlen($q)>70)fail('BAD_REQUEST','Enter 2-70 characters');
  echo json_encode(['data'=>station_search($q)],JSON_INVALID_UTF8_SUBSTITUTE);exit;
 }
-if(($_GET['action']??'')==='discover'){
+if(in_array(($_GET['action']??''),['discover','validate'],true)){
  require __DIR__.'/lib/discovery.php';
+ if(($_GET['action']??'')==='validate')require __DIR__.'/lib/validation.php';
  $from=(string)($_GET['from']??'');$to=(string)($_GET['to']??'');
  if(!preg_match('/^[\\w:-]{3,50}$/',$from)||!preg_match('/^[\\w:-]{3,50}$/',$to)||$from===$to)fail('BAD_REQUEST','Select two different stations');
  $origin=['id'=>$from,'name'=>substr((string)($_GET['fromName']??$from),0,100)];
  $destination=['id'=>$to,'name'=>substr((string)($_GET['toName']??$to),0,100)];
- try{$data=qa_discover($origin,$destination,new DateTimeImmutable('now',new DateTimeZone('Australia/Sydney')));echo json_encode(['data'=>$data],JSON_INVALID_UTF8_SUBSTITUTE|JSON_PARTIAL_OUTPUT_ON_ERROR);exit;}
+ try{$data=qa_discover($origin,$destination,new DateTimeImmutable('now',new DateTimeZone('Australia/Sydney')));if(($_GET['action']??'')==='validate')$data=qa_validate_departures($data,$origin,$destination);echo json_encode(['data'=>$data],JSON_INVALID_UTF8_SUBSTITUTE|JSON_PARTIAL_OUTPUT_ON_ERROR);exit;}
  catch(Throwable $e){error_log('QA discovery: '.$e->getMessage());fail('UPSTREAM_UNAVAILABLE','Discovery failed; retry shortly',502);}
 }
 if(($_GET['action']??'')!=='trace')fail('BAD_REQUEST','Unknown action',404);
