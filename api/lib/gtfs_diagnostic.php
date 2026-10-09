@@ -132,7 +132,7 @@ function qa_gtfs_probe(array $candidate,array $origin):array{
   $db->close();
  }else{
   $stream=$zip->getStream('stop_times.txt');if(!$stream){$zip->close();$result['status']='GTFS_STOP_TIMES_UNREADABLE';return $result;}
-  $headers=fgetcsv($stream);$headers=array_map(fn($v)=>trim((string)$v,"\\xEF\\xBB\\xBF \\t"),$headers?:[]);
+  $headers=fgetcsv($stream);$headers=array_map(fn($v)=>trim((string)$v,"\xEF\xBB\xBF \t"),$headers?:[]);
   while(($line=fgetcsv($stream))!==false){
    ++$scanned;if(count($line)!==count($headers))continue;
    $v=array_combine($headers,$line);$trip=(string)($v['trip_id']??'');
