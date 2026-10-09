@@ -8,7 +8,7 @@ function qa_journey_seconds(string $clock):?int{
 function qa_journey_station(string $name):string{
  return strtolower(trim((string)preg_replace('/\\s+station(?:,.*)?$/i','',clean_station_name($name))));
 }
-function qa_journey_build(array $candidate,array $origin,array $destination):array{
+function qa_journey_build(array $candidate,array $origin,array $destination,int $routeLimit=12):array{
  $result=['mode'=>'Step 3 independent GTFS journey construction','status'=>'UNAVAILABLE','routes'=>[],'minimumTransferSeconds'=>180,
  'note'=>'Static scheduled journey candidates only. No /trip calls, realtime connection confirmation or commuter routing changes.'];
  $probe=qa_gtfs_probe($candidate,$origin);$result['firstLegEvidence']=['status'=>$probe['status'],'indexStatus'=>$probe['indexStatus']??null,'matches'=>count($probe['matches']??[])];
@@ -93,7 +93,7 @@ function qa_journey_build(array $candidate,array $origin,array $destination):arr
  $result['deduplicatedConnections']=count($found)-count($unique);
  $found=array_values($unique);$result['uniqueJourneyCount']=count($found);
  usort($found,fn($a,$b)=>qa_journey_seconds((string)$a['legs'][0]['departure'])<=>qa_journey_seconds((string)$b['legs'][0]['departure']) ?: ($a['arrivalSeconds']<=>$b['arrivalSeconds']) ?: ($a['transfers']<=>$b['transfers']));
- $result['routes']=array_slice($found,0,12);$result['displayedJourneyCount']=count($result['routes']);$result['hasMoreJourneys']=count($found)>count($result['routes']);$result['status']=$found?'STATIC_JOURNEYS_FOUND_UNVERIFIED':'NO_STATIC_JOURNEY_FOUND';
+ $result['routes']=$routeLimit>0?array_slice($found,0,$routeLimit):$found;$result['displayedJourneyCount']=count($result['routes']);$result['hasMoreJourneys']=count($found)>count($result['routes']);$result['status']=$found?'STATIC_JOURNEYS_FOUND_UNVERIFIED':'NO_STATIC_JOURNEY_FOUND';
  $result['checkedConnectingTrips']=$checked;
  $result['rankingPolicy']='earliest departure, then earliest arrival';
  $result['note'].=' Step 3D reports the connecting boarding platform as the second leg origin, removes duplicate platform variants, and distinguishes accepted versus displayed journeys. Rail-only connection filtering uses GTFS route_type 2/401/402. Step 3B uses destination-aware indexed searches and identifies the connecting GTFS stop ID. Transfer buffers are provisional conservative heuristics, not validated walking times. Live delays are not applied.';
