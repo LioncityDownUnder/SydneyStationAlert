@@ -60,8 +60,41 @@ function qa_validate_departures(array $discovery,array $from,array $to):array{
    if(!$valid){$failed++;continue;}
    $route=$valid[0];$matches[]=['route'=>$route,'rank'=>route_rank($route),'matchMethod'=>$idMatch?'TRIP_ID':'TIME_AND_LINE'];
   }
-  usort($matches,fn($a,$b)=>$a['rank']<=>$b['rank']);
-  $results[]=['identity'=>$item['identity'],'firstDeparture'=>$first,'departureTimestamp'=>$time,'window'=>$item['window'],'status'=>$matches?'VALID':'UNRESOLVED','reason'=>$matches?'COMPLETE_RAIL_JOURNEY_FOUND':($failed?'MATCHED_SERVICE_FAILED_VALIDATION':'NO_MATCHING_JOURNEY_RETURNED'),'matchingJourneys'=>count($matches),'bestJourney'=>$matches[0]??null];
+  usort($matches,fn($a,$b)=>($a['matchMethod']==='TRIP_ID'?0:1)<=>($b['matchMethod']==='TRIP_ID'?0:1) ?: ($a['rank']<=>$b['rank']));
+  $results[]=['identity'=>$item['identity'],'firstDeparture'=>$first,'departureTimestamp'=>$time,'window'=>$item['window'],'status'=>$matches?'VALID':'UNRESOLVED','reason'=>$matches?'COMPLETE_RAIL_JOURNEY_FOUND':($failed?'MATCHED_SERVICE_FAILED_VALIDATION':'NO_MATCHING_JOURNEY_RETURNED'),'matchingJourneys'=>count($matches),'bestJourney'=>$matches[0]??null,'matchMethods'=>array_values(array_unique(array_column($matches,'matchMethod')))];
  }
- return ['mode'=>'Step 2 QA validation','snapshotAt'=>$discovery['snapshotAt'],'origin'=>$from,'destination'=>$to,'candidateCount'=>count($items),'results'=>$results,'duplicateReview'=>$duplicateReview,'trace'=>$trace,'discovery'=>$discovery,'note'=>'Unmatched departures remain UNRESOLVED. Connection risk and independent interchange search are not yet evaluated.'];
+ // Consolidate candidates only when their validated first-leg physical trip ID agrees.
+ // Unresolved records remain visible and are never silently removed.
+ $groups=[];$candidateEvidence=[];
+ foreach($results as $i=>$result){
+  $best=$result['bestJourney']??null;
+  $leg=$best['route']['legs'][0]??null;
+  $physicalId=is_array($leg)?(string)($leg['tripIds'][0]??''):'';
+  $key=$physicalId!==''?'trip|'.$physicalId.'|'.($leg['departure']??''):'candidate|'.$result['identity'];
+  $groups[$key][]=$i;
+ }
+ $services=[];
+ foreach($groups as $indices){
+  $members=array_map(fn($i)=>$results[$i],$indices);
+  usort($members,fn($a,$b)=>(in_array('TRIP_ID',$a['matchMethods']??[],true)?0:1)<=>(in_array('TRIP_ID',$b['matchMethods']??[],true)?0:1) ?: (($a['bestJourney']['rank']??[])<=>($b['bestJourney']['rank']??[])));
+  $chosen=$members[0];$route=$chosen['bestJourney']['route']??null;$risks=[];
+  if(is_array($route)){
+   $legs=$route['legs']??[];
+   for($i=1;$i<count($legs);$i++){
+    $prev=$legs[$i-1];$next=$legs[$i];
+    $arr=iso_ts($prev['arrival']??null);$dep=iso_ts($next['departure']??null);
+    $arrPlatform=(string)($prev['destination']['platform']??'');
+    $depPlatform=(string)($next['origin']['platform']??'');
+    if($arr!==null&&$dep!==null){
+     $minutes=($dep-$arr)/60;
+     if($minutes<0||($minutes<5&&$arrPlatform!==''&&$depPlatform!==''&&$arrPlatform!==$depPlatform)){
+      $risks[]=['station'=>$next['origin']['name']??'','minutes'=>$minutes,'arrivalPlatform'=>$arrPlatform,'departurePlatform'=>$depPlatform,'reason'=>$minutes<0?'NEGATIVE_TRANSFER_TIME':'SHORT_PLATFORM_CHANGE','assessment'=>'RISKY_UNVERIFIED'];
+     }
+    }
+   }
+  }
+  $services[]=['identity'=>$chosen['identity'],'firstDeparture'=>$chosen['firstDeparture'],'departureTimestamp'=>$chosen['departureTimestamp'],'status'=>$chosen['status'],'reason'=>$chosen['reason'],'bestJourney'=>$chosen['bestJourney'],'matchMethod'=>$chosen['bestJourney']['matchMethod']??null,'sourceCandidateCount'=>count($indices),'sourceCandidateIds'=>array_column($members,'identity'),'connectionRisks'=>$risks,'connectionAssessment'=>$risks?'RISKY_UNVERIFIED':'NOT_FLAGGED','evidence'=>$members];
+ }
+ usort($services,fn($a,$b)=>$a['departureTimestamp']<=>$b['departureTimestamp']);
+ return ['mode'=>'Step 2 QA validation','snapshotAt'=>$discovery['snapshotAt'],'origin'=>$from,'destination'=>$to,'candidateCount'=>count($items),'physicalServiceCount'=>count($services),'services'=>$services,'results'=>$results,'duplicateReview'=>$duplicateReview,'trace'=>$trace,'discovery'=>$discovery,'note'=>'Unmatched departures remain UNRESOLVED. Short cross-platform connections are flagged heuristically; transfer feasibility and independent interchange search are not yet verified.'];
 }
