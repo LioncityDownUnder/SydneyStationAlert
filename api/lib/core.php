@@ -256,14 +256,6 @@ function normalized_journeys(array $body,array $origin,array $destination):array
    $arrive=$legs[$i-1]['destination'];$depart=$legs[$i]['origin'];$s=$depart;
    $transfers[]=['id'=>$s['id'],'name'=>$s['name'],'mode'=>$s['mode'],'lat'=>$s['lat'],'lon'=>$s['lon'],'arrivalPlatform'=>$arrive['platform']??null,'departurePlatform'=>$depart['platform']??null];
   }
-  // Reject impossible or unreasonably tight transfers in the complete upstream itinerary.
-  $validTransfers=true;
-  for($k=1;$k<count($legs);$k++){
-   if(!same_station($legs[$k-1]['destination'],$legs[$k]['origin'])){$validTransfers=false;break;}
-   $arriveAt=iso_ts($legs[$k-1]['arrival']);$leaveAt=iso_ts($legs[$k]['departure']);
-   if($arriveAt===null||$leaveAt===null||$leaveAt-$arriveAt<180){$validTransfers=false;break;}
-  }
-  if(!$validTransfers)continue;
   $departure=iso_ts($legs[0]['departure']);$arrival=iso_ts($legs[count($legs)-1]['arrival']);
   $duration=($departure!==null&&$arrival!==null&&$arrival>=$departure)?$arrival-$departure:PHP_INT_MAX;
   $candidates[]=['arrival'=>$arrival??PHP_INT_MAX,'departure'=>$departure??PHP_INT_MAX,'duration'=>$duration,'transfers'=>count($transfers),'index'=>$journeyIndex,'route'=>[
@@ -356,7 +348,7 @@ function stitch_routes(array $first,array $second,array $origin,array $destinati
  $legs1=val($first,'legs',[]);$legs2=val($second,'legs',[]);if(!is_array($legs1)||!$legs1||!is_array($legs2)||!$legs2)return null;
  $end1=$legs1[count($legs1)-1]['destination'];$start2=$legs2[0]['origin'];if(!same_station($end1,$start2))return null;
  $arrive=iso_ts($legs1[count($legs1)-1]['arrival']);$depart=iso_ts($legs2[0]['departure']);
- if($arrive===null||$depart===null||$depart<$arrive+180)return null;
+ if($arrive!==null&&$depart!==null&&$depart<$arrive+120)return null;
  $legs=array_merge($legs1,$legs2);$all=[];foreach($legs as $leg)foreach(val($leg,'stops',[]) as $s)append_unique_station($all,$s);
  $transfers=[];for($i=1;$i<count($legs);$i++){
   $a=$legs[$i-1]['destination'];$d=$legs[$i]['origin'];if(!same_station($a,$d))return null;
