@@ -17,11 +17,12 @@ def get(action, **params):
 def station(name):
     data=get("stations",q=name)
     exact=next((s for s in data if s["name"].lower()==name.lower()),None)
+    if not exact: exact=next((s for s in data if s["name"].lower().startswith(name.lower()+" station")),None)
     if not exact: raise ValueError("No exact station match: "+name)
     return exact
 try:
     a,b=station("Hurstville"),station("Padstow")
-    data=get("compare",from_=a["id"]) if False else get("compare",**{"from":a["id"],"to":b["id"],"fromName":a["name"],"toName":b["name"]})
+    data=get("compare",**{"from":a["id"],"to":b["id"],"fromName":a["name"],"toName":b["name"]})
     with open(OUT+"/step5-comparison.json","w") as f:json.dump(data,f,indent=2)
     independent=data.get("independent",{})
     check("Step 5 response version",data.get("version")=="5A",str(data.get("version")))
@@ -31,7 +32,9 @@ try:
     check("No truncated per-departure routes",complete.get("perDepartureRoutesTruncated") is False,str(complete.get("perDepartureRoutesTruncated")))
     legacy=data.get("legacyJourneyCount",0)
     # Upstream legacy planner may legitimately return zero; preserve evidence and flag as blocked, not a passing comparison.
-    check("Legacy comparison has usable journeys",legacy>0,str(legacy)+" usable journeys; status="+str(data.get("legacyStatus")))
+    check("Legacy comparison request completed",data.get("legacyStatus")=="LEGACY_RESPONSE_RECEIVED",str(data.get("legacyStatus")))
+    if legacy == 0:
+        check("Legacy route comparison inconclusive",False,"0 normalized journeys; investigate upstream response and rejection reasons")
     check("Comparison rows match shortlist",len(data.get("comparisons",[]))==len(independent.get("ranked",[])),str(len(data.get("comparisons",[])))+" rows")
 except Exception as e:
     check("QA diagnostic execution",False,type(e).__name__+": "+str(e))
