@@ -23,8 +23,8 @@ function qa_journey_build(array $candidate,array $origin,array $destination):arr
  $zip=new ZipArchive();if($zip->open($path)!==true)return $result;
  $date=new DateTimeImmutable($probe['serviceDate'],new DateTimeZone('Australia/Sydney'));
  $active=qa_gtfs_active_services($zip,$date);
- $stopRows=qa_gtfs_rows($zip,'stops.txt');$stopNames=[];$stationStopIds=[];
- foreach($stopRows as $stop){$id=(string)($stop['stop_id']??'');$key=qa_journey_station((string)($stop['stop_name']??''));if($id!==''&&$key!==''){$stopNames[$id]=$key;$stationStopIds[$key][]=$id;}}
+ $stopRows=qa_gtfs_rows($zip,'stops.txt');$stopNames=[];$stopLabels=[];$stationStopIds=[];
+ foreach($stopRows as $stop){$id=(string)($stop['stop_id']??'');$key=qa_journey_station((string)($stop['stop_name']??''));if($id!==''&&$key!==''){$stopNames[$id]=$key;$stopLabels[$id]=(string)($stop['stop_name']??'');$stationStopIds[$key][]=$id;}}
  $trips=qa_gtfs_rows($zip,'trips.txt');$tripMap=[];
  foreach($trips as $trip)$tripMap[$trip['trip_id']??'']=$trip;
  $zip->close();
@@ -67,7 +67,7 @@ function qa_journey_build(array $candidate,array $origin,array $destination):arr
     if($wait<$minimum){$rejections['insufficientTransferTime']++;continue;}
     $found[]=['type'=>'one_transfer','legs'=>[
      ['tripId'=>$match['tripId'],'line'=>$candidate['firstDeparture']['line']??'','from'=>$origin['name'],'to'=>$change['stop']['name'],'departure'=>$stops[$originIdx]['departure'],'arrival'=>$change['stop']['arrival'],'boardingStopId'=>$stops[$originIdx]['stopId'],'alightingStopId'=>$change['stop']['stopId']],
-     ['tripId'=>$tripId,'from'=>$change['stop']['name'],'to'=>$destination['name'],'departure'=>$row['boardDeparture'],'arrival'=>$row['destinationArrival'],'boardingStopId'=>$platformId,'boardingPlatformName'=>$change['station'],'alightingStopId'=>$row['destinationStop']]],
+     ['tripId'=>$tripId,'from'=>$change['stop']['name'],'to'=>$destination['name'],'departure'=>$row['boardDeparture'],'arrival'=>$row['destinationArrival'],'boardingStopId'=>$platformId,'boardingPlatformName'=>$stopLabels[$platformId]??null,'alightingStopId'=>$row['destinationStop']]],
      'transfers'=>1,'transferSeconds'=>$wait,'minimumTransferSeconds'=>$minimum,'arrivalSeconds'=>$arr,'confidence'=>'STATIC_SCHEDULE_UNVERIFIED'];
    }
    $rs->finalize();
