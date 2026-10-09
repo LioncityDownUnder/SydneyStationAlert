@@ -25,7 +25,7 @@ try:
     data=get("compare",**{"from":a["id"],"to":b["id"],"fromName":a["name"],"toName":b["name"]})
     with open(OUT+"/step5-comparison.json","w") as f:json.dump(data,f,indent=2)
     independent=data.get("independent",{})
-    check("Step 5 response version",data.get("version")=="5E",str(data.get("version")))
+    check("Step 5 response version",data.get("version")=="5F",str(data.get("version")))
     check("Independent engine returns shortlist",len(independent.get("ranked",[]))>0,str(len(independent.get("ranked",[])))+" journeys",advisory=True)
     complete=independent.get("searchCompleteness",{})
     check("All discovered departures evaluated",complete.get("evaluatedAllDiscoveredDepartures") is True,str(complete))
@@ -42,6 +42,7 @@ try:
     check("Step 5E comparison classifications",all(row.get("matchStatus") in ("NO_LEGACY_CANDIDATE","DEPARTURE_NOT_COMPARABLE","ROUTE_STRUCTURE_DIFFERS","TIME_ALIGNED_STRUCTURE_MATCH") and "departureDifferenceSeconds" in row and "arrivalDifferenceSeconds" in row and "sameTransferStations" in row for row in rows),str([row.get("matchStatus") for row in rows]))
     check("Step 5E rejects distant legacy departures",all(row.get("nearestLegacyIndex") is None or row.get("nearestLegacyDepartureGapSeconds",999999)<=300 for row in rows),str([(row.get("matchStatus"),row.get("nearestLegacyDepartureGapSeconds")) for row in rows]))
     check("Step 5E bounded probes",1<=data.get("legacyProbeCount",0)<=3,str(data.get("legacyProbeCount")))
+    check("Step 5F unmatched departure diagnostics",all(isinstance(row.get("departureDiagnostics"),dict) and row["departureDiagnostics"].get("diagnosis") in ("NO_RAIL_ONLY_LEGACY_REFERENCE","DEPARTURE_WINDOW_MISMATCH","WITHIN_FIVE_MINUTES_REVIEW_ROUTE") and isinstance(row["departureDiagnostics"].get("independentLegs"),list) for row in rows),str([(row.get("departureDiagnostics",{}).get("diagnosis"),row.get("departureDiagnostics",{}).get("closestLegacyGapSeconds")) for row in rows]))
     check("Comparison rows match shortlist",len(data.get("comparisons",[]))==len(independent.get("ranked",[])),str(len(data.get("comparisons",[])))+" rows")
 except Exception as e:
     check("QA diagnostic execution",False,type(e).__name__+": "+str(e))
