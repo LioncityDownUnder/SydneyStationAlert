@@ -6,9 +6,12 @@ function qa_compare_engines(array $discovery,array $origin,array $destination,Da
  $params=['depArrMacro'=>'dep','itdDate'=>$now->format('Ymd'),'itdTime'=>$now->format('Hi'),
   'type_origin'=>'stop','name_origin'=>$origin['id'],'type_destination'=>'stop','name_destination'=>$destination['id'],
   'calcNumberOfTrips'=>30,'TfNSWTR'=>'true'];
- $started=microtime(true);$legacyError=null;$legacy=[];
+ $started=microtime(true);$legacyError=null;$legacy=[];$rawLegacyCount=null;$legacyResponseKeys=[];
  try{
   $body=timed_upstream('trip',$params,25);
+  $legacyResponseKeys=is_array($body)?array_keys($body):[];
+  $rawJourneys=is_array($body)?val($body,'journeys',[]):[];
+  $rawLegacyCount=is_array($rawJourneys)?count($rawJourneys):null;
   $legacy=normalized_journeys($body,
    $origin+['lat'=>0.0,'lon'=>0.0,'mode'=>'train'],
    $destination+['lat'=>0.0,'lon'=>0.0,'mode'=>'train']);
@@ -55,6 +58,8 @@ function qa_compare_engines(array $discovery,array $origin,array $destination,Da
   'legacyError'=>$legacyError,'legacyElapsedMs'=>(int)((microtime(true)-$started)*1000),
   'legacyRequest'=>['date'=>$params['itdDate'],'time'=>$params['itdTime'],'requestedTrips'=>30],
   'legacyJourneys'=>$summary,'legacyJourneyCount'=>count($summary),
+  'legacyRawJourneyCount'=>$rawLegacyCount,'legacyResponseKeys'=>$legacyResponseKeys,
+  'legacyNormalizationRejectedCount'=>$rawLegacyCount===null?null:max(0,$rawLegacyCount-count($legacy)),
   'independent'=>$independent,'comparisons'=>$comparisons,
   'note'=>'QA-only one bounded /trip call for legacy reference, not the full production fallback/probe search. Independent GTFS identity and downstream arrival remain unverified. No commuter state changes.'];
 }
