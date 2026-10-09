@@ -71,7 +71,7 @@ function qa_journey_build(array $candidate,array $origin,array $destination):arr
     if($wait<$minimum){$rejections['insufficientTransferTime']++;continue;}
     $found[]=['type'=>'one_transfer','legs'=>[
      ['tripId'=>$match['tripId'],'line'=>$candidate['firstDeparture']['line']??'','from'=>$origin['name'],'to'=>$change['stop']['name'],'departure'=>$stops[$originIdx]['departure'],'arrival'=>$change['stop']['arrival'],'boardingStopId'=>$stops[$originIdx]['stopId'],'alightingStopId'=>$change['stop']['stopId']],
-     ['tripId'=>$tripId,'from'=>$change['stop']['name'],'to'=>$destination['name'],'departure'=>$row['boardDeparture'],'arrival'=>$row['destinationArrival'],'boardingStopId'=>$platformId,'boardingPlatformName'=>$stopLabels[$platformId]??null,'alightingStopId'=>$row['destinationStop']]],
+     ['tripId'=>$tripId,'from'=>$stopLabels[$platformId]??$change['stop']['name'],'to'=>$destination['name'],'departure'=>$row['boardDeparture'],'arrival'=>$row['destinationArrival'],'boardingStopId'=>$platformId,'boardingPlatformName'=>$stopLabels[$platformId]??null,'alightingStopId'=>$row['destinationStop']]],
      'transfers'=>1,'transferSeconds'=>$wait,'minimumTransferSeconds'=>$minimum,'arrivalSeconds'=>$arr,'confidence'=>'STATIC_SCHEDULE_UNVERIFIED'];
    }
    $rs->finalize();
@@ -79,11 +79,23 @@ function qa_journey_build(array $candidate,array $origin,array $destination):arr
  }
  $result['rejectedConnections']=$rejections;
  $result['matchingDestinationEvents']=count($found);
- $db->close();$found=array_values($found);
+ $db->close();
+ // Multiple GTFS platform records can describe the same train at one interchange.
+ // Retain the earliest feasible boarding event for each connecting trip and interchange station.
+ $unique=[];
+ foreach($found as $route){
+  if($route['type']==='direct'){$key='direct|'.$route['legs'][0]['tripId'].'|'.$route['legs'][0]['alightingStopId'];}
+  else{$key='transfer|'.$route['legs'][1]['tripId'].'|'.qa_journey_station((string)$route['legs'][0]['to']);}
+  if(!isset($unique[$key])){$unique[$key]=$route;continue;}
+  $old=$unique[$key];
+  if($route['arrivalSeconds']<$old['arrivalSeconds']||($route['arrivalSeconds']===$old['arrivalSeconds']&&qa_journey_seconds((string)$route['legs'][1]['departure'])<qa_journey_seconds((string)$old['legs'][1]['departure'])))$unique[$key]=$route;
+ }
+ $result['deduplicatedConnections']=count($found)-count($unique);
+ $found=array_values($unique);$result['uniqueJourneyCount']=count($found);
  usort($found,fn($a,$b)=>qa_journey_seconds((string)$a['legs'][0]['departure'])<=>qa_journey_seconds((string)$b['legs'][0]['departure']) ?: ($a['arrivalSeconds']<=>$b['arrivalSeconds']) ?: ($a['transfers']<=>$b['transfers']));
- $result['routes']=array_slice($found,0,12);$result['status']=$found?'STATIC_JOURNEYS_FOUND_UNVERIFIED':'NO_STATIC_JOURNEY_FOUND';
+ $result['routes']=array_slice($found,0,12);$result['displayedJourneyCount']=count($result['routes']);$result['hasMoreJourneys']=count($found)>count($result['routes']);$result['status']=$found?'STATIC_JOURNEYS_FOUND_UNVERIFIED':'NO_STATIC_JOURNEY_FOUND';
  $result['checkedConnectingTrips']=$checked;
  $result['rankingPolicy']='earliest departure, then earliest arrival';
- $result['note'].=' Rail-only connection filtering uses GTFS route_type 2/401/402. Step 3B uses destination-aware indexed searches and identifies the connecting GTFS stop ID. Transfer buffers are provisional conservative heuristics, not validated walking times. Live delays are not applied.';
+ $result['note'].=' Step 3D reports the connecting boarding platform as the second leg origin, removes duplicate platform variants, and distinguishes accepted versus displayed journeys. Rail-only connection filtering uses GTFS route_type 2/401/402. Step 3B uses destination-aware indexed searches and identifies the connecting GTFS stop ID. Transfer buffers are provisional conservative heuristics, not validated walking times. Live delays are not applied.';
  return $result;
 }
