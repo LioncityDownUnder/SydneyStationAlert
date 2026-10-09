@@ -25,6 +25,8 @@ function qa_journey_build(array $candidate,array $origin,array $destination):arr
  $active=qa_gtfs_active_services($zip,$date);
  $stopRows=qa_gtfs_rows($zip,'stops.txt');$stopNames=[];$stopLabels=[];$stationStopIds=[];
  foreach($stopRows as $stop){$id=(string)($stop['stop_id']??'');$key=qa_journey_station((string)($stop['stop_name']??''));if($id!==''&&$key!==''){$stopNames[$id]=$key;$stopLabels[$id]=(string)($stop['stop_name']??'');$stationStopIds[$key][]=$id;}}
+ $routes=qa_gtfs_rows($zip,'routes.txt');$railRoutes=[];
+ foreach($routes as $route){if(in_array((string)($route['route_type']??''),['2','401','402'],true))$railRoutes[(string)($route['route_id']??'')]=true;}
  $trips=qa_gtfs_rows($zip,'trips.txt');$tripMap=[];
  foreach($trips as $trip)$tripMap[$trip['trip_id']??'']=$trip;
  $zip->close();
@@ -41,12 +43,13 @@ function qa_journey_build(array $candidate,array $origin,array $destination):arr
  }
  $result['interchangeStationsConsidered']=count($interchanges);
  $result['destinationStopIds']=count($stationStopIds[$target]??[]);
+ $result['railRouteTypePolicy']=['2','401','402'];
  $result['transferPolicy']=['samePlatformSeconds'=>180,'otherPlatformSeconds'=>420,'centralOtherPlatformSeconds'=>900,'note'=>'Conservative QA heuristics only; no platform walking or accessibility data'];
  if(empty($stationStopIds[$target])){$result['status']='DESTINATION_NOT_IN_GTFS';$db->close();return $result;}
  $destIds=array_values(array_unique($stationStopIds[$target]));
  $destPlaceholders=implode(',',array_fill(0,count($destIds),'?'));
  $query=$db->prepare("SELECT b.trip,b.stop AS boardStop,b.departure AS boardDeparture,b.seq AS boardSeq,d.stop AS destinationStop,d.arrival AS destinationArrival,d.seq AS destinationSeq FROM times b JOIN times d ON b.trip=d.trip AND d.seq>b.seq WHERE b.stop=? AND d.stop IN ($destPlaceholders) AND d.seq=(SELECT MIN(d2.seq) FROM times d2 WHERE d2.trip=b.trip AND d2.seq>b.seq AND d2.stop IN ($destPlaceholders))");
- $checked=0;$seen=[];
+ $checked=0;$seen=[];$rejections['nonRailService']=0;
  foreach($interchanges as $change){
   $stationIds=array_values(array_unique($stationStopIds[$change['station']]??[]));
   foreach($stationIds as $platformId){
@@ -57,6 +60,7 @@ function qa_journey_build(array $candidate,array $origin,array $destination):arr
     ++$checked;
     $tripId=$row['trip'];$key=$tripId.'|'.$platformId.'|'.$change['stop']['stopId'];
     if(isset($seen[$key])||$tripId===$match['tripId'])continue;$seen[$key]=true;
+    if(!isset($railRoutes[(string)($tripMap[$tripId]['route_id']??'')])){$rejections['nonRailService']++;continue;}
     if(!isset($active[$tripMap[$tripId]['service_id']??''])){$rejections['inactiveService']++;continue;}
     $dep=qa_journey_seconds((string)$row['boardDeparture']);$arr=qa_journey_seconds((string)$row['destinationArrival']);
     if($dep===null||$arr===null||$arr<$dep){$rejections['noOnwardDestination']++;continue;}
@@ -80,6 +84,6 @@ function qa_journey_build(array $candidate,array $origin,array $destination):arr
  $result['routes']=array_slice($found,0,12);$result['status']=$found?'STATIC_JOURNEYS_FOUND_UNVERIFIED':'NO_STATIC_JOURNEY_FOUND';
  $result['checkedConnectingTrips']=$checked;
  $result['rankingPolicy']='earliest departure, then earliest arrival';
- $result['note'].=' Step 3B uses destination-aware indexed searches and identifies the connecting GTFS stop ID. Transfer buffers are provisional conservative heuristics, not validated walking times. Live delays are not applied.';
+ $result['note'].=' Rail-only connection filtering uses GTFS route_type 2/401/402. Step 3B uses destination-aware indexed searches and identifies the connecting GTFS stop ID. Transfer buffers are provisional conservative heuristics, not validated walking times. Live delays are not applied.';
  return $result;
 }
