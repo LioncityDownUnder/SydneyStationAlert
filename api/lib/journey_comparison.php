@@ -74,7 +74,9 @@ function qa_compare_engines(array $discovery,array $origin,array $destination,Da
   $legacyMatch=$nearest!==null?$summary[$nearest]:null;
   $transferStations=[];
   foreach(array_slice($route['legs'],0,-1) as $leg)$transferStations[]=(string)($leg['to']??'');
-  $comparisons[]=['candidateIndex'=>$route['candidateIndex'],'independentEstimatedDeparture'=>$route['estimatedOriginDeparture']??null,
+  $sameStations=$legacyMatch===null?null:array_map('strtolower',array_map('trim',$transferStations))===array_map('strtolower',array_map('trim',$legacyMatch['transferStations']));
+  $matchStatus=$legacyMatch===null?'NO_LEGACY_CANDIDATE':($distance>300?'DEPARTURE_NOT_COMPARABLE':(($route['transfers']!==$legacyMatch['transfers']||!$sameStations)?'ROUTE_STRUCTURE_DIFFERS':'TIME_ALIGNED_STRUCTURE_MATCH'));
+  $comparisons[]=['matchStatus'=>$matchStatus,'sameTransferStations'=>$sameStations,'departureDifferenceSeconds'=>$legacyMatch===null?null:$indDep-$legacyMatch['departureTimestamp'],'arrivalDifferenceSeconds'=>$legacyMatch===null?null:$indArr-$legacyMatch['arrivalTimestamp'],'candidateIndex'=>$route['candidateIndex'],'independentEstimatedDeparture'=>$route['estimatedOriginDeparture']??null,
    'independentStaticArrival'=>$route['legs'][count($route['legs'])-1]['arrival']??null,
    'independentTransferStations'=>$transferStations,'independentTransfers'=>$route['transfers'],
    'connectionRisk'=>$route['connectionRisk'],'nearestLegacyIndex'=>$nearest,
@@ -85,7 +87,7 @@ function qa_compare_engines(array $discovery,array $origin,array $destination,Da
    'similarDepartureWithinFiveMinutes'=>$nearest!==null&&$distance<=300,
    'sameTransferCount'=>$legacyMatch!==null&&$legacyMatch['transfers']===$route['transfers']];
  }
- return ['mode'=>'Step 5 independent versus legacy comparison','version'=>'5C',
+ return ['mode'=>'Step 5 independent versus legacy comparison','version'=>'5D',
   'snapshotAt'=>$discovery['snapshotAt']??$now->format(DATE_ATOM),
   'comparisonPolicy'=>'Closest legacy departure by time; proximity does not prove same train identity or equivalent route',
   'legacyStatus'=>count($legacy)>0?'LEGACY_JOURNEYS_AVAILABLE':($legacyError!==null?'LEGACY_PARTIAL_OR_UNAVAILABLE':'LEGACY_NO_USABLE_JOURNEYS'),
