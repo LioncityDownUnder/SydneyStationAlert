@@ -1,11 +1,11 @@
 <?php
 declare(strict_types=1);
-/** QA-only Step 4B: compare the best complete static journey for each origin departure. */
+/** QA-only Step 4D: compare the best complete static journey for each origin departure. */
 function qa_journey_rank_departures(array $discovery,array $origin,array $destination):array{
  $all=$discovery['discovered']??[];
  $limit=10;
  $candidates=array_slice($all,0,$limit);
- $out=['mode'=>'Step 4 independent GTFS journey ranking','version'=>'4C','status'=>'NO_VALID_STATIC_JOURNEY',
+ $out=['mode'=>'Step 4 independent GTFS journey ranking','version'=>'4D','status'=>'NO_VALID_STATIC_JOURNEY',
   'snapshotAt'=>$discovery['snapshotAt']??null,'candidateCount'=>count($all),
   'evaluatedCandidateCount'=>count($candidates),'candidateLimit'=>$limit,
   'ranked'=>[],'evaluations'=>[],
@@ -14,7 +14,7 @@ function qa_journey_rank_departures(array $discovery,array $origin,array $destin
   'note'=>'QA-only estimated-origin ordering with static GTFS downstream times. Delay is projected unchanged to the interchange only for connection-risk screening; this is not a realtime prediction or confirmation. No /trip calls or commuter state changes.'];
  $accepted=0;$bestByDeparture=[];$truncated=false;
  foreach($candidates as $index=>$candidate){
-  $built=qa_journey_build($candidate,$origin,$destination);
+  $built=qa_journey_build($candidate,$origin,$destination,0);
   $routes=$built['routes']??[];
   $truncated=$truncated||!empty($built['hasMoreJourneys']);
   $first=$candidate['firstDeparture']??[];
@@ -26,7 +26,7 @@ function qa_journey_rank_departures(array $discovery,array $origin,array $destin
    'plannedDeparture'=>$first['planned']??null,'estimatedDeparture'=>$first['estimated']??null,'originDelaySeconds'=>$delaySeconds,'status'=>$built['status']??'UNKNOWN','firstLegEvidence'=>$built['firstLegEvidence']??null,
    'returnedRoutes'=>count($routes),'uniqueJourneyCount'=>$built['uniqueJourneyCount']??count($routes),
    'hasMoreJourneys'=>$built['hasMoreJourneys']??false,
-   'rejectedConnections'=>$built['rejectedConnections']??null,'bestJourney'=>null];
+   'rejectedConnections'=>$built['rejectedConnections']??null,'bestJourney'=>null,'allUniqueRoutesReturned'=>true];
   $best=null;
   foreach($routes as $route){
    $legs=$route['legs']??[];
@@ -44,7 +44,7 @@ function qa_journey_rank_departures(array $discovery,array $origin,array $destin
     'plannedOriginDeparture'=>$first['planned']??null,'estimatedOriginDeparture'=>$first['estimated']??null,
     'originDelaySeconds'=>$delaySeconds,'delayMeaningful'=>$delaySeconds!==null&&abs($delaySeconds)>=120,
     'connectionRisk'=>$risk,'projectedTransferSlackSeconds'=>$projectedSlack,
-    'arrivalSeconds'=>$arrival,'durationSeconds'=>$arrival-$departure]+$route;
+    'arrivalSeconds'=>$arrival,'durationSeconds'=>$arrival-$departure,'scheduledDurationSeconds'=>$arrival-$departure,'displayDepartureSource'=>$estimatedTs!==null?'REALTIME_ORIGIN_ESTIMATE':'STATIC_GTFS','displayArrivalSource'=>'STATIC_GTFS_UNVERIFIED']+$route;
    if($best===null||($best['connectionRisk']==='POTENTIAL_MISSED_CONNECTION'&&$risk!=='POTENTIAL_MISSED_CONNECTION')||(($best['connectionRisk']==='POTENTIAL_MISSED_CONNECTION')===($risk==='POTENTIAL_MISSED_CONNECTION')&&($arrival<$best['arrivalSeconds']||($arrival===$best['arrivalSeconds']&&$item['transfers']<$best['transfers']))))$best=$item;
   }
   if($best!==null){
@@ -75,7 +75,7 @@ function qa_journey_rank_departures(array $discovery,array $origin,array $destin
  $out['shortlistJourneyCount']=$count;
  $out['suppressedSlowerAlternatives']=$accepted-$count;
  $out['displayedJourneyCount']=$count;
- $out['hasMoreJourneys']=false;
+ $out['hasMoreJourneys']=count($all)>count($candidates)||$truncated;
  $out['ranked']=$bestByDeparture;
  $out['delayAffectedJourneyCount']=count(array_filter($bestByDeparture,fn($r)=>$r['delayMeaningful']));
  $out['potentialMissedConnectionCount']=count(array_filter($bestByDeparture,fn($r)=>$r['connectionRisk']==='POTENTIAL_MISSED_CONNECTION'));
@@ -83,6 +83,6 @@ function qa_journey_rank_departures(array $discovery,array $origin,array $destin
  $out['status']=$count?'STATIC_JOURNEYS_RANKED_UNVERIFIED':'NO_VALID_STATIC_JOURNEY';
  $out['searchCompleteness']=['evaluatedAllDiscoveredDepartures'=>count($all)<=count($candidates),
   'perDepartureRoutesTruncated'=>$truncated,
-  'note'=>'Best journey selected from at most 12 routes returned per origin departure; not guaranteed globally optimal.'];
+  'note'=>'All deduplicated routes returned for evaluated departures; discovery is still limited to the first 10 candidates and static train identity remains unverified.'];
  return $out;
 }
