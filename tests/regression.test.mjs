@@ -132,3 +132,9 @@ test('late missed connection recovery requires departure after request',()=>{
  assert.match(main,/window\.confirm\('Confirm missed connection at '/);
  assert.match(main,/transfer&&state\.onboard/);
 });
+
+test('core routing compares all initial probe candidates',()=>{
+ const api=fs.readFileSync('api/index.php','utf8');
+ assert.match(api,/\$route=better_route\(\$route,\$candidate\)/);
+ assert.doesNotMatch(api,/if\(\$candidate\)\{\$route=\$candidate;break;\}/);
+});
