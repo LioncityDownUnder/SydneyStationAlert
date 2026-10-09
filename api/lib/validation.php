@@ -49,16 +49,27 @@ function qa_validate_departures(array $discovery,array $from,array $to):array{
    foreach(val($j,'legs',[]) as $leg){if(is_array($leg)&&mode(val($leg,'transportation',[]))){$firstLeg=$leg;break;}}
    if(!$firstLeg)continue;
    $node=val($firstLeg,'origin',[]);
-   $departure=iso_ts(val($node,'departureTimeEstimated'))??iso_ts(val($node,'departureTimePlanned'));
+   $journeyPlanned=iso_ts(val($node,'departureTimePlanned'));
+   $journeyEstimated=iso_ts(val($node,'departureTimeEstimated'));
+   $candidatePlanned=iso_ts($first['planned']??null);
+   $candidateEstimated=iso_ts($first['estimated']??null);
    $transport=val($firstLeg,'transportation',[]);
    $otherIds=array_map('strval',transportation_trip_ids($transport));
-   $idMatch=$ids&&$otherIds&&array_intersect($ids,$otherIds);
-   $timeMatch=$departure!==null&&abs($departure-$time)<=120;
+   $idMatch=(bool)($ids&&$otherIds&&array_intersect($ids,$otherIds));
+   // Compare like-for-like times: a delayed 14:21 service can depart at 14:25.
+   // Never widen the tolerance to encompass neighbouring physical trains.
+   $plannedMatch=$candidatePlanned!==null&&$journeyPlanned!==null&&abs($candidatePlanned-$journeyPlanned)<=120;
+   $estimatedMatch=$candidateEstimated!==null&&$journeyEstimated!==null&&abs($candidateEstimated-$journeyEstimated)<=120;
+   $fallbackMatch=($candidateEstimated===null||$journeyEstimated===null)
+    &&($candidatePlanned===null||$journeyPlanned===null)
+    &&(($journeyEstimated??$journeyPlanned)!==null)
+    &&abs(($journeyEstimated??$journeyPlanned)-$time)<=120;
    $lineMatch=(string)val($transport,'disassembledName','')===(string)($first['line']??'');
-   if(!$idMatch&&!($timeMatch&&$lineMatch))continue;
+   if(!$idMatch&&!($lineMatch&&($plannedMatch||$estimatedMatch||$fallbackMatch)))continue;
+   $matchMethod=$idMatch?'TRIP_ID':($plannedMatch?'PLANNED_TIME_AND_LINE':($estimatedMatch?'ESTIMATED_TIME_AND_LINE':'TIME_AND_LINE'));
    $valid=normalized_journeys(['journeys'=>[$j]],$origin,$destination);
    if(!$valid){$failed++;continue;}
-   $route=$valid[0];$matches[]=['route'=>$route,'rank'=>route_rank($route),'matchMethod'=>$idMatch?'TRIP_ID':'TIME_AND_LINE'];
+   $route=$valid[0];$matches[]=['route'=>$route,'rank'=>route_rank($route),'matchMethod'=>$matchMethod];
   }
   usort($matches,fn($a,$b)=>($a['matchMethod']==='TRIP_ID'?0:1)<=>($b['matchMethod']==='TRIP_ID'?0:1) ?: ($a['rank']<=>$b['rank']));
   $results[]=['identity'=>$item['identity'],'firstDeparture'=>$first,'departureTimestamp'=>$time,'window'=>$item['window'],'status'=>$matches?'VALID':'UNRESOLVED','reason'=>$matches?'COMPLETE_RAIL_JOURNEY_FOUND':($failed?'MATCHED_SERVICE_FAILED_VALIDATION':'NO_MATCHING_JOURNEY_RETURNED'),'matchingJourneys'=>count($matches),'bestJourney'=>$matches[0]??null,'matchMethods'=>array_values(array_unique(array_column($matches,'matchMethod')))];
