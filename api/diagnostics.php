@@ -12,7 +12,7 @@ if(($_GET['action']??'')==='stations'){
  $q=trim((string)($_GET['q']??''));if(mb_strlen($q)<2||mb_strlen($q)>70)fail('BAD_REQUEST','Enter 2-70 characters');
  echo json_encode(['data'=>station_search($q)],JSON_INVALID_UTF8_SUBSTITUTE);exit;
 }
-if(in_array(($_GET['action']??''),['discover','stops','service','gtfs','build','validate','rank'],true)){
+if(in_array(($_GET['action']??''),['discover','stops','service','gtfs','build','rank_static','validate','rank'],true)){
  require __DIR__.'/lib/discovery.php';
  if(in_array(($_GET['action']??''),['validate','rank'],true))require __DIR__.'/lib/validation.php';
  $from=(string)($_GET['from']??'');$to=(string)($_GET['to']??'');
@@ -35,6 +35,12 @@ if(in_array(($_GET['action']??''),['discover','stops','service','gtfs','build','
   require __DIR__.'/lib/gtfs_diagnostic.php';
   require __DIR__.'/lib/journey_builder.php';
   $data=qa_journey_build($candidate,$origin,$destination);
+ }
+ if(($_GET['action']??'')==='rank_static'){
+  require __DIR__.'/lib/gtfs_diagnostic.php';
+  require __DIR__.'/lib/journey_builder.php';
+  require __DIR__.'/lib/journey_ranking.php';
+  $data=qa_journey_rank_departures($data,$origin,$destination);
  }
  if(($_GET['action']??'')==='service'){
  $index=filter_var($_GET['candidate']??'0',FILTER_VALIDATE_INT,['options'=>['min_range'=>0,'max_range'=>24]]);
