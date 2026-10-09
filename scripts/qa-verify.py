@@ -1,0 +1,42 @@
+#!/usr/bin/env python3
+"""Read-only QA diagnostics smoke verification. No credentials or private URLs."""
+import json, os, sys, urllib.parse, urllib.request
+from datetime import datetime, timezone
+
+BASE="https://trains.nytnetwork.work/qatest/api/"
+OUT="qa-verification"
+os.makedirs(OUT,exist_ok=True)
+results=[]
+def check(name, ok, detail):
+    results.append({"test":name,"passed":bool(ok),"detail":detail})
+    print(("PASS" if ok else "FAIL")+": "+name+" — "+detail,flush=True)
+def get(action, **params):
+    url=BASE+"diagnostics.php?"+urllib.parse.urlencode({"action":action,**params})
+    with urllib.request.urlopen(urllib.request.Request(url,headers={"User-Agent":"SydneyStationAlert-QA-CI"}),timeout=160) as resp:
+        return json.load(resp)["data"]
+def station(name):
+    data=get("stations",q=name)
+    exact=next((s for s in data if s["name"].lower()==name.lower()),None)
+    if not exact: raise ValueError("No exact station match: "+name)
+    return exact
+try:
+    a,b=station("Hurstville"),station("Padstow")
+    data=get("compare",from_=a["id"]) if False else get("compare",**{"from":a["id"],"to":b["id"],"fromName":a["name"],"toName":b["name"]})
+    with open(OUT+"/step5-comparison.json","w") as f:json.dump(data,f,indent=2)
+    independent=data.get("independent",{})
+    check("Step 5 response version",data.get("version")=="5A",str(data.get("version")))
+    check("Independent engine returns shortlist",len(independent.get("ranked",[]))>0,str(len(independent.get("ranked",[])))+" journeys")
+    complete=independent.get("searchCompleteness",{})
+    check("All discovered departures evaluated",complete.get("evaluatedAllDiscoveredDepartures") is True,str(complete))
+    check("No truncated per-departure routes",complete.get("perDepartureRoutesTruncated") is False,str(complete.get("perDepartureRoutesTruncated")))
+    legacy=data.get("legacyJourneyCount",0)
+    # Upstream legacy planner may legitimately return zero; preserve evidence and flag as blocked, not a passing comparison.
+    check("Legacy comparison has usable journeys",legacy>0,str(legacy)+" usable journeys; status="+str(data.get("legacyStatus")))
+    check("Comparison rows match shortlist",len(data.get("comparisons",[]))==len(independent.get("ranked",[])),str(len(data.get("comparisons",[])))+" rows")
+except Exception as e:
+    check("QA diagnostic execution",False,type(e).__name__+": "+str(e))
+with open(OUT+"/summary.json","w") as f:json.dump({"timestamp":datetime.now(timezone.utc).isoformat(),"results":results},f,indent=2)
+with open(OUT+"/summary.md","w") as f:
+    f.write("# QA diagnostic verification\n\n| Test | Result | Detail |\n|---|---|---|\n")
+    for r in results:f.write("| "+r["test"]+" | "+("PASS" if r["passed"] else "FAIL")+" | "+r["detail"].replace("|","/").replace("\n"," ")+" |\n")
+sys.exit(0 if all(r["passed"] for r in results) else 1)
