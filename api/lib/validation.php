@@ -21,6 +21,25 @@ function qa_validate_departures(array $discovery,array $from,array $to):array{
   $trace[]=['stage'=>'validation_probe','request'=>$params,'returnedCount'=>is_array($raw)?count($raw):0,'rawResponse'=>$body];
   foreach(is_array($raw)?$raw:[] as $j)if(is_array($j))$journeys[]=$j;
  }
+ $sameMinute=[];
+ foreach($items as $item){
+  $minute=(int)floor(($item['departureTimestamp']??0)/60);
+  $key=$minute.'|'.(string)($item['firstDeparture']['line']??'');
+  $sameMinute[$key][]=$item;
+ }
+ $duplicateReview=[];
+ foreach($sameMinute as $group){
+  if(count($group)<2)continue;
+  $members=[];
+  foreach($group as $item){
+   $event=$item['event']??[];$transport=val($event,'transportation',[]);
+   $location=val($event,'location',[]);
+   $members[]=['identity'=>$item['identity'],'departure'=>$item['firstDeparture'],'location'=>$location,'transportation'=>$transport,'destination'=>val($event,'destination',null),'properties'=>val($event,'properties',null)];
+  }
+  $platforms=array_values(array_unique(array_filter(array_map(fn($x)=>(string)val($x['location'],'id',''),$members))));
+  $ids=array_map(fn($x)=>implode(',',array_map('strval',$x['departure']['tripIds']??[])),$members);
+  $duplicateReview[]=['minute'=>$group[0]['departureTimestamp'],'line'=>$group[0]['firstDeparture']['line'],'candidateCount'=>count($group),'platformIds'=>$platforms,'tripIdSets'=>$ids,'assessment'=>'REVIEW_REQUIRED','reason'=>'Same-minute same-line departures: distinct IDs alone cannot establish distinct physical trains. Compare platform, direction and raw service records.','members'=>$members];
+ }
  $results=[];
  foreach($items as $item){
   $first=$item['firstDeparture'];$time=$item['departureTimestamp'];
@@ -44,5 +63,5 @@ function qa_validate_departures(array $discovery,array $from,array $to):array{
   usort($matches,fn($a,$b)=>$a['rank']<=>$b['rank']);
   $results[]=['identity'=>$item['identity'],'firstDeparture'=>$first,'departureTimestamp'=>$time,'window'=>$item['window'],'status'=>$matches?'VALID':'UNRESOLVED','reason'=>$matches?'COMPLETE_RAIL_JOURNEY_FOUND':($failed?'MATCHED_SERVICE_FAILED_VALIDATION':'NO_MATCHING_JOURNEY_RETURNED'),'matchingJourneys'=>count($matches),'bestJourney'=>$matches[0]??null];
  }
- return ['mode'=>'Step 2 QA validation','snapshotAt'=>$discovery['snapshotAt'],'origin'=>$from,'destination'=>$to,'candidateCount'=>count($items),'results'=>$results,'trace'=>$trace,'discovery'=>$discovery,'note'=>'Unmatched departures remain UNRESOLVED. Connection risk and independent interchange search are not yet evaluated.'];
+ return ['mode'=>'Step 2 QA validation','snapshotAt'=>$discovery['snapshotAt'],'origin'=>$from,'destination'=>$to,'candidateCount'=>count($items),'results'=>$results,'duplicateReview'=>$duplicateReview,'trace'=>$trace,'discovery'=>$discovery,'note'=>'Unmatched departures remain UNRESOLVED. Connection risk and independent interchange search are not yet evaluated.'];
 }
