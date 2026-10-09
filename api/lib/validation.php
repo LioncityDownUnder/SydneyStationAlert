@@ -14,12 +14,12 @@ function qa_validate_departures(array $discovery,array $from,array $to):array{
   $at=(new DateTimeImmutable('@'.max(0,$bucket-120)))->setTimezone(new DateTimeZone('Australia/Sydney'));
   $requests[]=['depArrMacro'=>'dep','itdDate'=>$at->format('Ymd'),'itdTime'=>$at->format('Hi'),'type_origin'=>'stop','name_origin'=>$from['id'],'type_destination'=>'stop','name_destination'=>$to['id'],'calcNumberOfTrips'=>60,'TfNSWTR'=>'true','excludedMeans'=>'checkbox','exclMOT_4'=>1,'exclMOT_5'=>1,'exclMOT_7'=>1,'exclMOT_9'=>1,'exclMOT_11'=>1];
  }
- $journeys=[];$trace=[];
+ $journeys=[];$trace=[];$journeySources=[];
  foreach($requests as $params){
   $body=timed_upstream('trip',$params,0);
   $raw=val($body,'journeys',[]);
   $trace[]=['stage'=>'validation_probe','request'=>$params,'returnedCount'=>is_array($raw)?count($raw):0,'rawResponse'=>$body];
-  foreach(is_array($raw)?$raw:[] as $j)if(is_array($j))$journeys[]=$j;
+  foreach(is_array($raw)?$raw:[] as $index=>$j)if(is_array($j)){$journeys[]=$j;$journeySources[]=['probeIndex'=>count($trace)-1,'journeyIndex'=>$index,'requestedDate'=>$params['itdDate'],'requestedTime'=>$params['itdTime']];}
  }
  $sameMinute=[];
  foreach($items as $item){
@@ -45,10 +45,12 @@ function qa_validate_departures(array $discovery,array $from,array $to):array{
   $first=$item['firstDeparture'];$time=$item['departureTimestamp'];
   $ids=array_map('strval',$first['tripIds']??[]);$matches=[];$failed=0;
   $diagnostic=['journeysReturned'=>count($journeys),'firstRailLegFound'=>0,'tripIdMatches'=>0,'plannedTimeMatches'=>0,'estimatedTimeMatches'=>0,'fallbackTimeMatches'=>0,'lineMatches'=>0,'firstLegMatches'=>0,'failedNormalization'=>0,'noRailFirstLeg'=>0];
-  foreach($journeys as $j){
+  $diagnostic['candidate']=['planned'=>$first['planned']??null,'estimated'=>$first['estimated']??null,'line'=>$first['line']??null,'tripIds'=>$ids];
+  $diagnostic['returnedFirstLegs']=[];
+  foreach($journeys as $journeyIndex=>$j){
    $firstLeg=null;
    foreach(val($j,'legs',[]) as $leg){if(is_array($leg)&&mode(val($leg,'transportation',[]))){$firstLeg=$leg;break;}}
-   if(!$firstLeg){$diagnostic['noRailFirstLeg']++;continue;}
+   if(!$firstLeg){$diagnostic['noRailFirstLeg']++;$diagnostic['returnedFirstLegs'][]=['source'=>$journeySources[$journeyIndex]??null,'reason'=>'NO_RAIL_LEG'];continue;}
    $diagnostic['firstRailLegFound']++;
    $node=val($firstLeg,'origin',[]);
    $journeyPlanned=iso_ts(val($node,'departureTimePlanned'));
@@ -72,6 +74,7 @@ function qa_validate_departures(array $discovery,array $from,array $to):array{
    if($lineMatch&&$plannedMatch)$diagnostic['plannedTimeMatches']++;
    if($lineMatch&&$estimatedMatch)$diagnostic['estimatedTimeMatches']++;
    if($lineMatch&&$fallbackMatch)$diagnostic['fallbackTimeMatches']++;
+   $diagnostic['returnedFirstLegs'][]=['source'=>$journeySources[$journeyIndex]??null,'planned'=>val($node,'departureTimePlanned'),'estimated'=>val($node,'departureTimeEstimated'),'line'=>val($transport,'disassembledName',''),'tripIds'=>$otherIds,'tripIdMatch'=>$idMatch,'lineMatch'=>$lineMatch,'plannedTimeDifferenceSeconds'=>($candidatePlanned!==null&&$journeyPlanned!==null)?$journeyPlanned-$candidatePlanned:null,'estimatedTimeDifferenceSeconds'=>($candidateEstimated!==null&&$journeyEstimated!==null)?$journeyEstimated-$candidateEstimated:null,'acceptedFirstLeg'=>$idMatch||($lineMatch&&($plannedMatch||$estimatedMatch||$fallbackMatch))];
    if(!$idMatch&&!($lineMatch&&($plannedMatch||$estimatedMatch||$fallbackMatch)))continue;
    $diagnostic['firstLegMatches']++;
    $matchMethod=$idMatch?'TRIP_ID':($plannedMatch?'PLANNED_TIME_AND_LINE':($estimatedMatch?'ESTIMATED_TIME_AND_LINE':'TIME_AND_LINE'));
