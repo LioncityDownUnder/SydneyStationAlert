@@ -25,7 +25,7 @@ try:
     data=get("compare",**{"from":a["id"],"to":b["id"],"fromName":a["name"],"toName":b["name"]})
     with open(OUT+"/step5-comparison.json","w") as f:json.dump(data,f,indent=2)
     independent=data.get("independent",{})
-    check("Step 5 response version",data.get("version")=="5C",str(data.get("version")))
+    check("Step 5 response version",data.get("version")=="5D",str(data.get("version")))
     check("Independent engine returns shortlist",len(independent.get("ranked",[]))>0,str(len(independent.get("ranked",[])))+" journeys",advisory=True)
     complete=independent.get("searchCompleteness",{})
     check("All discovered departures evaluated",complete.get("evaluatedAllDiscoveredDepartures") is True,str(complete))
@@ -38,6 +38,8 @@ try:
     check("Legacy probe diagnostics available",len(data.get("legacyProbes",[]))>=1,str(data.get("legacyProbes",[])))
     rejected=[p for p in data.get("legacyProbes",[]) if p.get("rejectionReasons",{}).get("UNSUPPORTED_TRANSPORT",0)>0]
     check("Unsupported transport class evidence",not rejected or all(p.get("unsupportedTransportSamples") for p in rejected),str([p.get("unsupportedTransportSamples",[]) for p in rejected]))
+    rows=data.get("comparisons",[])
+    check("Step 5D comparison classifications",all(row.get("matchStatus") in ("NO_LEGACY_CANDIDATE","DEPARTURE_NOT_COMPARABLE","ROUTE_STRUCTURE_DIFFERS","TIME_ALIGNED_STRUCTURE_MATCH") and "departureDifferenceSeconds" in row and "arrivalDifferenceSeconds" in row and "sameTransferStations" in row for row in rows),str([row.get("matchStatus") for row in rows]))
     check("Comparison rows match shortlist",len(data.get("comparisons",[]))==len(independent.get("ranked",[])),str(len(data.get("comparisons",[])))+" rows")
 except Exception as e:
     check("QA diagnostic execution",False,type(e).__name__+": "+str(e))
