@@ -21,10 +21,10 @@ if(is_file($path)&&filesize($path)>1000&&$headStatus===200){
 $tmp=tempnam($dir,'gtfs-');if($tmp===false)exit(2);
 $fp=fopen($tmp,'wb');if(!$fp)exit(2);
 $ch=curl_init($url);
-curl_setopt_array($ch,[CURLOPT_FILE=>$fp,CURLOPT_HTTPHEADER=>['Authorization: apikey '.$key],CURLOPT_CONNECTTIMEOUT=>15,CURLOPT_TIMEOUT=>180,CURLOPT_FOLLOWLOCATION=>false,CURLOPT_MAXFILESIZE=>120000000]);
+curl_setopt_array($ch,[CURLOPT_FILE=>$fp,CURLOPT_HTTPHEADER=>['Authorization: apikey '.$key],CURLOPT_CONNECTTIMEOUT=>15,CURLOPT_TIMEOUT=>600,CURLOPT_FOLLOWLOCATION=>false,CURLOPT_MAXFILESIZE=>750000000]);
 $ok=curl_exec($ch);$status=(int)curl_getinfo($ch,CURLINFO_RESPONSE_CODE);$err=curl_error($ch);curl_close($ch);fclose($fp);
 if(!$ok||$status!==200){unlink($tmp);fwrite(STDERR,"GTFS: download failed HTTP $status ($err)\n");exit(3);}
-if(filesize($tmp)<1000||filesize($tmp)>120000000||!class_exists('ZipArchive')){unlink($tmp);fwrite(STDERR,"GTFS: invalid size or ZIP extension unavailable\n");exit(4);}
+if(filesize($tmp)<1000||filesize($tmp)>750000000||!class_exists('ZipArchive')){unlink($tmp);fwrite(STDERR,"GTFS: invalid size or ZIP extension unavailable\n");exit(4);}
 $zip=new ZipArchive();if($zip->open($tmp)!==true){unlink($tmp);fwrite(STDERR,"GTFS: invalid ZIP\n");exit(4);}
 foreach(['trips.txt','stops.txt','stop_times.txt','calendar.txt','calendar_dates.txt'] as $file){
  if(in_array($file,['calendar.txt','calendar_dates.txt'],true))continue;
