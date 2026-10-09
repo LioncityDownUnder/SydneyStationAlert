@@ -20,7 +20,7 @@ function qa_gtfs_probe(array $candidate,array $origin):array{
  'note'=>'Requires QA_GTFS_STATIC_ZIP pointing to a trusted Sydney Trains GTFS ZIP on the QA server. No /trip calls; no automatic download. Exact trip-ID mapping is preferred; station/time candidates are explicitly unverified.'];
  if($path===''||!is_file($path))return $result;
  if(!class_exists('ZipArchive')){$result['status']='ZIP_EXTENSION_UNAVAILABLE';return $result;}
- if(filesize($path)>120000000){$result['status']='GTFS_ZIP_TOO_LARGE';return $result;}
+ if(filesize($path)>750000000){$result['status']='GTFS_ZIP_TOO_LARGE';return $result;}
  $zip=new ZipArchive();if($zip->open($path)!==true){$result['status']='GTFS_ZIP_UNREADABLE';return $result;}
  foreach(['trips.txt','stop_times.txt','stops.txt'] as $file)if($zip->locateName($file)===false){$result['status']='GTFS_MISSING_'.$file;$zip->close();return $result;}
  $trips=qa_gtfs_rows($zip,'trips.txt');$stops=qa_gtfs_rows($zip,'stops.txt');
