@@ -138,3 +138,16 @@ test('core routing compares all initial probe candidates',()=>{
  assert.match(api,/\$route=better_route\(\$route,\$candidate\)/);
  assert.doesNotMatch(api,/if\(\$candidate\)\{\$route=\$candidate;break;\}/);
 });
+
+test('QA route diagnostics includes read-only candidate trace and build output',()=>{
+ const html=fs.readFileSync('public/diagnostics.html','utf8');
+ const php=fs.readFileSync('api/diagnostics.php','utf8');
+ const pkg=fs.readFileSync('package.json','utf8');
+ assert.match(html,/Find journey/);
+ assert.match(html,/Full raw TfNSW response/);
+ assert.match(html,/Download complete diagnostic JSON/);
+ assert.match(php,/\/qatest\/api\//);
+ assert.match(php,/diagnostic_candidate/);
+ assert.match(php,/rawResponse/);
+ assert.match(pkg,/cp public\/diagnostics\.html dist\/diagnostics\.html/);
+});
