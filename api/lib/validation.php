@@ -82,8 +82,69 @@ function qa_validate_departures(array $discovery,array $from,array $to):array{
    if(!$valid){$failed++;$diagnostic['failedNormalization']++;continue;}
    $route=$valid[0];$matches[]=['route'=>$route,'rank'=>route_rank($route),'matchMethod'=>$matchMethod];
   }
+  // QA-only bounded recovery: seek the exact departure on a shorter origin-to-interchange journey.
+  // Never invent a first leg or treat a neighbouring train as the candidate.
+  if(!$matches){
+   $diagnostic['recovery']=['status'=>'NOT_FOUND','attempts'=>[]];
+   $interchanges=[];
+   foreach($journeys as $j){
+    foreach(val($j,'legs',[]) as $leg){
+     if(!is_array($leg)||!mode(val($leg,'transportation',[])))continue;
+     $node=val($leg,'destination',[]);
+     $id=(string)val($node,'id','');
+     if($id!==''&&$id!==(string)$from['id']&&$id!==(string)$to['id'])$interchanges[$id]=['id'=>$id,'name'=>(string)val($node,'name',val($node,'disassembledName',$id)),'lat'=>0.0,'lon'=>0.0,'mode'=>'train'];
+    }
+   }
+   $interchanges=array_slice(array_values($interchanges),0,2);
+   foreach($interchanges as $interchange){
+    $at=(new DateTimeImmutable('@'.max(0,$time-120)))->setTimezone(new DateTimeZone('Australia/Sydney'));
+    $params=['depArrMacro'=>'dep','itdDate'=>$at->format('Ymd'),'itdTime'=>$at->format('Hi'),'type_origin'=>'stop','name_origin'=>$from['id'],'type_destination'=>'stop','name_destination'=>$interchange['id'],'calcNumberOfTrips'=>30,'TfNSWTR'=>'true','excludedMeans'=>'checkbox','exclMOT_4'=>1,'exclMOT_5'=>1,'exclMOT_7'=>1,'exclMOT_9'=>1,'exclMOT_11'=>1];
+    $body=timed_upstream('trip',$params,0);
+    $raw=val($body,'journeys',[]);
+    $attempt=['interchange'=>$interchange,'firstLegJourneys'=>is_array($raw)?count($raw):0,'matchedFirstLegs'=>0,'validFirstRoutes'=>0,'validOnwardRoutes'=>0,'stitchedRoutes'=>0];
+    foreach(is_array($raw)?$raw:[] as $j){
+     if(!is_array($j))continue;
+     $rail=null;
+     foreach(val($j,'legs',[]) as $leg)if(is_array($leg)&&mode(val($leg,'transportation',[]))){$rail=$leg;break;}
+     if(!$rail)continue;
+     $tr=val($rail,'transportation',[]);$node=val($rail,'origin',[]);
+     $otherIds=array_map('strval',transportation_trip_ids($tr));
+     $idMatch=(bool)($ids&&$otherIds&&array_intersect($ids,$otherIds));
+     $lineMatch=(string)val($tr,'disassembledName','')===(string)($first['line']??'');
+     $planned=iso_ts(val($node,'departureTimePlanned'));$estimated=iso_ts(val($node,'departureTimeEstimated'));
+     $cp=iso_ts($first['planned']??null);$ce=iso_ts($first['estimated']??null);
+     $timeMatch=($cp!==null&&$planned!==null&&abs($cp-$planned)<=120)||($ce!==null&&$estimated!==null&&abs($ce-$estimated)<=120);
+     if(!$idMatch&&!($lineMatch&&$timeMatch))continue;
+     $attempt['matchedFirstLegs']++;
+     $firstRoutes=normalized_journeys(['journeys'=>[$j]],$origin,$interchange);
+     foreach($firstRoutes as $firstRoute){
+      $attempt['validFirstRoutes']++;
+      $legs=$firstRoute['legs']??[];
+      if(count($legs)!==1)continue; // Only an exact single-train first segment is recovered.
+      $arrival=route_arrival_ts($firstRoute);
+      if($arrival===PHP_INT_MAX)continue;
+      $onwardAt=(new DateTimeImmutable('@'.($arrival+120)))->setTimezone(new DateTimeZone('Australia/Sydney'));
+      $onwardParams=$params;
+      $onwardParams['itdDate']=$onwardAt->format('Ymd');$onwardParams['itdTime']=$onwardAt->format('Hi');
+      $onwardParams['name_origin']=$interchange['id'];$onwardParams['name_destination']=$to['id'];
+      $onward=timed_upstream('trip',$onwardParams,0);
+      $onwardRoutes=normalized_journeys($onward,$interchange,$destination);
+      $attempt['validOnwardRoutes']+=count($onwardRoutes);
+      foreach(array_slice($onwardRoutes,0,12) as $next){
+       $stitched=stitch_routes($firstRoute,$next,$origin,$destination);
+       if(!$stitched)continue;
+       $attempt['stitchedRoutes']++;
+       $matches[]=['route'=>$stitched,'rank'=>route_rank($stitched),'matchMethod'=>'RECOVERED_CONNECTION'];
+      }
+     }
+    }
+    $diagnostic['recovery']['attempts'][]=$attempt;
+    if($matches){$diagnostic['recovery']['status']='RECOVERED';break;}
+   }
+   if(!$interchanges)$diagnostic['recovery']['status']='NO_INTERCHANGE_CANDIDATES';
+  }
   usort($matches,fn($a,$b)=>($a['matchMethod']==='TRIP_ID'?0:1)<=>($b['matchMethod']==='TRIP_ID'?0:1) ?: ($a['rank']<=>$b['rank']));
-  $results[]=['identity'=>$item['identity'],'firstDeparture'=>$first,'departureTimestamp'=>$time,'window'=>$item['window'],'status'=>$matches?'VALID':'UNRESOLVED','reason'=>$matches?'COMPLETE_RAIL_JOURNEY_FOUND':($failed?'MATCHED_SERVICE_FAILED_VALIDATION':'NO_MATCHING_JOURNEY_RETURNED'),'matchingJourneys'=>count($matches),'matchDiagnostics'=>$diagnostic,'bestJourney'=>$matches[0]??null,'matchMethods'=>array_values(array_unique(array_column($matches,'matchMethod')))];
+  $results[]=['identity'=>$item['identity'],'firstDeparture'=>$first,'departureTimestamp'=>$time,'window'=>$item['window'],'status'=>$matches?'VALID':'UNRESOLVED','reason'=>$matches?(($matches[0]['matchMethod']??'')==='RECOVERED_CONNECTION'?'RECOVERED_CONNECTION':'COMPLETE_RAIL_JOURNEY_FOUND'):($failed?'MATCHED_SERVICE_FAILED_VALIDATION':'NO_MATCHING_JOURNEY_RETURNED'),'matchingJourneys'=>count($matches),'matchDiagnostics'=>$diagnostic,'bestJourney'=>$matches[0]??null,'matchMethods'=>array_values(array_unique(array_column($matches,'matchMethod')))];
  }
  // Consolidate candidates only when their validated first-leg physical trip ID agrees.
  // Unresolved records remain visible and are never silently removed.
@@ -134,5 +195,5 @@ function qa_validate_departures(array $discovery,array $from,array $to):array{
  usort($ranked,fn($a,$b)=>$a['sortKey']<=>$b['sortKey']);
  foreach($ranked as $i=>&$entry){$entry['position']=$i+1;$entry['selectionReason']=$entry['riskCount']?'RISK_FLAGGED_REVIEW_REQUIRED':'NO_SHORT_PLATFORM_CHANGE_FLAGGED';unset($entry['sortKey']);}unset($entry);
 
- return ['mode'=>'Step 2 QA validation','snapshotAt'=>$discovery['snapshotAt'],'origin'=>$from,'destination'=>$to,'candidateCount'=>count($items),'physicalServiceCount'=>count($services),'services'=>$services,'ranking'=>['policy'=>'Unflagged complete routes first; then earliest arrival, fewest transfers, shortest duration, earlier departure. Risk flagged routes remain visible.','ranked'=>$ranked,'selected'=>$ranked[0]??null,'unresolvedCount'=>count(array_filter($services,fn($x)=>$x['status']!=='VALID'))],'results'=>$results,'duplicateReview'=>$duplicateReview,'trace'=>$trace,'discovery'=>$discovery,'note'=>'Unmatched departures remain UNRESOLVED. Short cross-platform connections are flagged heuristically; transfer feasibility and independent interchange search are not yet verified.'];
+ return ['mode'=>'Step 2 QA validation','snapshotAt'=>$discovery['snapshotAt'],'origin'=>$from,'destination'=>$to,'candidateCount'=>count($items),'physicalServiceCount'=>count($services),'services'=>$services,'ranking'=>['policy'=>'Unflagged complete routes first; then earliest arrival, fewest transfers, shortest duration, earlier departure. Risk flagged routes remain visible.','ranked'=>$ranked,'selected'=>$ranked[0]??null,'unresolvedCount'=>count(array_filter($services,fn($x)=>$x['status']!=='VALID'))],'results'=>$results,'duplicateReview'=>$duplicateReview,'trace'=>$trace,'discovery'=>$discovery,'note'=>'Unmatched departures remain UNRESOLVED. Short cross-platform connections are flagged heuristically; QA recovery attempts up to two interchange candidates, requiring exact first-train matching, a normalized single-train first segment and a stitched onward route with at least two minutes transfer time; other connections may remain unresolved.'];
 }
