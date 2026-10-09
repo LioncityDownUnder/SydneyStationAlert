@@ -25,16 +25,17 @@ try:
     data=get("compare",**{"from":a["id"],"to":b["id"],"fromName":a["name"],"toName":b["name"]})
     with open(OUT+"/step5-comparison.json","w") as f:json.dump(data,f,indent=2)
     independent=data.get("independent",{})
-    check("Step 5 response version",data.get("version")=="5A",str(data.get("version")))
+    check("Step 5 response version",data.get("version")=="5B",str(data.get("version")))
     check("Independent engine returns shortlist",len(independent.get("ranked",[]))>0,str(len(independent.get("ranked",[])))+" journeys",advisory=True)
     complete=independent.get("searchCompleteness",{})
     check("All discovered departures evaluated",complete.get("evaluatedAllDiscoveredDepartures") is True,str(complete))
     check("No truncated per-departure routes",complete.get("perDepartureRoutesTruncated") is False,str(complete.get("perDepartureRoutesTruncated")))
     legacy=data.get("legacyJourneyCount",0)
     # Upstream legacy planner may legitimately return zero; preserve evidence and flag as blocked, not a passing comparison.
-    check("Legacy comparison request completed",data.get("legacyStatus")=="LEGACY_RESPONSE_RECEIVED",str(data.get("legacyStatus")))
+    check("Legacy comparison request completed",data.get("legacyStatus") in ("LEGACY_JOURNEYS_AVAILABLE","LEGACY_NO_USABLE_JOURNEYS"),str(data.get("legacyStatus")))
     if legacy == 0:
         check("Legacy route comparison inconclusive",False,"0 normalized journeys; raw="+str(data.get("legacyRawJourneyCount"))+"; investigate upstream response and normalization",advisory=True)
+    check("Legacy probe diagnostics available",len(data.get("legacyProbes",[]))>=1,str(data.get("legacyProbes",[])))
     check("Comparison rows match shortlist",len(data.get("comparisons",[]))==len(independent.get("ranked",[])),str(len(data.get("comparisons",[])))+" rows")
 except Exception as e:
     check("QA diagnostic execution",False,type(e).__name__+": "+str(e))
