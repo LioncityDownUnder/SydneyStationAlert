@@ -14,6 +14,7 @@ function qa_gtfs_rows(ZipArchive $zip,string $name):array{
 }
 function qa_gtfs_probe(array $candidate,array $origin):array{
  $path=(string)(getenv('QA_GTFS_STATIC_ZIP')?:'');
+ if($path===''){$config=__DIR__.'/../gtfs-path.local.php';if(is_file($config)){$private=require $config;if(is_string($private))$path=$private;}}
  $result=['mode'=>'Step 2C GTFS timetable investigation','candidate'=>['identity'=>$candidate['identity']??null,'firstDeparture'=>$candidate['firstDeparture']??null],
  'source'=>'local GTFS static ZIP','status'=>'GTFS_NOT_CONFIGURED','matches'=>[],
  'note'=>'Requires QA_GTFS_STATIC_ZIP pointing to a trusted Sydney Trains GTFS ZIP on the QA server. No /trip calls; no automatic download. Exact trip-ID mapping is preferred; station/time candidates are explicitly unverified.'];
