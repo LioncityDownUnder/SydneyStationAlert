@@ -6,7 +6,15 @@ function qa_compare_engines(array $discovery,array $origin,array $destination,Da
  $params=['depArrMacro'=>'dep','itdDate'=>$now->format('Ymd'),'itdTime'=>$now->format('Hi'),
   'type_origin'=>'stop','name_origin'=>$origin['id'],'type_destination'=>'stop','name_destination'=>$destination['id'],
   'calcNumberOfTrips'=>30,'TfNSWTR'=>'true'];
- $started=microtime(true);$legacyError=null;$legacy=[];$rawLegacyCount=0;$legacyResponseKeys=[];$probes=[];$probeTimes=array_slice(journey_search_probes($now),0,3);
+ $started=microtime(true);$legacyError=null;$legacy=[];$rawLegacyCount=0;$legacyResponseKeys=[];$probes=[];$probeTimes=[];$seenProbeMinutes=[];
+ foreach($independent['ranked'] as $candidate){
+  $seconds=(int)($candidate['effectiveDepartureSeconds']??0);
+  $candidateTime=$now->setTime(0,0)->modify('+'.$seconds.' seconds')->modify('-10 minutes');
+  $minute=$candidateTime->format('YmdHi');
+  if(!isset($seenProbeMinutes[$minute])){$seenProbeMinutes[$minute]=true;$probeTimes[]=$candidateTime;}
+  if(count($probeTimes)>=3)break;
+ }
+ if(!$probeTimes)$probeTimes=array_slice(journey_search_probes($now),0,3);
  foreach($probeTimes as $probeIndex=>$probeTime){
   $request=$params;$request['itdDate']=$probeTime->format('Ymd');$request['itdTime']=$probeTime->format('Hi');
   $probe=['probe'=>$probeIndex+1,'requestedAt'=>$probeTime->format(DATE_ATOM),'status'=>'PENDING','rawCount'=>null,'normalizedCount'=>0,'rejectionReasons'=>[],'unsupportedTransportSamples'=>[]];
@@ -48,7 +56,7 @@ function qa_compare_engines(array $discovery,array $origin,array $destination,Da
    error_log('QA Step 5 legacy probe '.($probeIndex+1).': '.$e->getMessage());
   }
   $probes[]=$probe;
-  if(count($legacy)>0)break;
+  // Keep probing the bounded departure windows to improve comparison coverage.
  }
  $summary=[];
  foreach($legacy as $route){
@@ -67,13 +75,17 @@ function qa_compare_engines(array $discovery,array $origin,array $destination,Da
   $dayStart=$now->setTime(0,0)->getTimestamp();
   $indDep=$dayStart+$staticDeparture;$indArr=$dayStart+$staticArrival;
   $nearest=null;$distance=PHP_INT_MAX;
-  foreach($summary as $i=>$candidate){
-   $gap=abs($candidate['departureTimestamp']-$indDep);
-   if($gap<$distance){$nearest=$i;$distance=$gap;}
-  }
-  $legacyMatch=$nearest!==null?$summary[$nearest]:null;
   $transferStations=[];
   foreach(array_slice($route['legs'],0,-1) as $leg)$transferStations[]=(string)($leg['to']??'');
+  $normalizedTransfers=array_map('strtolower',array_map('trim',$transferStations));
+  $bestScore=PHP_INT_MAX;
+  foreach($summary as $i=>$candidate){
+   $gap=abs($candidate['departureTimestamp']-$indDep);
+   $sameStructure=$route['transfers']===$candidate['transfers']&&$normalizedTransfers===array_map('strtolower',array_map('trim',$candidate['transferStations']));
+   $score=$gap+($sameStructure?0:86400);
+   if($gap<=300&&$score<$bestScore){$nearest=$i;$distance=$gap;$bestScore=$score;}
+  }
+  $legacyMatch=$nearest!==null?$summary[$nearest]:null;
   $sameStations=$legacyMatch===null?null:array_map('strtolower',array_map('trim',$transferStations))===array_map('strtolower',array_map('trim',$legacyMatch['transferStations']));
   $matchStatus=$legacyMatch===null?'NO_LEGACY_CANDIDATE':($distance>300?'DEPARTURE_NOT_COMPARABLE':(($route['transfers']!==$legacyMatch['transfers']||!$sameStations)?'ROUTE_STRUCTURE_DIFFERS':'TIME_ALIGNED_STRUCTURE_MATCH'));
   $comparisons[]=['matchStatus'=>$matchStatus,'sameTransferStations'=>$sameStations,'departureDifferenceSeconds'=>$legacyMatch===null?null:$indDep-$legacyMatch['departureTimestamp'],'arrivalDifferenceSeconds'=>$legacyMatch===null?null:$indArr-$legacyMatch['arrivalTimestamp'],'candidateIndex'=>$route['candidateIndex'],'independentEstimatedDeparture'=>$route['estimatedOriginDeparture']??null,
@@ -87,9 +99,9 @@ function qa_compare_engines(array $discovery,array $origin,array $destination,Da
    'similarDepartureWithinFiveMinutes'=>$nearest!==null&&$distance<=300,
    'sameTransferCount'=>$legacyMatch!==null&&$legacyMatch['transfers']===$route['transfers']];
  }
- return ['mode'=>'Step 5 independent versus legacy comparison','version'=>'5D',
+ return ['mode'=>'Step 5 independent versus legacy comparison','version'=>'5E',
   'snapshotAt'=>$discovery['snapshotAt']??$now->format(DATE_ATOM),
-  'comparisonPolicy'=>'Closest legacy departure by time; proximity does not prove same train identity or equivalent route',
+  'comparisonPolicy'=>'Bounded legacy probes near independent departures; only compare departures within five minutes, preferring identical transfer sequence and count. Time proximity does not prove train identity',
   'legacyStatus'=>count($legacy)>0?'LEGACY_JOURNEYS_AVAILABLE':($legacyError!==null?'LEGACY_PARTIAL_OR_UNAVAILABLE':'LEGACY_NO_USABLE_JOURNEYS'),
   'legacyError'=>$legacyError,'legacyElapsedMs'=>(int)((microtime(true)-$started)*1000),
   'legacyRequest'=>['date'=>$params['itdDate'],'time'=>$params['itdTime'],'requestedTrips'=>30],
@@ -98,5 +110,5 @@ function qa_compare_engines(array $discovery,array $origin,array $destination,Da
   'legacyRawJourneyCount'=>$rawLegacyCount,'legacyResponseKeys'=>$legacyResponseKeys,
   'legacyNormalizationRejectedCount'=>max(0,$rawLegacyCount-count($legacy)),
   'independent'=>$independent,'comparisons'=>$comparisons,
-  'note'=>'Step 5C inspects unsupported legacy transport classes without relaxing rail-only journey acceptance. QA-only up to three bounded /trip probes for legacy reference, not the full production fallback/probe search. Independent GTFS identity and downstream arrival remain unverified. No commuter state changes.'];
+  'note'=>'Step 5E uses independent-departure-aligned legacy probes and rejects out-of-window comparisons. Step 5C inspects unsupported legacy transport classes without relaxing rail-only journey acceptance. QA-only up to three bounded /trip probes for legacy reference, not the full production fallback/probe search. Independent GTFS identity and downstream arrival remain unverified. No commuter state changes.'];
 }
