@@ -16,7 +16,7 @@ curl_exec($head);$headStatus=(int)curl_getinfo($head,CURLINFO_RESPONSE_CODE);cur
 if($headStatus===401||$headStatus===403){fwrite(STDERR,"GTFS: existing key not authorized (HTTP $headStatus)\n");exit(3);}
 if(is_file($path)&&filesize($path)>1000&&$headStatus===200){
  // HEAD is advisory only; periodically refresh even when unchanged.
- if(filemtime($path)>time()-86400){echo "GTFS: cached private archive available\n";exit;}
+ if(filemtime($path)>time()-86400){file_put_contents(__DIR__.'/gtfs-path.local.php','<?php return '.var_export($path,true).';');echo "GTFS: cached private archive available\n";exit;}
 }
 $tmp=tempnam($dir,'gtfs-');if($tmp===false)exit(2);
 $fp=fopen($tmp,'wb');if(!$fp)exit(2);
@@ -32,4 +32,6 @@ foreach(['trips.txt','stops.txt','stop_times.txt','calendar.txt','calendar_dates
 }
 $zip->close();chmod($tmp,0600);
 if(!rename($tmp,$path)){unlink($tmp);exit(4);}
+file_put_contents(__DIR__.'/gtfs-path.local.php','<?php return '.var_export($path,true).';');
+chmod(__DIR__.'/gtfs-path.local.php',0600);
 echo "GTFS: validated archive installed in private QA directory\n";
