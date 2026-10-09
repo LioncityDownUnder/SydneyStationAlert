@@ -24,14 +24,14 @@ function qa_discover(array $from,array $to,DateTimeImmutable $now):array{
    if(!$m)$reasons[]='NOT_TRAIN_OR_METRO';
    if($time===null)$reasons[]='MISSING_DEPARTURE_TIME';
    else{
-    if($time<$snapshot+120)$reasons[]='LESS_THAN_2_MINUTES';
+    if($time<$snapshot)$reasons[]='ALREADY_DEPARTED';
     if($time<$start||$time>=$end)$reasons[]='OUTSIDE_WINDOW';
    }
    // Departure-monitor locations may be platform IDs, not the parent station ID.
    // The requested stop ID is authoritative; platform names are not used to reject.
    $identity=hash('sha256',implode('|',[$time,(string)$first['line'],implode(',',array_map('strval',$first['tripIds'])),(string)val($transport,'number','')]));
    if(!$reasons&&isset($found[$identity]))$reasons[]='DUPLICATE_DEPARTURE';
-   $entry['candidates'][]=['index'=>$index,'firstDeparture'=>$first,'departureTimestamp'=>$time,'status'=>$reasons?'excluded':'discovered','reasons'=>$reasons?:['AWAITING_DESTINATION_VALIDATION'],'identity'=>$identity];
+   $entry['candidates'][]=['index'=>$index,'firstDeparture'=>$first,'departureTimestamp'=>$time,'status'=>$reasons?'excluded':'discovered','boardingWarning'=>($time!==null&&$time>=$snapshot&&$time<$snapshot+120)?'DEPARTING_SOON':null,'reasons'=>$reasons?:['AWAITING_DESTINATION_VALIDATION'],'identity'=>$identity];
    if(!$reasons)$found[$identity]=['firstDeparture'=>$first,'departureTimestamp'=>$time,'identity'=>$identity,'window'=>$entry['window'],'event'=>$event];
   }
   $entry['decision']=$found?'Found eligible departures; destination feasibility deferred to Step 2':'No eligible departures; expand search window';
@@ -39,5 +39,5 @@ function qa_discover(array $from,array $to,DateTimeImmutable $now):array{
   if($found)break;
  }
  $ordered=array_values($found);usort($ordered,fn($a,$b)=>$a['departureTimestamp']<=>$b['departureTimestamp']);
- return ['snapshotAt'=>$now->format(DATE_ATOM),'mode'=>'Step 1 QA discovery','minimumLeadSeconds'=>120,'candidateCount'=>count($ordered),'discovered'=>$ordered,'selected'=>null,'trace'=>$trace,'note'=>'Origin station departures only. Destination '.$to['name'].' is not used to reject trains. Step 2 must establish onward route feasibility. TfNSW stop-event limits may constrain completeness.'];
+ return ['snapshotAt'=>$now->format(DATE_ATOM),'mode'=>'Step 1 QA discovery','minimumLeadSeconds'=>0,'boardingWarningThresholdSeconds'=>120,'candidateCount'=>count($ordered),'discovered'=>$ordered,'selected'=>null,'trace'=>$trace,'note'=>'Origin station departures only. Destination '.$to['name'].' is not used to reject trains. Step 2 must establish onward route feasibility. TfNSW stop-event limits may constrain completeness.'];
 }
