@@ -95,6 +95,22 @@ function qa_validate_departures(array $discovery,array $from,array $to):array{
   }
   $services[]=['identity'=>$chosen['identity'],'firstDeparture'=>$chosen['firstDeparture'],'departureTimestamp'=>$chosen['departureTimestamp'],'status'=>$chosen['status'],'reason'=>$chosen['reason'],'bestJourney'=>$chosen['bestJourney'],'matchMethod'=>$chosen['bestJourney']['matchMethod']??null,'sourceCandidateCount'=>count($indices),'sourceCandidateIds'=>array_column($members,'identity'),'connectionRisks'=>$risks,'connectionAssessment'=>$risks?'RISKY_UNVERIFIED':'NOT_FLAGGED','evidence'=>$members];
  }
- usort($services,fn($a,$b)=>$a['departureTimestamp']<=>$b['departureTimestamp']);
- return ['mode'=>'Step 2 QA validation','snapshotAt'=>$discovery['snapshotAt'],'origin'=>$from,'destination'=>$to,'candidateCount'=>count($items),'physicalServiceCount'=>count($services),'services'=>$services,'results'=>$results,'duplicateReview'=>$duplicateReview,'trace'=>$trace,'discovery'=>$discovery,'note'=>'Unmatched departures remain UNRESOLVED. Short cross-platform connections are flagged heuristically; transfer feasibility and independent interchange search are not yet verified.'];
+ usort($services,fn($a,$b)=>$a['departureTimestamp']<=>$b['departureTimestamp']); 
+ // Step 3 QA-only: rank unique complete journeys; do not silently promote unresolved services.
+ $ranked=[];
+ foreach($services as $service){
+  if($service['status']!=='VALID'||!is_array($service['bestJourney']['route']??null))continue;
+  $route=$service['bestJourney']['route'];$legs=$route['legs']??[];
+  $departure=iso_ts($route['railStart']['departure']??null)??iso_ts($legs[0]['departure']??null);
+  $arrival=iso_ts($route['railEnd']['arrival']??null)??iso_ts($legs[count($legs)-1]['arrival']??null);
+  if($departure===null||$arrival===null||$arrival<$departure)continue;
+  $transfers=max(0,count($legs)-1);$riskCount=count($service['connectionRisks']);
+  // Arrival first among non-flagged journeys, then transfers, duration, departure.
+  // Flagged journeys remain visible but cannot displace a non-flagged option.
+  $ranked[]=['identity'=>$service['identity'],'firstDeparture'=>$service['firstDeparture'],'arrival'=>gmdate('c',$arrival),'durationMinutes'=>round(($arrival-$departure)/60,1),'transfers'=>$transfers,'riskCount'=>$riskCount,'connectionRisks'=>$service['connectionRisks'],'matchMethod'=>$service['matchMethod'],'sourceCandidateCount'=>$service['sourceCandidateCount'],'route'=>$route,'sortKey'=>[$riskCount>0?1:0,$arrival,$transfers,$arrival-$departure,$departure]];
+ }
+ usort($ranked,fn($a,$b)=>$a['sortKey']<=>$b['sortKey']);
+ foreach($ranked as $i=>&$entry){$entry['position']=$i+1;$entry['selectionReason']=$entry['riskCount']?'RISK_FLAGGED_REVIEW_REQUIRED':'NO_SHORT_PLATFORM_CHANGE_FLAGGED';unset($entry['sortKey']);}unset($entry);
+
+ return ['mode'=>'Step 2 QA validation','snapshotAt'=>$discovery['snapshotAt'],'origin'=>$from,'destination'=>$to,'candidateCount'=>count($items),'physicalServiceCount'=>count($services),'services'=>$services,'ranking'=>['policy'=>'Unflagged complete routes first; then earliest arrival, fewest transfers, shortest duration, earlier departure. Risk flagged routes remain visible.','ranked'=>$ranked,'selected'=>$ranked[0]??null,'unresolvedCount'=>count(array_filter($services,fn($x)=>$x['status']!=='VALID'))],'results'=>$results,'duplicateReview'=>$duplicateReview,'trace'=>$trace,'discovery'=>$discovery,'note'=>'Unmatched departures remain UNRESOLVED. Short cross-platform connections are flagged heuristically; transfer feasibility and independent interchange search are not yet verified.'];
 }
