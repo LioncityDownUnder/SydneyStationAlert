@@ -8,7 +8,7 @@ function qa_gtfs_rows(ZipArchive $zip,string $name):array{
  $out=[];while(($line=fgetcsv($stream))!==false){
   if(count($line)!==count($header))continue;
   $out[]=array_combine($header,$line);
-  if(count($out)>250000){fclose($stream);return [];}
+  if(count($out)>1000000){fclose($stream);return [];}
  }
  fclose($stream);return $out;
 }
@@ -36,7 +36,7 @@ function qa_gtfs_probe(array $candidate,array $origin):array{
  $headers=fgetcsv($stream);$headers=array_map(fn($v)=>trim((string)$v,"\xEF\xBB\xBF \t"),$headers?:[]);
  $matched=[];$possible=[];$scanned=0;
  while(($line=fgetcsv($stream))!==false){
-  if(++$scanned>1500000)break;
+  ++$scanned;
   if(count($line)!==count($headers))continue;
   $v=array_combine($headers,$line);$trip=(string)($v['trip_id']??'');
   if(isset($exact[$trip])){$matched[$trip][]=$v;continue;}
@@ -51,7 +51,7 @@ function qa_gtfs_probe(array $candidate,array $origin):array{
  if(!$exact&&$possible){
   // Second streaming pass for stop sequences of bounded station/time candidates.
   $possible=array_slice($possible,0,20,true);$stream=$zip->getStream('stop_times.txt');fgetcsv($stream);$n=0;
-  while(($line=fgetcsv($stream))!==false&&++$n<=1500000){
+  while(($line=fgetcsv($stream))!==false){++$n;
    if(count($line)!==count($headers))continue;$v=array_combine($headers,$line);
    if(isset($possible[$v['trip_id']??'']))$matched[$v['trip_id']][]=$v;
   }
@@ -63,7 +63,7 @@ function qa_gtfs_probe(array $candidate,array $origin):array{
   $result['matches'][]=['tripId'=>$id,'confidence'=>isset($exact[$id])?'EXACT_GTFS_TRIP_ID':'STATION_TIME_ONLY_UNVERIFIED',
    'stops'=>array_map(fn($v)=>['stopId'=>$v['stop_id']??null,'name'=>$stopMap[$v['stop_id']??'']['stop_name']??null,'arrival'=>$v['arrival_time']??null,'departure'=>$v['departure_time']??null,'sequence'=>$v['stop_sequence']??null],$rows)];
  }
- $result['status']=$scanned>1500000?'GTFS_SCAN_LIMIT':($result['matches']?'GTFS_CANDIDATES_FOUND_UNVERIFIED':'NO_GTFS_MATCH');
+ $result['status']=$result['matches']?'GTFS_CANDIDATES_FOUND_UNVERIFIED':'NO_GTFS_MATCH';
  $result['scannedStopTimeRows']=$scanned;
  $result['note'].=' Static service-calendar validity, feed freshness, station identity and realtime identity must still be verified before using any result for routing.';
  return $result;
