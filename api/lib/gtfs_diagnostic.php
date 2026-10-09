@@ -27,6 +27,29 @@ function qa_gtfs_active_services(ZipArchive $zip,DateTimeImmutable $date):?array
  }
  return $active;
 }
+function qa_gtfs_live_destination(array $candidate):array{
+ $event=$candidate['event']??[];$transport=$event['transportation']??[];
+ $paths=[
+  ['event.destination', $event['destination']??null],
+  ['event.transportation.destination', $transport['destination']??null],
+  ['event.transportation.properties.destination', $transport['properties']['destination']??null],
+  ['event.transportation.properties.direction', $transport['properties']['direction']??null],
+  ['event.transportation.properties.destinationName', $transport['properties']['destinationName']??null],
+ ];
+ foreach($paths as [$source,$raw]){
+  $value=is_string($raw)?trim($raw):'';
+  if(is_array($raw))foreach(['name','disassembledName','description','value'] as $field){
+   if(isset($raw[$field])&&is_string($raw[$field])&&trim($raw[$field])!==''){$value=trim($raw[$field]);break;}
+  }
+  if($value!=='')return ['name'=>$value,'source'=>$source];
+ }
+ return ['name'=>null,'source'=>null];
+}
+function qa_gtfs_station_key(string $value):string{
+ $value=strtolower(clean_station_name($value));
+ $value=preg_replace('/\\b(?:station|platform|via)\\b.*$/i','',$value);
+ return trim((string)$value);
+}
 function qa_gtfs_pattern_evidence(array $rows,array $stopMap,string $originName,int $seconds,array $trip,array $first):array{
  $originIndex=null;$originDelta=null;$stopNames=[];
  foreach($rows as $i=>$row){
@@ -41,8 +64,8 @@ function qa_gtfs_pattern_evidence(array $rows,array $stopMap,string $originName,
  $headsign=trim((string)($trip['trip_headsign']??''));
  $terminus=(string)(end($stopNames)?:'');
  $liveDestination=trim((string)($first['destination']??''));
- $destinationComparable=$liveDestination!==''&&$headsign!=='';
- $destinationAgrees=$destinationComparable&&str_contains(strtolower($headsign),strtolower($liveDestination));
+ $destinationComparable=$liveDestination!==''&&($headsign!==''||$terminus!=='');
+ $destinationAgrees=$destinationComparable&&(qa_gtfs_station_key($liveDestination)===qa_gtfs_station_key($terminus)||($headsign!==''&&str_contains(strtolower($headsign),strtolower($liveDestination))));
  return ['originStopIndex'=>$originIndex,'originSequence'=>$originIndex===null?null:($rows[$originIndex]['stop_sequence']??null),
  'originDepartureDifferenceSeconds'=>$originDelta,'originIsLastStop'=>$originIndex===count($rows)-1,
  'scheduledHeadSign'=>$headsign,'scheduledTerminus'=>$terminus,
@@ -67,6 +90,9 @@ function qa_gtfs_probe(array $candidate,array $origin):array{
  if(!$trips||!$stops){$result['status']='GTFS_PARSE_OR_SIZE_LIMIT';$zip->close();return $result;}
  $stopMap=[];foreach($stops as $s)$stopMap[$s['stop_id']??'']=$s;
  $first=$candidate['firstDeparture']??[];
+ $live=qa_gtfs_live_destination($candidate);
+ $first['destination']=$live['name'];
+ $result['liveDestinationEvidence']=$live;
  $plannedTs=iso_ts($first['planned']??null);$serviceDate=(new DateTimeImmutable('@'.($plannedTs??(int)($candidate['departureTimestamp']??0))))->setTimezone(new DateTimeZone('Australia/Sydney'));
  $active=qa_gtfs_active_services($zip,$serviceDate);
  $result['serviceDate']=$serviceDate->format('Y-m-d');$result['calendarAvailable']=$active!==null;
@@ -125,6 +151,7 @@ function qa_gtfs_probe(array $candidate,array $origin):array{
   if(!$originStops)continue;
   $evidence=qa_gtfs_pattern_evidence($rows,$stopMap,$originName,$seconds,$trip,$first);
   if($evidence['originIsLastStop']||$evidence['onwardStopCount']===0)continue;
+  if($evidence['destinationComparable']&&$evidence['destinationAgrees']===false){$excluded['destinationMismatch']=($excluded['destinationMismatch']??0)+1;continue;}
   $valid[]=['tripId'=>$id,'evidence'=>$evidence,'confidence'=>isset($exact[$id])?'GTFS_ID_MATCH_CALENDAR_CHECKED':'CALENDAR_ROUTE_TIME_MATCH_UNVERIFIED',
    'serviceId'=>$serviceId,'calendarActive'=>$active!==null,'routeName'=>$routeText,'routeVerified'=>$routeVerified,
    'stops'=>array_map(fn($v)=>['stopId'=>$v['stop_id']??null,'name'=>$stopMap[$v['stop_id']??'']['stop_name']??null,'arrival'=>$v['arrival_time']??null,'departure'=>$v['departure_time']??null,'sequence'=>$v['stop_sequence']??null],$rows)];
@@ -134,6 +161,6 @@ function qa_gtfs_probe(array $candidate,array $origin):array{
  $result['evidenceStatus']='SCHEDULE_PATTERN_ONLY_LIVE_TRIP_ID_NOT_LINKED';
  $result['status']=!$result['calendarAvailable']?'GTFS_CALENDAR_UNAVAILABLE':(count($valid)===1&&$valid[0]['routeVerified']?'SINGLE_GTFS_SCHEDULE_MATCH_UNVERIFIED':($valid?'GTFS_CANDIDATES_FOUND_UNVERIFIED':'NO_GTFS_MATCH'));
  $result['scannedStopTimeRows']=$scanned;
- $result['note']='QA-only Step 2E checks origin position, onward stops, scheduled headsign and available destination comparison. Live trip identity remains unverified without independent service linkage. No /trip calls and no commuter routing changes.';
+ $result['note']='QA-only Step 2F extracts advertised destination from departure-event fields where available, compares it with GTFS direction, and retains conservative unverified identity. No /trip calls or commuter routing changes.';
  return $result;
 }
