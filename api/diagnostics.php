@@ -12,14 +12,40 @@ if(($_GET['action']??'')==='stations'){
  $q=trim((string)($_GET['q']??''));if(mb_strlen($q)<2||mb_strlen($q)>70)fail('BAD_REQUEST','Enter 2-70 characters');
  echo json_encode(['data'=>station_search($q)],JSON_INVALID_UTF8_SUBSTITUTE);exit;
 }
-if(in_array(($_GET['action']??''),['discover','stops','validate','rank'],true)){
+if(in_array(($_GET['action']??''),['discover','stops','service','validate','rank'],true)){
  require __DIR__.'/lib/discovery.php';
  if(in_array(($_GET['action']??''),['validate','rank'],true))require __DIR__.'/lib/validation.php';
  $from=(string)($_GET['from']??'');$to=(string)($_GET['to']??'');
  if(!preg_match('/^[\\w:-]{3,50}$/',$from)||!preg_match('/^[\\w:-]{3,50}$/',$to)||$from===$to)fail('BAD_REQUEST','Select two different stations');
  $origin=['id'=>$from,'name'=>substr((string)($_GET['fromName']??$from),0,100)];
  $destination=['id'=>$to,'name'=>substr((string)($_GET['toName']??$to),0,100)];
- try{$data=qa_discover($origin,$destination,new DateTimeImmutable('now',new DateTimeZone('Australia/Sydney')));if(($_GET['action']??'')==='stops'){
+ try{$data=qa_discover($origin,$destination,new DateTimeImmutable('now',new DateTimeZone('Australia/Sydney')));if(($_GET['action']??'')==='service'){
+ $index=filter_var($_GET['candidate']??'0',FILTER_VALIDATE_INT,['options'=>['min_range'=>0,'max_range'=>24]]);
+ if($index===false)fail('BAD_REQUEST','Candidate index must be 0–24');
+ $candidate=val($data,'discovered',[])[$index]??null;
+ if(!$candidate)fail('BAD_REQUEST','Candidate unavailable in current discovery snapshot; refresh Step 2');
+ $first=val($candidate,'firstDeparture',[]);$ts=(int)val($candidate,'departureTimestamp',0);
+ $at=(new DateTimeImmutable('@'.max(0,$ts-120)))->setTimezone(new DateTimeZone('Australia/Sydney'));
+ $params=['type_dm'=>'stop','name_dm'=>$from,'mode'=>'direct','itdDate'=>$at->format('Ymd'),'itdTime'=>$at->format('Hi'),'limit'=>100,'TfNSWDM'=>'true','includeCompleteStopSeq'=>1,'excludedMeans'=>'checkbox','exclMOT_4'=>1,'exclMOT_5'=>1,'exclMOT_7'=>1,'exclMOT_9'=>1,'exclMOT_11'=>1];
+ $started=microtime(true);$response=timed_upstream('departure_mon',$params,0);$events=val($response,'stopEvents',[]);$matches=[];
+ foreach(is_array($events)?$events:[] as $event){
+  if(!is_array($event))continue;
+  $transport=val($event,'transportation',[]);$ids=transportation_trip_ids($transport);
+  $sameId=(bool)array_intersect($ids,val($first,'tripIds',[]));
+  $time=iso_ts(val($event,'departureTimeEstimated'))??iso_ts(val($event,'departureTimePlanned'));
+  $sameTime=$time!==null&&abs($time-$ts)<=120;
+  $sameLine=(string)val($transport,'disassembledName',val($transport,'number',''))===(string)val($first,'line','');
+  if(!$sameId&&!($sameTime&&$sameLine))continue;
+  $seq=val($event,'stopSequence',[]);
+  $matches[]=['tripIdMatch'=>$sameId,'timeAndLineMatch'=>$sameTime&&$sameLine,'tripIds'=>$ids,'sequenceCount'=>is_array($seq)?count($seq):0,'stopSequence'=>$seq,'destination'=>val($event,'destination'),'rawEvent'=>$event];
+ }
+ $hasStops=false;foreach($matches as $m)if($m['sequenceCount']>1)$hasStops=true;
+ $data=['mode'=>'Step 2B service lookup probe','snapshotAt'=>gmdate('c'),'candidate'=>$candidate,'candidateIndex'=>$index,'matchedEvents'=>$matches,
+ 'status'=>!$matches?'SERVICE_NOT_FOUND_IN_PROBE':($hasStops?'STOP_SEQUENCE_PRESENT_UNVERIFIED':'STOP_SEQUENCE_NOT_EXPOSED'),
+ 'request'=>$params,'rawResponse'=>$response,'elapsedMs'=>(int)((microtime(true)-$started)*1000),
+ 'note'=>'One-service exploratory departure-monitor probe with includeCompleteStopSeq=1. Parameter support is unverified; this is NOT a documented trip-ID lookup and does not use /trip. If absent, GTFS static stop_times plus realtime trip updates are the next data source.'];
+ }
+ if(($_GET['action']??'')==='stops'){
  $rows=[];$started=microtime(true);
  foreach(array_slice(val($data,'discovered',[]),0,25) as $candidate){
   $event=val($candidate,'event',[]);$transport=val($event,'transportation',[]);
