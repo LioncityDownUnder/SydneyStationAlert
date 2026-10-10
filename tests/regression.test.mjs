@@ -275,3 +275,13 @@ test('Step 5AQ station identity and alert diagnostic is QA-only and read-only',(
  assert.match(diag,/configuredStationId'=>'222010'/);
  assert.match(wf,/step5aq-identity-alerts\.json/);
 });
+
+test('Step 5AS QA rail pilot highlights only confirmed active contextual alerts on no-route',()=>{
+ const ui=fs.readFileSync('src/main.ts','utf8');
+ assert.match(ui,/periodStatus==='WITHIN_ACTIVE_PERIOD'/);
+ assert.match(ui,/qaRailPilot&&state\.noRoute&&!state\.noRouteLimited&&active\.length/);
+ assert.match(ui,/Trackwork may affect travel; this does not confirm cancellation/);
+ assert.match(ui,/Contextual notice; impact on your selected journey is unverified/);
+ assert.match(ui,/https:\/\/transportnsw\.info\/alerts/);
+ assert.match(ui,/https:\/\/transportnsw\.info\/trip/);
+});
