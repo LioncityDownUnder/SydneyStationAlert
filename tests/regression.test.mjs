@@ -163,7 +163,7 @@ test('Step 5X refuses to construct replacement-bus journeys from advisory text',
 test('Step 5AB QA-only search budget is explicit and does not affect production journey search',()=>{
  const api=fs.readFileSync('api/index.php','utf8');
  const core=fs.readFileSync('api/lib/core.php','utf8');
- assert.match(api,/\$qaBoundedSearch=\$coreOnly&&str_contains/);
+ assert.match(api,/\$qaBoundedSearch=\$coreOnly;/);
  assert.match(api,/\$qaSearchDeadline=\$qaBoundedSearch\?microtime\(true\)\+22\.0:INF/);
  assert.match(api,/if\(\$qaBoundedSearch&&microtime\(true\)>=\$qaSearchDeadline\)/);
  assert.match(api,/No train-only journey was verified within the QA search time limit/);
@@ -189,7 +189,7 @@ test('Step 5AX filtered initial journey search is standard QA-only',()=>{
  assert.match(backend,/if\(\$qaRailPilot\)\$fastParams=array_map\('qa_rail_filter_params',\$fastParams\)/);
  assert.match(backend,/timed_normalized_journey\(\$body,\$originSeed,\$destinationSeed\)/);
  assert.doesNotMatch(api,/new URLSearchParams\(window\.location\.search\)\.get\('qaRailPilot'\)/);
- assert.match(api,/qaRailPilot:'1'/);
+ assert.match(api,/coreOnly \? 32000 : 30000/);
 });
 
 test('Step 5AI QA pilot rejects departed first-leg services and labels overnight departures',()=>{
@@ -276,7 +276,7 @@ test('Step 5AW QA refresh keeps boarded service and unboarded selected departure
 test('Step 5AX standard QA enables rail safeguards without query flag and preserves refresh warning',()=>{
  const main=fs.readFileSync('src/main.ts','utf8');
  const backend=fs.readFileSync('api/index.php','utf8');
- assert.match(main,/const qaRailPilot = isQaEnvironment;/);
+ assert.match(main,/const qaRailPilot = true;/);
  assert.match(backend,/\$qaRailPilot=\$qaBoundedSearch;/);
  assert.match(main,/const adopted=adoptJourneyUpdate\(updated\);if\(adopted\)\{state\.lastChecked=new Date\(\);state\.message='';\}checkAlerts\(\);/);
 });
@@ -306,7 +306,7 @@ test('Step 5AX selection lists verified QA rail options and retains explicit boa
  const api=fs.readFileSync('api/index.php','utf8');
  const client=fs.readFileSync('src/api.ts','utf8');
  assert.match(api,/if\(\$action==='boarding-options'\)/);
- assert.match(api,/\/qatest\/api\//);
+ assert.doesNotMatch(api,/if\(!str_contains\(\(string\)\(\$_SERVER\['SCRIPT_NAME'\]/);
  assert.match(api,/qa_rail_chronology_valid\(\$candidate\)/);
  assert.match(api,/array_slice\(\$options,0,8\)/);
  assert.match(client,/getBoardingOptions = \(from,to\)/);
@@ -332,4 +332,20 @@ test('QA alert reliability notice stays collapsible above journey footer',()=>{
  assert.ok(render.indexOf('${notificationReliabilityNotice()}')>render.indexOf('<section class="panel">'));
  assert.ok(render.indexOf('${notificationReliabilityNotice()}')<render.indexOf('${footer}</main>'));
  assert.ok(!render.includes('${notificationReliabilityNotice()}${serviceUpdate(j)}'));
+});
+
+test('Production release enables 4-hour rail-only routing and Step 5AX while separating storage',()=>{
+ const main=fs.readFileSync('src/main.ts','utf8');
+ const client=fs.readFileSync('src/api.ts','utf8');
+ const backend=fs.readFileSync('api/index.php','utf8');
+ const workflow=fs.readFileSync('.github/workflows/deploy-production.yml','utf8');
+ assert.match(main,/const qaRailPilot = true;/);
+ assert.match(main,/isQaEnvironment \? 'sydstnalert:qa:active-trip:v1'/);
+ assert.match(backend,/\$qaBoundedSearch=\$coreOnly;/);
+ assert.match(backend,/\$qaRailPilot=\$qaBoundedSearch;/);
+ assert.match(backend,/if\(\$action==='boarding-options'\)/);
+ assert.match(backend,/qa_rail_filter_params/);
+ assert.match(client,/coreOnly \? 32000 : 30000/);
+ assert.match(workflow,/test -f dist\/api\/lib\/qa_route_rejections\.php/);
+ assert.match(workflow,/--exclude='\/qatest\/'/);
 });
