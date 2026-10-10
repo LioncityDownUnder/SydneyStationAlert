@@ -151,3 +151,24 @@ test('QA route diagnostics includes read-only candidate trace and build output',
  assert.match(php,/rawResponse/);
  assert.match(pkg,/cp public\/diagnostics\.html dist\/diagnostics\.html/);
 });
+
+test('Step 5X no-route notices are QA-only and retry is actionable',()=>{
+ const main=fs.readFileSync('src/main.ts','utf8');
+ assert.match(main,/function qaNoRouteAlertDetails\(\)/);
+ assert.match(main,/if\(!isQaEnvironment\|\|state\.origin\?\.id!=='222010'\)return ''/);
+ assert.match(main,/periodStatus==='WITHIN_ACTIVE_PERIOD'/);
+ assert.match(main,/esc\(a\.title\|\|'TfNSW service notice'\)/);
+ assert.match(main,/Contextual notice; impact on your selected journey is unverified/);
+ assert.match(main,/state\.noRoute=e instanceof ApiRequestError&&e\.code==='NO_ROUTE'/);
+ assert.match(main,/if\(state\.noRoute\)void loadQaNoRouteAlerts\(generation\)/);
+ assert.match(main,/id="retry-no-route"/);
+ assert.match(main,/getElementById\('retry-no-route'\)\?\.addEventListener\('click',\(\)=>void setJourney\(\)\)/);
+ assert.match(main,/if\(generation===journeyGeneration&&state\.noRoute\)/);
+ assert.match(main,/Disruption information is unavailable/);
+});
+test('Step 5X refuses to construct replacement-bus journeys from advisory text',()=>{
+ const main=fs.readFileSync('src/main.ts','utf8');
+ assert.match(main,/Replacement buses are informational only/);
+ assert.match(main,/state\.noRouteAlertsLoading=true;setup\(\)/);
+ assert.match(main,/state\.noRouteAlertsLoading=false;setup\(\)/);
+});
