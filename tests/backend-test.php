@@ -175,3 +175,12 @@ $qaReject=qa_route_rejection_summary($qaMixed,$qaOrigin,$qaDest);
 assertit(($qaReject['rawJourneys']??0)>0,'Step 5AD rejection probe counts raw journeys');
 assertit(($qaReject['railOnlyNormalized']??-1)===0,'Step 5AD rejection probe does not accept mixed-mode journeys');
 assertit(array_sum($qaReject['reasons'])===$qaReject['sampledJourneys'],'Step 5AD counts each sampled journey once');
+
+$qaDetails=$qaReject['journeyLegDetails']??[];
+assertit(count($qaDetails)===1,'Step 5AE includes one bounded fixture journey classification');
+assertit(($qaDetails[0]['reason']??'')==='NON_RAIL_LEG','Step 5AE preserves strict rail-only rejection');
+assertit(($qaDetails[0]['legs'][0]['kind']??'')==='non_rail'&&($qaDetails[0]['legs'][0]['transportClass']??'')==='5','Step 5AE identifies bus leg without exposing journey payload');
+assertit(($qaDetails[0]['legs'][1]['kind']??'')==='train','Step 5AE distinguishes following rail leg');
+$qaWalk=['journeys'=>[['legs'=>[['transportation'=>['product'=>['class'=>100],'name'=>'Walk']]]]]];
+$qaWalkDetails=qa_route_rejection_summary($qaWalk,$qaOrigin,$qaDest)['journeyLegDetails'][0]['legs']??[];
+assertit(($qaWalkDetails[0]['kind']??'')==='walk','Step 5AE does not classify walking interchange as non-rail transport');
