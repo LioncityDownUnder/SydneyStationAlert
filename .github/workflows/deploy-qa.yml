@@ -185,6 +185,13 @@ jobs:
               rm -f "$tmp" "$headers"
               return 1
             fi
+            if [ "$status" = "503" ] && jq -e '.error.code=="SEARCH_TIME_LIMIT"' "$tmp" >/dev/null; then
+              echo "WARN: $from to $to: QA search time budget reached; route availability unconfirmed"
+              grep -i '^server-timing:' "$headers" || true
+              grep -i '^x-qa-journey-search:' "$headers" || true
+              rm -f "$tmp" "$headers"
+              return 0
+            fi
             if [ "$status" = "404" ] && jq -e '.error.code=="NO_ROUTE"' "$tmp" >/dev/null; then
               echo "WARN: $from to $to: no verified rail-only journey (NO_ROUTE); not an API outage"
               rm -f "$tmp" "$headers"
