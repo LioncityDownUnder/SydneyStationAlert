@@ -109,7 +109,7 @@ try {
    $qaSearchDiagnostics['time_budget_exceeded']=$qaSearchBudgetExceeded?1:0;
    if($qaBoundedSearch){journey_perf_qa_header();journey_search_qa_diagnostics_header($qaSearchDiagnostics);}
    $message=$qaSearchBudgetExceeded?'No train-only journey was verified within the QA search time limit. Other services may be available; check official TfNSW information or retry.':'No verified train-only journey could be found from '.$fromName.' to '.$toName.' in the next 24 hours. Train services may still be running; please retry or check TripView.';
-   fail('NO_ROUTE',$message,404);
+   fail($qaSearchBudgetExceeded?'SEARCH_TIME_LIMIT':'NO_ROUTE',$message,$qaSearchBudgetExceeded?503:404);
   }
   if($coreOnly){
    journey_perf_phase('response');
