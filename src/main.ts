@@ -296,7 +296,7 @@ function confirmBoardingOption(index){
  if(!Number.isFinite(departure)||departure>now+10*60000||departure<now-90*60000){state.message='That departure is outside the available boarding window. Search again.';state.boardingOptions=null;renderJourneyStable();return;}
  const first=candidate.legs[0];
  const detail=[first.line||'Rail service',datedTrainTime(first.departure||first.origin?.departure),first.origin?.name||candidate.origin?.name].join(' · ');
- if(!window.confirm('Did you board this exact train?\\n'+detail+'\\n\\nConfirm only if this is your service. Cancel keeps the original journey.'))return;
+ if(!window.confirm('Did you board this exact train?\n'+detail+'\n\nConfirm only if this is your service. Cancel keeps the original journey.'))return;
  // Explicit commuter selection is the only path that changes the monitored service.
  journeyGeneration++;state.journey=candidate;state.onboard=true;state.boardingOptions=null;state.alert='Different train confirmed by you. Monitoring this selected service.';state.message='';state.lastChecked=new Date();fired.clear();saveActiveTrip();checkAlerts();renderJourneyStable();
 }
