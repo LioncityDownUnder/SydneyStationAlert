@@ -31,6 +31,16 @@ try:
         modes=dict(Counter(str((c.get("firstDeparture") or {}).get("mode")) for c in w.get("candidates",[])))
         windows.append({"window":w.get("window"),"returnedCount":w.get("returnedCount"),"parsedCandidates":len(w.get("candidates",[])),"modes":modes,"exclusionReasons":dict(reasons),"decision":w.get("decision"),"upstreamResponseType":type(w.get("rawResponse")).__name__,"upstreamKeys":list(w.get("rawResponse",{}).keys()) if isinstance(w.get("rawResponse"),dict) else []})
     evidence={"snapshotAt":discovery.get("snapshotAt"),"candidateCount":discovery.get("candidateCount"),"windows":windows}
+    # Step 5J: summarize TfNSW messages, resolved stops, and nonsecret request parameters.
+    for i, window in enumerate(discovery.get("trace",[])):
+        raw=window.get("rawResponse")
+        if not isinstance(raw,dict): continue
+        evidence["windows"][i]["systemMessages"]=raw.get("systemMessages",[])
+        locations=raw.get("locations",[])
+        evidence["windows"][i]["locations"]=locations[:5] if isinstance(locations,list) else locations
+        allowed=("type_dm","name_dm","mode","itdDate","itdTime","limit","TfNSWDM","excludedMeans","exclMOT_4","exclMOT_5","exclMOT_7","exclMOT_9","exclMOT_11")
+        evidence["windows"][i]["request"]={k:v for k,v in window.get("request",{}).items() if k in allowed}
+    print("STEP 5J RESPONSE: "+json.dumps(evidence["windows"],ensure_ascii=False,default=str),flush=True)
     with open(OUT+"/step5i-departure-monitor.json","w") as f:json.dump(evidence,f,indent=2)
     print("STEP 5I DEPARTURE MONITOR: "+json.dumps(evidence),flush=True)
     check("Step 5I discovery evidence",len(windows)>0,str({"windows":len(windows),"rawCounts":[w["returnedCount"] for w in windows],"eligible":discovery.get("candidateCount")}))
