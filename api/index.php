@@ -28,6 +28,12 @@ try {
   // Explicit opt-in on QA only; production and ordinary QA requests follow the legacy path.
   $qaRailPilot=$qaBoundedSearch&&(string)($_GET['qaRailPilot']??'')==='1';
   if($qaRailPilot)require_once __DIR__.'/lib/qa_route_rejections.php';
+  $qaRailLatestDeparture=$qaRailPilot?$now->getTimestamp()+4*3600:PHP_INT_MAX;
+  $qaRouteWithinWindow=static function(?array $candidate)use($qaRailPilot,$now,$qaRailLatestDeparture):?array{
+   if(!$qaRailPilot||$candidate===null)return $candidate;
+   $departure=route_departure_ts($candidate);
+   return $departure>=$now->getTimestamp()&&$departure<=$qaRailLatestDeparture?$candidate:null;
+  };
   $qaSearchBudgetExceeded=false;
   $tripCount=$coreOnly?22:30;
   $fallbackTripCount=$coreOnly?8:16;
@@ -39,7 +45,7 @@ try {
    foreach($fastProbes as $probe)$fastParams[]=['depArrMacro'=>'dep','itdDate'=>$probe->format('Ymd'),'itdTime'=>$probe->format('Hi'),'type_origin'=>'stop','name_origin'=>$from,'type_destination'=>'stop','name_destination'=>$to,'calcNumberOfTrips'=>$tripCount,'TfNSWTR'=>'true'];
    if($qaRailPilot)$fastParams=array_map('qa_rail_filter_params',$fastParams);
    $fastBodies=timed_parallel_trip($fastParams,25);
-   foreach($fastBodies as $i=>$body){if(!is_array($body))continue;$candidate=$qaRailPilot?earliest_future_route($body,$originSeed,$destinationSeed,$now->getTimestamp()):timed_normalized_journey($body,$originSeed,$destinationSeed);$route=better_route($route,$candidate);}
+   foreach($fastBodies as $i=>$body){if(!is_array($body))continue;$candidate=$qaRailPilot?earliest_future_route($body,$originSeed,$destinationSeed,$now->getTimestamp()):timed_normalized_journey($body,$originSeed,$destinationSeed);$candidate=$qaRouteWithinWindow($candidate);$route=better_route($route,$candidate);}
    if(!$route){
     journey_perf_phase('parallel_fallback');
     $fallbackMeta=[];$firstParams=[];
@@ -72,7 +78,7 @@ try {
   if($qaRailPilot&&!headers_sent())header('X-QA-Rail-Pilot: enabled');
   $qaSearchDiagnostics=['initial_route_found'=>$route!==null,'additional_probes'=>0,'additional_route_probe'=>0,'additional_prefetch_count'=>0,'interchange_checks'=>0,'time_budget_exceeded'=>0];
   journey_perf_phase('additional_search');
-  $remainingSearchTimes=($coreOnly&&count($searchTimes)>=6)?array_slice($searchTimes,6):$searchTimes;
+  $remainingSearchTimes=$qaRailPilot?[]:(($coreOnly&&count($searchTimes)>=6)?array_slice($searchTimes,6):$searchTimes);
   // The initial batch has already verified a train-only route. Avoid an extra
   // TfNSW lookup on core-only requests; retain full search for non-core requests.
   if($coreOnly&&$route)$remainingSearchTimes=[];
@@ -110,11 +116,12 @@ try {
    }
    if($route){$qaSearchDiagnostics['additional_route_probe']=$probeIndex+1;break;}
   }
-  if($qaRailPilot&&$route&&route_departure_ts($route)<$now->getTimestamp())$route=null;
+  if($qaRailPilot)$route=$qaRouteWithinWindow($route);
   if(!$route){
    $qaSearchDiagnostics['time_budget_exceeded']=$qaSearchBudgetExceeded?1:0;
    if($qaBoundedSearch){journey_perf_qa_header();journey_search_qa_diagnostics_header($qaSearchDiagnostics);}
    $message=$qaSearchBudgetExceeded?'No train-only journey was verified within the QA search time limit. Other services may be available; check official TfNSW information or retry.':'No verified train-only journey could be found from '.$fromName.' to '.$toName.' in the next 24 hours. Train services may still be running; please retry or check TripView.';
+   if($qaRailPilot&&!$qaSearchBudgetExceeded){$message='No train-only journey departing '.$fromName.' for '.$toName.' could be verified in the next 4 hours. This does not prove trains are not running. Check TfNSW service alerts and Trip Planner for alternative travel options.';}
    fail($qaSearchBudgetExceeded?'SEARCH_TIME_LIMIT':'NO_ROUTE',$message,$qaSearchBudgetExceeded?503:404);
   }
   if($coreOnly){
