@@ -45,7 +45,7 @@ try {
    foreach($fastProbes as $probe)$fastParams[]=['depArrMacro'=>'dep','itdDate'=>$probe->format('Ymd'),'itdTime'=>$probe->format('Hi'),'type_origin'=>'stop','name_origin'=>$from,'type_destination'=>'stop','name_destination'=>$to,'calcNumberOfTrips'=>$tripCount,'TfNSWTR'=>'true'];
    if($qaRailPilot)$fastParams=array_map('qa_rail_filter_params',$fastParams);
    $fastBodies=timed_parallel_trip($fastParams,25);
-   foreach($fastBodies as $i=>$body){if(!is_array($body))continue;$candidate=$qaRailPilot?earliest_future_route($body,$originSeed,$destinationSeed,$now->getTimestamp()):timed_normalized_journey($body,$originSeed,$destinationSeed);$candidate=$qaRouteWithinWindow($candidate);$route=better_route($route,$candidate);}
+   foreach($fastBodies as $i=>$body){if(!is_array($body))continue;$candidate=$qaRailPilot?qa_rail_route_in_window($body,$originSeed,$destinationSeed,$now->getTimestamp(),$qaRailLatestDeparture):timed_normalized_journey($body,$originSeed,$destinationSeed);$candidate=$qaRouteWithinWindow($candidate);$route=better_route($route,$candidate);}
    if(!$route){
     journey_perf_phase('parallel_fallback');
     $fallbackMeta=[];$firstParams=[];
