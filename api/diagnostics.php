@@ -18,7 +18,8 @@ if(($_GET['action']??'')==='probe_modes'){
  foreach(['filtered'=>$filtered,'unfiltered'=>$base] as $label=>$params){
   $body=timed_upstream('departure_mon',$params,0);
   $events=val($body,'stopEvents',[]);
-  $out[$label]=['count'=>is_array($events)?count($events):0,'messages'=>val($body,'systemMessages',[])];
+  $samples=[];foreach(array_slice(is_array($events)?$events:[],0,12) as $event){$t=val($event,'transportation',[]);$samples[]=['transportation'=>$t,'location'=>val($event,'location',[])];}
+  $out[$label]=['count'=>is_array($events)?count($events):0,'messages'=>val($body,'systemMessages',[]),'samples'=>$samples];
  }
  echo json_encode(['data'=>$out],JSON_INVALID_UTF8_SUBSTITUTE);exit;
 }
