@@ -23,6 +23,22 @@ if(($_GET['action']??'')==='probe_modes'){
  }
  echo json_encode(['data'=>$out],JSON_INVALID_UTF8_SUBSTITUTE);exit;
 }
+if(($_GET['action']??'')==='probe_exact_stops_alerts'){
+ $now=new DateTimeImmutable('now',new DateTimeZone('Australia/Sydney'));
+ $out=['stations'=>[],'alerts'=>[]];
+ foreach(['Hurstville'=>'222010','Burwood'=>'213010'] as $label=>$id){
+  $body=timed_upstream('stop_finder',['type_sf'=>'stop','name_sf'=>$id,'anyMaxSizeHitList'=>30,'TfNSWSF'=>'true'],0);
+  $locs=val($body,'locations',[]);if(!is_array($locs))$locs=[];
+  $stops=[];
+  foreach($locs as $loc){if(!is_array($loc))continue;$stops[]=['id'=>val($loc,'id'),'name'=>val($loc,'name'),'type'=>val($loc,'type'),'modes'=>val($loc,'modes',[])];}
+  $out['stations'][$label]=['requestedId'=>$id,'locations'=>array_slice($stops,0,30),'messages'=>val($body,'systemMessages',[])];
+ }
+ foreach(['dated'=>['filterDateValid'=>$now->format('d-m-Y'),'filterPublicationStatus'=>'current'],'unfiltered'=>[]] as $label=>$params){
+  $body=upstream_optional('add_info',$params,0);
+  $out['alerts'][$label]=['available'=>is_array($body),'keys'=>is_array($body)?array_keys($body):[],'count'=>is_array($body)?count(current_service_alerts($body)):null,'messages'=>is_array($body)?val($body,'systemMessages',[]):[]];
+ }
+ echo json_encode(['data'=>$out],JSON_INVALID_UTF8_SUBSTITUTE|JSON_PARTIAL_OUTPUT_ON_ERROR);exit;
+}
 if(($_GET['action']??'')==='probe_platforms_alerts'){
  $now=new DateTimeImmutable('now',new DateTimeZone('Australia/Sydney'));
  $out=[];
