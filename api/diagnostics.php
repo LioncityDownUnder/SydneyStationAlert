@@ -12,10 +12,15 @@ if(($_GET['action']??'')==='probe_route_rejections'){
  require_once __DIR__.'/lib/qa_route_rejections.php';
  $now=new DateTimeImmutable('now',new DateTimeZone('Australia/Sydney'));
  $origin=['id'=>'222010','name'=>'Hurstville','mode'=>'train','lat'=>0.0,'lon'=>0.0];
- $destinations=[
-  ['id'=>'221310','name'=>'Padstow','mode'=>'train','lat'=>0.0,'lon'=>0.0],
-  ['id'=>'216610','name'=>'Casula','mode'=>'train','lat'=>0.0,'lon'=>0.0]
- ];
+ $destinations=[];
+ foreach(['Padstow','Casula'] as $stationName){
+  $match=null;
+  foreach(station_search($stationName) as $candidate){
+   if(strcasecmp((string)val($candidate,'name',''),$stationName)===0){$match=$candidate;break;}
+  }
+  if(!$match)fail('STATION_LOOKUP_FAILED','Unable to resolve diagnostic station',503);
+  $destinations[]=$match;
+ }
  // Fixed two-request budget; this probe cannot be used to generate arbitrary TfNSW traffic.
  $params=[];
  foreach($destinations as $to)$params[]=['depArrMacro'=>'dep','itdDate'=>$now->format('Ymd'),'itdTime'=>$now->format('Hi'),'type_origin'=>'stop','name_origin'=>$origin['id'],'type_destination'=>'stop','name_destination'=>$to['id'],'calcNumberOfTrips'=>22,'TfNSWTR'=>'true'];
