@@ -103,10 +103,16 @@ function point(mixed $node):?array{
 }
 function mode(mixed $transport):?string{
  if(!is_array($transport))return null;
- $product=val($transport,'product',[]);$class=(int)val($product,'class',-1);
- $name=strtolower((string)(val($product,'name','').' '.val($transport,'name','').' '.val($transport,'disassembledName','')));
- if(str_contains($name,'metro')||str_contains($name,'subway')||$class===2)return 'metro';
- if($class===1||str_contains($name,'train')||str_contains($name,'rail'))return 'train';
+ $product=val($transport,'product',[]);
+ if(!is_array($product))return null;
+ $class=val($product,'class',null);
+ if($class!==null&&is_numeric($class)){
+  return match((int)$class){1=>'train',2=>'metro',default=>null};
+ }
+ // Only use explicit rail labels when TfNSW omits the product class.
+ $name=strtolower(trim((string)val($product,'name','')));
+ if(str_contains($name,'metro'))return 'metro';
+ if(str_contains($name,'sydney trains')||$name==='train')return 'train';
  return null;
 }
 function location_rail_mode(mixed $raw):?string{
