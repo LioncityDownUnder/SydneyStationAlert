@@ -230,3 +230,15 @@ test('Step 5AJ QA pilot applies four-hour window, strict leg times and official 
  assert.match(ui,/transportnsw\.info\/alerts/);
  assert.match(ui,/transportnsw\.info\/trip/);
 });
+
+test('Step 5AL diagnostic is fixed QA-only and leaves commuter search unchanged',()=>{
+ const diag=fs.readFileSync('api/diagnostics.php','utf8');
+ const workflow=fs.readFileSync('.github/workflows/deploy-qa.yml','utf8');
+ assert.match(diag,/str_starts_with\(\(string\)\(\$_SERVER\['SCRIPT_NAME'\]/);
+ assert.match(diag,/probe_four_hour_search_comparison/);
+ assert.match(diag,/\$offsets=\[0,60,180\]/);
+ assert.match(diag,/\$pairs=\[\['Hurstville','Padstow'\]/);
+ assert.match(diag,/QA_FOUR_HOUR_PROBE_COMPARISON/);
+ assert.match(workflow,/step5al-four-hour-comparison\.json/);
+ assert.match(workflow,/requestCount==12/);
+});
