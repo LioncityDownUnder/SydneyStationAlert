@@ -194,3 +194,13 @@ $comparison=qa_rail_filter_comparison($qaMixed,$qaMixed,$qaOrigin,$qaDest);
 assertit(($comparison['baseline']['summary']['rawJourneys']??0)===1&&($comparison['railFiltered']['summary']['railOnlyNormalized']??-1)===0,'Step 5AF reports counts without falsely accepting mixed fixture');
 assertit(($comparison['railFilterConfirmed']??null)===false,'Step 5AF does not claim that TfNSW applied the filter');
 assertit(!isset($comparison['baseline']['summary']['journeyLegDetails']),'Step 5AF comparison excludes raw per-leg journey evidence');
+
+$qaRailResult=qa_rail_search_result($qaMixed,$qaOrigin,$qaDest);
+assertit(($qaRailResult['status']??'')==='NO_RAIL_CANDIDATE_IN_RESPONSE','Step 5AG refuses mixed-mode route even with filter request');
+assertit(($qaRailResult['railOnlyNormalized']??-1)===0,'Step 5AG strictly normalizes candidates');
+assertit(!isset($qaRailResult['journeyLegDetails'])&&!isset($qaRailResult['journeys']),'Step 5AG response does not expose raw journeys');
+$qaMissingResult=qa_rail_search_result(null,$qaOrigin,$qaDest);
+assertit(($qaMissingResult['status']??'')==='UPSTREAM_UNAVAILABLE','Step 5AG distinguishes upstream failure from unavailable trains');
+$qaRailFixture=json_decode(file_get_contents(__DIR__.'/fixtures/success.json'),true);
+$qaGoodResult=qa_rail_search_result($qaRailFixture,$qaOrigin,$qaDest);
+assertit(($qaGoodResult['status']??'')==='RAIL_CANDIDATE_UNVERIFIED'&&$qaGoodResult['railOnlyNormalized']>0,'Step 5AG keeps valid train-only candidate explicitly unverified');
