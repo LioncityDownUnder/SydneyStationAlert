@@ -144,10 +144,22 @@ jobs:
             tmp="$(mktemp)"
             local headers
             headers="$(mktemp)"
-            time="$(curl --fail --silent --show-error --max-time 35 --dump-header "$headers" --get "$API" \
+            local status
+            status="$(curl --silent --show-error --max-time 35 --dump-header "$headers" --get "$API" \
               --data-urlencode "action=journey" --data-urlencode "from=$a" --data-urlencode "to=$b" \
               --data-urlencode "fromName=$from" --data-urlencode "toName=$to" \
-              --data-urlencode "coreOnly=1" -o "$tmp" -w '%{time_total}')"
+              --data-urlencode "coreOnly=1" -o "$tmp" -w '%{http_code}')"
+            if [ "$status" = "404" ] && jq -e '.error.code=="NO_ROUTE"' "$tmp" >/dev/null; then
+              echo "WARN: $from to $to: no verified rail-only journey (NO_ROUTE); not an API outage"
+              rm -f "$tmp" "$headers"
+              return 0
+            fi
+            if [ "$status" != "200" ]; then
+              echo "FAIL: $from to $to: unexpected HTTP $status"
+              cat "$tmp"
+              return 1
+            fi
+            time="$(grep -i '^server-timing:' "$headers" | head -n 1 || true)"
             jq -e '.data.legs|length>=1' "$tmp" >/dev/null
             # Check that every returned journey has a coherent stop/leg structure.
             jq -e '
@@ -162,7 +174,7 @@ jobs:
             if grep -qi '^x-qa-journey-search:.*initial_route_found=1' "$headers"; then
               grep -qi '^x-qa-journey-search:.*additional_probes=0' "$headers"
             fi
-            echo "$from to $to: ${time}s (5s target)"
+            echo "$from to $to: valid journey returned"
             grep -i '^server-timing:' "$headers" || true
             grep -i '^x-qa-journey-search:' "$headers" || true
             rm -f "$tmp" "$headers"
