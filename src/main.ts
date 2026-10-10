@@ -30,9 +30,11 @@ function qaSameSelectedTrain(a,b){
  return a.legs.every((leg,i)=>{
   const other=b.legs[i];if(!other||leg.origin?.id!==other.origin?.id||leg.destination?.id!==other.destination?.id)return false;
   const ids=(leg.tripIds||[]).map(x=>String(x).toLowerCase()),otherIds=(other.tripIds||[]).map(x=>String(x).toLowerCase());
-  if(ids.length&&otherIds.length)return ids.some(id=>otherIds.includes(id));
+  // If either side has a trip ID, do not silently fall back to matching by time.
+  if(ids.length||otherIds.length)return ids.length>0&&otherIds.length>0&&ids.some(id=>otherIds.includes(id));
   const aTime=Date.parse(leg.departure||leg.origin?.departure||''),bTime=Date.parse(other.departure||other.origin?.departure||'');
-  return leg.line===other.line&&Number.isFinite(aTime)&&Number.isFinite(bTime)&&Math.abs(aTime-bTime)<=3*60000;
+  // A time-only match is provisional; avoid merging a different service into a boarded trip.
+  return !state.onboard&&leg.line===other.line&&Number.isFinite(aTime)&&Number.isFinite(bTime)&&Math.abs(aTime-bTime)<=3*60000;
  });
 }
 
@@ -162,12 +164,12 @@ function pickStation(field,index){const chosen=state.searchResults[index];if(!ch
 function syncButton(){const button=document.getElementById('set');if(button)button.disabled=!state.origin||!state.destination||state.origin.id===state.destination.id||state.busy;}
 async function locate(){state.locating=true;state.message='';state.noRoute=false;setup();if(!navigator.geolocation){state.locating=false;state.manual=true;state.message='Location is not available in this browser. Choose your boarding station manually.';return setup();}navigator.geolocation.getCurrentPosition(async p=>{try{state.location={lat:p.coords.latitude,lon:p.coords.longitude};const stations=await nearbyStations(state.location);const nearest=nearestStation(stations,state.location);state.locating=false;if(nearest){state.origin=nearest;state.detected=true;state.manual=false;state.message='';}else{state.manual=true;state.message='We could not find a supported train or metro station nearby. Choose your boarding station manually.';}}catch{state.locating=false;state.manual=true;state.message='We could not check nearby stations just now. You can still choose your boarding station manually.';}setup();},()=>{state.locating=false;state.manual=true;state.message='Location permission was not available. Choose your boarding station manually.';setup();},GEO.options);}
 function renderJourneyStable(){const x=window.scrollX,y=window.scrollY;renderJourney();requestAnimationFrame(()=>window.scrollTo(x,y));}
-async function enrichJourney(generation){if(!state.journey)return;state.enriching=true;renderJourneyStable();const statusTimer=window.setTimeout(()=>{if(generation===journeyGeneration&&state.enriching){state.enriching=false;renderJourneyStable();}},5000);try{const updated=await getJourney(state.journey.origin,state.journey.destination,qaRailPilot);if(generation!==journeyGeneration||!state.journey)return;const adopted=adoptJourneyUpdate(updated);state.lastChecked=new Date();if(adopted)state.message='';checkAlerts();}catch{}finally{clearTimeout(statusTimer);if(generation===journeyGeneration){state.enriching=false;renderJourneyStable();}}}
+async function enrichJourney(generation){if(!state.journey)return;state.enriching=true;renderJourneyStable();const statusTimer=window.setTimeout(()=>{if(generation===journeyGeneration&&state.enriching){state.enriching=false;renderJourneyStable();}},5000);try{const updated=await getJourney(state.journey.origin,state.journey.destination,qaRailPilot);if(generation!==journeyGeneration||!state.journey)return;const adopted=adoptJourneyUpdate(updated);if(adopted){state.lastChecked=new Date();state.message='';}checkAlerts();}catch(e){if(generation===journeyGeneration&&state.journey)state.message='Live service details could not be verified. Showing previously saved journey information.';}finally{clearTimeout(statusTimer);if(generation===journeyGeneration){state.enriching=false;renderJourneyStable();}}}
 async function setJourney(){stopQaRecoveryWatch();if(!state.origin||!state.destination||state.origin.id===state.destination.id)return;const generation=++journeyGeneration;state.busy=true;state.enriching=false;state.message='';state.noRoute=false;state.noRouteLimited=false;state.noRouteAlerts=null;state.noRouteAlertsLoading=false;setup();try{const j=await getJourney(state.origin,state.destination,true);if(generation!==journeyGeneration)return;state.journey=j;state.suggestedConnection=null;state.lastSuggestionCheck=0;state.onboard=false;clearActiveTrip();state.busy=false;state.paused=false;state.lastChecked=new Date();state.alert='';fired.clear();startTracking();startPolling();renderJourney();void enrichJourney(generation);}catch(e){if(generation!==journeyGeneration)return;state.busy=false;state.enriching=false;state.journey=null;state.noRoute=e instanceof ApiRequestError&&(e.code==='NO_ROUTE'||e.code==='SEARCH_TIME_LIMIT');state.noRouteLimited=e instanceof ApiRequestError&&e.code==='SEARCH_TIME_LIMIT';state.message=e.message;setup();if(state.noRoute){void loadQaNoRouteAlerts(generation);startQaRecoveryWatch();}}}
 function stopTracking(){if(watchId!==null&&navigator.geolocation)navigator.geolocation.clearWatch(watchId);watchId=null;clearInterval(pollId);pollId=undefined;}
 function startTracking(){if(watchId!==null||!navigator.geolocation||state.paused)return;try{watchId=navigator.geolocation.watchPosition(p=>{state.location={lat:p.coords.latitude,lon:p.coords.longitude};checkAlerts();renderJourneyStable();},()=>{},{...GEO.options,maximumAge:20000});}catch{}}
 function startPolling(){clearInterval(pollId);if(!state.paused)pollId=window.setInterval(()=>{if(!document.hidden&&navigator.onLine)void refresh();},REFRESH_MS);}
-async function refresh(){if(!state.journey||state.checking||state.paused)return;const generation=journeyGeneration;state.checking=true;try{const updated=await getJourney(state.journey.origin,state.journey.destination,qaRailPilot);if(generation!==journeyGeneration)return;const adopted=adoptJourneyUpdate(updated);state.lastChecked=new Date();if(adopted)state.message='';checkAlerts();}catch(e){state.message=`Unable to refresh live train details: ${e.message}`;}finally{if(generation===journeyGeneration){state.checking=false;renderJourneyStable();void suggestOnwardConnection();}}}
+async function refresh(){if(!state.journey||state.checking||state.paused)return;const generation=journeyGeneration;state.checking=true;try{const updated=await getJourney(state.journey.origin,state.journey.destination,qaRailPilot);if(generation!==journeyGeneration)return;const adopted=adoptJourneyUpdate(updated);if(adopted){state.lastChecked=new Date();state.message='';}checkAlerts();}catch(e){if(generation===journeyGeneration)state.message=`Live train details could not be verified. Showing the last confirmed journey: ${e.message}`;}finally{if(generation===journeyGeneration){state.checking=false;renderJourneyStable();void suggestOnwardConnection();}}}
 // A stale or distant GPS reading must never trigger a missed-connection warning.
 function connectionAtRisk(j){
  if(!state.onboard||state.paused||!j||!Array.isArray(j.legs))return null;
@@ -290,7 +292,7 @@ if(restoredTrip){
   state.destination=restoredTrip.destination;
   state.onboard=true;
   state.paused=false;
-  state.lastChecked=new Date(restoredTrip.fetchedAt||Date.now());
+  state.lastChecked=restoredTrip.fetchedAt?new Date(restoredTrip.fetchedAt):null;
   journeyGeneration++;
   startTracking();
   startPolling();
