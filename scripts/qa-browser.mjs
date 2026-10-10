@@ -15,7 +15,7 @@ async function scenario(mode) {
   const action=query.get('action');
   if(action==='journey'){
    searches++;
-   return route.fulfill({status:404,contentType:'application/json',body:JSON.stringify({error:{code:'NO_ROUTE',message:'No verified train-only journey found'}})});
+   return route.fulfill({status:mode==='limited'?503:404,contentType:'application/json',body:JSON.stringify({error:{code:mode==='limited'?'SEARCH_TIME_LIMIT':'NO_ROUTE',message:mode==='limited'?'No train-only journey was verified within the QA search time limit.':'No verified train-only journey found'}})});
   }
   const data=action==='station-index'?stations:action==='stations'?stations.filter(s=>s.name.toLowerCase().includes((query.get('q')||'').toLowerCase())):[];
   return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({data})});
@@ -36,8 +36,9 @@ async function scenario(mode) {
  await page.locator('#destination').fill('Casula');
  await page.getByRole('option',{name:/Casula/}).click();
  await page.locator('#set').click();
- await page.getByText('JOURNEY NOT FOUND').waitFor({timeout:12000});
- if(mode==='active'){
+ await page.getByText(mode==='limited'?'SEARCH TIME LIMIT REACHED':'JOURNEY NOT FOUND').waitFor({timeout:12000});
+ if(mode==='limited')await page.getByText(/This does not confirm service cancellation/).waitFor();
+ if(mode==='active'||mode==='limited'){
   await page.getByText('Active T4 trackwork').waitFor();
   assert.equal(await page.getByText('Future T4 work').count(),0,'Inactive notice must not show');
  } else {
@@ -45,7 +46,7 @@ async function scenario(mode) {
  }
  assert.equal(searches,1);
  await page.locator('#retry-no-route').click();
- await page.getByText('JOURNEY NOT FOUND').waitFor();
+ await page.getByText(mode==='limited'?'SEARCH TIME LIMIT REACHED':'JOURNEY NOT FOUND').waitFor();
  await page.waitForFunction(()=>document.querySelector('#retry-no-route')!==null);
  assert.equal(searches,2,'Retry must issue new journey request');
  assert.ok(notices>=2,'Retry must refresh disruption information');
@@ -55,4 +56,5 @@ async function scenario(mode) {
 try {
  await scenario('active');
  await scenario('unavailable');
+ await scenario('limited');
 } finally {await browser.close();}
