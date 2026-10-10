@@ -23,6 +23,18 @@ if(($_GET['action']??'')==='probe_modes'){
  }
  echo json_encode(['data'=>$out],JSON_INVALID_UTF8_SUBSTITUTE);exit;
 }
+if(($_GET['action']??'')==='probe_hurstville_limits'){
+ $now=new DateTimeImmutable('now',new DateTimeZone('Australia/Sydney'));
+ $out=[];
+ foreach([100,300] as $limit){
+  $params=['type_dm'=>'stop','name_dm'=>'222010','mode'=>'direct','itdDate'=>$now->format('Ymd'),'itdTime'=>$now->format('Hi'),'limit'=>$limit,'TfNSWDM'=>'true'];
+  $body=timed_upstream('departure_mon',$params,0);
+  $events=val($body,'stopEvents',[]);$counts=[];
+  foreach(is_array($events)?$events:[] as $event){$t=val($event,'transportation',[]);$p=val($t,'product',[]);$c=(string)val($p,'class','unknown');$counts[$c]=($counts[$c]??0)+1;}
+  $out[(string)$limit]=['count'=>is_array($events)?count($events):0,'classes'=>$counts,'messages'=>val($body,'systemMessages',[])];
+ }
+ echo json_encode(['data'=>$out]);exit;
+}
 if(($_GET['action']??'')==='probe_station_classes'){
  $stations=['Hurstville'=>'222010'];foreach(['Central','Town Hall'] as $label){$matches=station_search($label);foreach($matches as $candidate){if(stripos((string)val($candidate,'name',''),$label)!==false){$stations[$label]=(string)val($candidate,'id','');break;}}}
  $now=new DateTimeImmutable('now',new DateTimeZone('Australia/Sydney'));
