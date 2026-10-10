@@ -25,6 +25,9 @@ try {
   // QA-only budget: prevent disrupted rail searches from traversing every 24-hour probe.
   $qaBoundedSearch=$coreOnly&&str_contains((string)($_SERVER['SCRIPT_NAME']??''),'/qatest/api/');
   $qaSearchDeadline=$qaBoundedSearch?microtime(true)+22.0:INF;
+  // Explicit opt-in on QA only; production and ordinary QA requests follow the legacy path.
+  $qaRailPilot=$qaBoundedSearch&&(string)($_GET['qaRailPilot']??'')==='1';
+  if($qaRailPilot)require_once __DIR__.'/lib/qa_route_rejections.php';
   $qaSearchBudgetExceeded=false;
   $tripCount=$coreOnly?22:30;
   $fallbackTripCount=$coreOnly?8:16;
@@ -34,6 +37,7 @@ try {
   if($coreOnly&&count($searchTimes)>=6){
    $fastProbes=array_slice($searchTimes,0,6);$fastParams=[];
    foreach($fastProbes as $probe)$fastParams[]=['depArrMacro'=>'dep','itdDate'=>$probe->format('Ymd'),'itdTime'=>$probe->format('Hi'),'type_origin'=>'stop','name_origin'=>$from,'type_destination'=>'stop','name_destination'=>$to,'calcNumberOfTrips'=>$tripCount,'TfNSWTR'=>'true'];
+   if($qaRailPilot)$fastParams=array_map('qa_rail_filter_params',$fastParams);
    $fastBodies=timed_parallel_trip($fastParams,25);
    foreach($fastBodies as $i=>$body){if(!is_array($body))continue;$candidate=timed_normalized_journey($body,$originSeed,$destinationSeed);$route=better_route($route,$candidate);}
    if(!$route){
@@ -65,6 +69,7 @@ try {
     }
    }
   }
+  if($qaRailPilot&&!headers_sent())header('X-QA-Rail-Pilot: enabled');
   $qaSearchDiagnostics=['initial_route_found'=>$route!==null,'additional_probes'=>0,'additional_route_probe'=>0,'additional_prefetch_count'=>0,'interchange_checks'=>0,'time_budget_exceeded'=>0];
   journey_perf_phase('additional_search');
   $remainingSearchTimes=($coreOnly&&count($searchTimes)>=6)?array_slice($searchTimes,6):$searchTimes;
