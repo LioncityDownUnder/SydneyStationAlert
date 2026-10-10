@@ -160,7 +160,7 @@ test('Step 5X no-route notices are QA-only and retry is actionable',()=>{
  assert.match(main,/esc\(a\.title\|\|'TfNSW service notice'\)/);
  assert.match(main,/Contextual notice; impact on your selected journey is unverified/);
  assert.match(main,/state\.noRoute=e instanceof ApiRequestError&&\(e\.code==='NO_ROUTE'\|\|e\.code==='SEARCH_TIME_LIMIT'\)/);
- assert.match(main,/if\(state\.noRoute\)void loadQaNoRouteAlerts\(generation\)/);
+ assert.match(main,/if\(state\.noRoute\)\{void loadQaNoRouteAlerts\(generation\);startQaRecoveryWatch\(\);\}/);
  assert.match(main,/id="retry-no-route"/);
  assert.match(main,/getElementById\('retry-no-route'\)\?\.addEventListener\('click',\(\)=>void setJourney\(\)\)/);
  assert.match(main,/if\(generation===journeyGeneration&&state\.noRoute\)/);
