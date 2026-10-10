@@ -166,3 +166,12 @@ assertit($lateProbes[0]->format('Y-m-d H:i')==='2026-10-08 23:42','overnight sea
 assertit($lateProbes[1]->format('Y-m-d H:i')==='2026-10-09 00:12','overnight search probes the following date');
 assertit($lateProbes[4]->format('Y-m-d H:i')==='2026-10-09 01:42','overnight search retains five probes for the parallel fast path');
 assertit($lateProbes[count($lateProbes)-1]->format('Y-m-d H:i')==='2026-10-09 23:42','overnight search ends within a rolling 24-hour horizon');
+
+require_once __DIR__.'/../api/lib/qa_route_rejections.php';
+$qaOrigin=['id'=>'101','name'=>'Central','lat'=>-33.883,'lon'=>151.206,'mode'=>'train'];
+$qaDest=['id'=>'103','name'=>'Town Hall','lat'=>-33.873,'lon'=>151.207,'mode'=>'train'];
+$qaMixed=json_decode(file_get_contents(__DIR__.'/fixtures/mixed.json'),true);
+$qaReject=qa_route_rejection_summary($qaMixed,$qaOrigin,$qaDest);
+assertit(($qaReject['rawJourneys']??0)>0,'Step 5AD rejection probe counts raw journeys');
+assertit(($qaReject['railOnlyNormalized']??-1)===0,'Step 5AD rejection probe does not accept mixed-mode journeys');
+assertit(array_sum($qaReject['reasons'])===$qaReject['sampledJourneys'],'Step 5AD counts each sampled journey once');
