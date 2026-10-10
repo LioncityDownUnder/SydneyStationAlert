@@ -39,7 +39,7 @@ try {
    foreach($fastProbes as $probe)$fastParams[]=['depArrMacro'=>'dep','itdDate'=>$probe->format('Ymd'),'itdTime'=>$probe->format('Hi'),'type_origin'=>'stop','name_origin'=>$from,'type_destination'=>'stop','name_destination'=>$to,'calcNumberOfTrips'=>$tripCount,'TfNSWTR'=>'true'];
    if($qaRailPilot)$fastParams=array_map('qa_rail_filter_params',$fastParams);
    $fastBodies=timed_parallel_trip($fastParams,25);
-   foreach($fastBodies as $i=>$body){if(!is_array($body))continue;$candidate=timed_normalized_journey($body,$originSeed,$destinationSeed);$route=better_route($route,$candidate);}
+   foreach($fastBodies as $i=>$body){if(!is_array($body))continue;$candidate=$qaRailPilot?earliest_future_route($body,$originSeed,$destinationSeed,$now->getTimestamp()):timed_normalized_journey($body,$originSeed,$destinationSeed);$route=better_route($route,$candidate);}
    if(!$route){
     journey_perf_phase('parallel_fallback');
     $fallbackMeta=[];$firstParams=[];
@@ -110,6 +110,7 @@ try {
    }
    if($route){$qaSearchDiagnostics['additional_route_probe']=$probeIndex+1;break;}
   }
+  if($qaRailPilot&&$route&&route_departure_ts($route)<$now->getTimestamp())$route=null;
   if(!$route){
    $qaSearchDiagnostics['time_budget_exceeded']=$qaSearchBudgetExceeded?1:0;
    if($qaBoundedSearch){journey_perf_qa_header();journey_search_qa_diagnostics_header($qaSearchDiagnostics);}
