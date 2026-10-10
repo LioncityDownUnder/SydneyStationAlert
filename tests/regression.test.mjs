@@ -204,3 +204,14 @@ test('Step 5AH opt-in filtered initial journey search is QA-only',()=>{
  assert.match(api,/new URLSearchParams\(window\.location\.search\)\.get\('qaRailPilot'\)/);
  assert.match(api,/qaRailPilot:'1'/);
 });
+
+test('Step 5AI QA pilot rejects departed first-leg services and labels overnight departures',()=>{
+ const backend=fs.readFileSync('api/index.php','utf8');
+ const main=fs.readFileSync('src/main.ts','utf8');
+ assert.match(backend,/\$qaRailPilot\?earliest_future_route\(\$body,\$originSeed,\$destinationSeed,\$now->getTimestamp\(\)\)/);
+ assert.match(backend,/if\(\$qaRailPilot&&\$route&&route_departure_ts\(\$route\)<\$now->getTimestamp\(\)\)\$route=null/);
+ assert.match(main,/function sydneyDayLabel\(value,now=new Date\(\)\)/);
+ assert.match(main,/timeZone:'Australia\/Sydney'/);
+ assert.match(main,/return 'Tomorrow, '/);
+ assert.match(main,/I boarded the \$\{esc\(datedTrainTime\(/);
+});
