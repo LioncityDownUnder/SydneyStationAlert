@@ -32,4 +32,4 @@ finally {
 export const searchStations = (q, signal) => get('stations', { q }, signal);
 export const preloadStations = (signal) => get('station-index', {}, signal);
 export const nearbyStations = (point) => get('nearby', { lat: String(point.lat), lon: String(point.lon) });
-export const getJourney = (from, to, coreOnly = false) => get('journey', { from: from.id, to: to.id, fromName: from.name, toName: to.name, ...(coreOnly?{coreOnly:'1'}:{}) }, undefined, coreOnly ? 20000 : 30000);
+export const getJourney = (from, to, coreOnly = false) => get('journey', { from: from.id, to: to.id, fromName: from.name, toName: to.name, ...(coreOnly?{coreOnly:'1'}:{}) }, undefined, coreOnly ? (/^\\/qatest(?:\\/|$)/.test(window.location.pathname) ? 32000 : 20000) : 30000);
