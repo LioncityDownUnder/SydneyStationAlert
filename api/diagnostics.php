@@ -34,6 +34,7 @@ if(($_GET['action']??'')==='probe_rail_search_four_routes'){
  foreach($stations as $i=>$pair){
   $from=$pair['from'];$to=$pair['to'];$label=$from['name'].' to '.$to['name'];
   $routes[$label]=qa_rail_search_result($bodies[$i]??null,$from,$to);
+  $routes[$label]['fourHourRejections']=is_array($bodies[$i]??null)?qa_window_rejection_counts($bodies[$i],$from,$to,$now->getTimestamp()):null;
  }
  echo json_encode(['data'=>['mode'=>'QA_FILTERED_DIAGNOSTIC_ONLY','requestCount'=>4,
   'elapsedMs'=>(int)round((microtime(true)-$started)*1000),
