@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Read-only QA diagnostics smoke verification. No credentials or private URLs."""
 import json, os, sys, urllib.parse, urllib.request
+from collections import Counter
 from datetime import datetime, timezone
 
 BASE="https://trains.nytnetwork.work/qatest/api/"
@@ -22,6 +23,17 @@ def station(name):
     return exact
 try:
     a,b=station("Hurstville"),station("Padstow")
+    # Step 5I: independently inspect departure-monitor discovery without changing route selection.
+    discovery=get("discover",**{"from":a["id"],"to":b["id"],"fromName":a["name"],"toName":b["name"]})
+    windows=[]
+    for w in discovery.get("trace",[]):
+        reasons=Counter(reason for c in w.get("candidates",[]) for reason in c.get("reasons",[]) if c.get("status")=="excluded")
+        modes=dict(Counter(str((c.get("firstDeparture") or {}).get("mode")) for c in w.get("candidates",[])))
+        windows.append({"window":w.get("window"),"returnedCount":w.get("returnedCount"),"parsedCandidates":len(w.get("candidates",[])),"modes":modes,"exclusionReasons":dict(reasons),"decision":w.get("decision"),"upstreamResponseType":type(w.get("rawResponse")).__name__,"upstreamKeys":list(w.get("rawResponse",{}).keys()) if isinstance(w.get("rawResponse"),dict) else []})
+    evidence={"snapshotAt":discovery.get("snapshotAt"),"candidateCount":discovery.get("candidateCount"),"windows":windows}
+    with open(OUT+"/step5i-departure-monitor.json","w") as f:json.dump(evidence,f,indent=2)
+    print("STEP 5I DEPARTURE MONITOR: "+json.dumps(evidence),flush=True)
+    check("Step 5I discovery evidence",len(windows)>0,str({"windows":len(windows),"rawCounts":[w["returnedCount"] for w in windows],"eligible":discovery.get("candidateCount")}))
     data=get("compare",**{"from":a["id"],"to":b["id"],"fromName":a["name"],"toName":b["name"]})
     with open(OUT+"/step5-comparison.json","w") as f:json.dump(data,f,indent=2)
     independent=data.get("independent",{})
