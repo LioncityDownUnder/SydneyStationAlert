@@ -23,6 +23,24 @@ if(($_GET['action']??'')==='probe_modes'){
  }
  echo json_encode(['data'=>$out],JSON_INVALID_UTF8_SUBSTITUTE);exit;
 }
+if(($_GET['action']??'')==='probe_station_classes'){
+ $stations=['Hurstville'=>'222010','Central'=>'200060','Town Hall'=>'200070'];
+ $now=new DateTimeImmutable('now',new DateTimeZone('Australia/Sydney'));
+ $out=[];
+ foreach($stations as $label=>$id){
+  $params=['type_dm'=>'stop','name_dm'=>$id,'mode'=>'direct','itdDate'=>$now->format('Ymd'),'itdTime'=>$now->format('Hi'),'limit'=>100,'TfNSWDM'=>'true'];
+  $body=timed_upstream('departure_mon',$params,0);
+  $events=val($body,'stopEvents',[]);if(!is_array($events))$events=[];
+  $classes=[];$examples=[];
+  foreach($events as $event){
+   $t=val($event,'transportation',[]);$product=val($t,'product',[]);
+   $class=(string)val($product,'class','unknown');$classes[$class]=($classes[$class]??0)+1;
+   if(!isset($examples[$class]))$examples[$class]=['product'=>val($product,'name',''),'service'=>val($t,'name',''),'mode'=>mode($t)];
+  }
+  $out[$label]=['stationId'=>$id,'returnedCount'=>count($events),'classes'=>$classes,'examples'=>$examples,'messages'=>val($body,'systemMessages',[]),'resolvedLocations'=>array_map(fn($v)=>['id'=>val($v,'id'),'name'=>val($v,'name')],array_slice(val($body,'locations',[]),0,2))];
+ }
+ echo json_encode(['data'=>['snapshotAt'=>$now->format(DATE_ATOM),'stations'=>$out]],JSON_INVALID_UTF8_SUBSTITUTE|JSON_PARTIAL_OUTPUT_ON_ERROR);exit;
+}
 if(($_GET['action']??'')==='stations'){
  $q=trim((string)($_GET['q']??''));if(mb_strlen($q)<2||mb_strlen($q)>70)fail('BAD_REQUEST','Enter 2-70 characters');
  echo json_encode(['data'=>station_search($q)],JSON_INVALID_UTF8_SUBSTITUTE);exit;
