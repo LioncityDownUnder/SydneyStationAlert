@@ -23,6 +23,35 @@ if(($_GET['action']??'')==='probe_modes'){
  }
  echo json_encode(['data'=>$out],JSON_INVALID_UTF8_SUBSTITUTE);exit;
 }
+if(($_GET['action']??'')==='probe_platforms_alerts'){
+ $now=new DateTimeImmutable('now',new DateTimeZone('Australia/Sydney'));
+ $out=[];
+ foreach(['Hurstville','Burwood'] as $label){
+  $found=timed_upstream('stop_finder',['type_sf'=>'any','name_sf'=>$label,'anyMaxSizeHitList'=>40,'TfNSWSF'=>'true'],0);
+  $locations=val($found,'locations',[]);if(!is_array($locations))$locations=[];
+  $candidates=[];
+  foreach($locations as $loc){
+   if(!is_array($loc))continue;
+   $name=(string)val($loc,'name','');$id=(string)val($loc,'id','');
+   if($id===''||stripos($name,$label)===false)continue;
+   $candidates[]=['id'=>$id,'name'=>$name,'type'=>val($loc,'type'),'modes'=>val($loc,'modes',[])];
+   if(count($candidates)>=12)break;
+  }
+  $out[$label]=['stopFinderCandidates'=>$candidates,'messages'=>val($found,'systemMessages',[])];
+ }
+ $alerts=fetch_current_service_alerts($now);
+ $out['alerts']=['available'=>is_array($alerts),'matching'=>[]];
+ if(is_array($alerts)){
+  foreach(normalized_service_alerts($alerts) as $alert){
+   $words=strtolower(json_encode($alert,JSON_INVALID_UTF8_SUBSTITUTE)?:'');
+   if(str_contains($words,'hurstville')||str_contains($words,'replacement')||str_contains($words,'t4')){
+    $out['alerts']['matching'][]=['title'=>val($alert,'title',''),'description'=>substr((string)val($alert,'description',''),0,350),'severity'=>val($alert,'severity','')];
+    if(count($out['alerts']['matching'])>=12)break;
+   }
+  }
+ }
+ echo json_encode(['data'=>$out],JSON_INVALID_UTF8_SUBSTITUTE|JSON_PARTIAL_OUTPUT_ON_ERROR);exit;
+}
 if(($_GET['action']??'')==='probe_hurstville_filters'){
  $now=new DateTimeImmutable('now',new DateTimeZone('Australia/Sydney'));
  $base=['type_dm'=>'stop','name_dm'=>'222010','mode'=>'direct','itdDate'=>$now->format('Ymd'),'itdTime'=>$now->format('Hi'),'limit'=>100,'TfNSWDM'=>'true'];
