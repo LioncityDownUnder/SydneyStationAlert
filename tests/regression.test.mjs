@@ -316,3 +316,14 @@ test('Step 5AV QA-only rediscovery never auto-boards or silently adopts journey'
  assert.match(main,/Search again to confirm/);
  assert.match(main,/async function setJourney\(\)\{stopQaRecoveryWatch\(\)/);
 });
+
+test('Step 5AW QA refresh keeps boarded service and unboarded selected departure stable',()=>{
+ const src=fs.readFileSync('src/main.ts','utf8');
+ assert.match(src,/function qaSameSelectedTrain\(a,b\)/);
+ assert.match(src,/if\(!qaRailPilot\)return sameService\(a,b\)/);
+ assert.match(src,/Math\.abs\(aTime-bTime\)<=3\*60000/);
+ assert.match(src,/if\(qaRailPilot&&state\.journey&&!qaSameSelectedTrain\(state\.journey,updated\)\)/);
+ assert.match(src,/Your confirmed boarded service is retained/);
+ assert.match(src,/Your selected departure is retained until it has departed/);
+ assert.match(src,/if\(adopted\)state\.message=''/);
+});
