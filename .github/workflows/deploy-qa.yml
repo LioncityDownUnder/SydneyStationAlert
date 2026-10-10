@@ -252,6 +252,12 @@ jobs:
           curl --fail --silent --show-error --max-time 30 "https://trains.nytnetwork.work/qatest/api/diagnostics.php?action=probe_rail_search_four_routes" -o qa-verification/step5ag-four-route-filter.json
           jq -e '.data.mode=="QA_FILTERED_DIAGNOSTIC_ONLY" and .data.requestCount==4 and (.data.routes | length)==4 and (.data.routes | all(.[]; .status=="RAIL_CANDIDATE_UNVERIFIED" or .status=="NO_RAIL_CANDIDATE_IN_RESPONSE" or .status=="UPSTREAM_UNAVAILABLE"))' qa-verification/step5ag-four-route-filter.json >/dev/null
           jq -c '.data | {elapsedMs, requestCount, routes: (.routes | with_entries(.value |= {status,rawJourneys,railOnlyNormalized}))}' qa-verification/step5ag-four-route-filter.json
+      - name: Step 5AL bounded four-hour probe comparison smoke
+        run: |
+          mkdir -p qa-verification
+          curl --fail --silent --show-error --max-time 35 "https://trains.nytnetwork.work/qatest/api/diagnostics.php?action=probe_four_hour_search_comparison" -o qa-verification/step5al-four-hour-comparison.json
+          jq -e '.data.mode=="QA_FOUR_HOUR_PROBE_COMPARISON" and .data.requestCount==12 and (.data.routes | length)==4 and (.data.routes | all(.[]; (.probes|length)==3 and (all(.probes[]; (.offsetMinutes==0 or .offsetMinutes==60 or .offsetMinutes==180) and (.fourHourRejections==null or (.fourHourRejections|has("eligible")))))))' qa-verification/step5al-four-hour-comparison.json >/dev/null
+          jq -c '.data | {elapsedMs, requestCount, routes}' qa-verification/step5al-four-hour-comparison.json
       - name: Optional Step 5AD route rejection evidence (manual only)
         if: github.event_name == 'workflow_dispatch'
         continue-on-error: true
