@@ -28,12 +28,11 @@ jobs:
       - name: Simulate protected production artifact
         run: |
           rm -f dist/api/gtfs-update.php dist/api/gtfs-index.php
-          rm -f dist/api/lib/qa_route_rejections.php
           test ! -e dist/api/diagnostics.php
           test ! -e dist/diagnostics.html
           test ! -e dist/api/gtfs-update.php
           test ! -e dist/api/gtfs-index.php
-          test ! -e dist/api/lib/qa_route_rejections.php
+          test -f dist/api/lib/qa_route_rejections.php
           test -f dist/api/index.php
           test -f dist/api/lib/core.php
       - name: Assert production deployment safeguards
