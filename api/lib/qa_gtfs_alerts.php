@@ -28,7 +28,7 @@ function qa_pb_messages(array $fields,int $field,int $limit=1500):array{
  $out=[];foreach($fields[$field]??[] as [$wire,$value]){if($wire!==2)continue;$out[]=qa_pb_fields($value);if(count($out)>=$limit)break;}return $out;
 }
 function qa_pb_string(array $fields,int $field):string{
- foreach($fields[$field]??[] as [$wire,$value])if($wire===2)return mb_convert_encoding(substr($value,0,1000),'UTF-8','UTF-8');return '';
+ foreach($fields[$field]??[] as [$wire,$value])if($wire===2)return substr($value,0,1000);return '';
 }
 function qa_pb_text(array $fields,int $field):string{
  foreach(qa_pb_messages($fields,$field,4) as $translated){
