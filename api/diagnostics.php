@@ -8,6 +8,39 @@ require __DIR__.'/lib/core.php';
 if(!str_starts_with((string)($_SERVER['SCRIPT_NAME']??''),'/qatest/api/')){http_response_code(404);echo json_encode(['error'=>['code'=>'NOT_FOUND','message'=>'QA diagnostics only']]);exit;}
 
 if(($_SERVER['REQUEST_METHOD']??'')!=='GET')fail('BAD_REQUEST','GET only',405);
+if(($_GET['action']??'')==='probe_rail_search_four_routes'){
+ require_once __DIR__.'/lib/qa_route_rejections.php';
+ $now=new DateTimeImmutable('now',new DateTimeZone('Australia/Sydney'));
+ // Fixed routes and maximum four upstream requests. No user-supplied stations or times.
+ $pairs=[['Hurstville','Padstow'],['Hurstville','Casula'],['Hurstville','Kogarah'],['Chatswood','Gadigal']];
+ $params=[];$stations=[];
+ foreach($pairs as [$fromName,$toName]){
+  $resolved=[];
+  foreach([$fromName,$toName] as $stationName){
+   $match=null;
+   foreach(station_search($stationName) as $candidate){
+    if(strcasecmp((string)val($candidate,'name',''),$stationName)===0){$match=$candidate;break;}
+   }
+   if(!$match)fail('STATION_LOOKUP_FAILED','Unable to resolve QA diagnostic station',503);
+   $resolved[]=$match;
+  }
+  [$from,$to]=$resolved;
+  $stations[]=['from'=>$from,'to'=>$to];
+  $params[]=qa_rail_filter_params(['depArrMacro'=>'dep','itdDate'=>$now->format('Ymd'),
+   'itdTime'=>$now->format('Hi'),'type_origin'=>'stop','name_origin'=>$from['id'],
+   'type_destination'=>'stop','name_destination'=>$to['id'],'calcNumberOfTrips'=>22,'TfNSWTR'=>'true']);
+ }
+ $started=microtime(true);$bodies=timed_parallel_trip($params,0);$routes=[];
+ foreach($stations as $i=>$pair){
+  $from=$pair['from'];$to=$pair['to'];$label=$from['name'].' to '.$to['name'];
+  $routes[$label]=qa_rail_search_result($bodies[$i]??null,$from,$to);
+ }
+ echo json_encode(['data'=>['mode'=>'QA_FILTERED_DIAGNOSTIC_ONLY','requestCount'=>4,
+  'elapsedMs'=>(int)round((microtime(true)-$started)*1000),
+  'filterClassesExcluded'=>[4,5,7,9,11],
+  'note'=>'Rail-only candidates are structurally normalized, not live-service or transfer verified. Production and commuter routing are unaffected.',
+  'routes'=>$routes]],JSON_INVALID_UTF8_SUBSTITUTE|JSON_PARTIAL_OUTPUT_ON_ERROR);exit;
+}
 if(($_GET['action']??'')==='probe_rail_filter_comparison'){
  require_once __DIR__.'/lib/qa_route_rejections.php';
  $now=new DateTimeImmutable('now',new DateTimeZone('Australia/Sydney'));
