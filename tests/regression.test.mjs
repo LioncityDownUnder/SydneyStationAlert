@@ -265,3 +265,13 @@ test('Step 5AP rail-filter comparison is fixed, QA-only and informational',()=>{
  assert.match(workflow,/step5ap-rail-filters\.json/);
  assert.match(workflow,/requestCount==3/);
 });
+
+test('Step 5AQ station identity and alert diagnostic is QA-only and read-only',()=>{
+ const diag=fs.readFileSync('api/diagnostics.php','utf8');
+ const wf=fs.readFileSync('.github/workflows/deploy-qa.yml','utf8');
+ assert.match(diag,/probe_hurstville_identity_alerts/);
+ assert.match(diag,/QA_HURSTVILLE_IDENTITY_ALERT_CHECK/);
+ assert.match(diag,/count\(\$stations\)>=6/);
+ assert.match(diag,/configuredStationId'=>'222010'/);
+ assert.match(wf,/step5aq-identity-alerts\.json/);
+});
