@@ -328,7 +328,7 @@ test('Step 5AW QA refresh keeps boarded service and unboarded selected departure
  assert.match(src,/if\(qaRailPilot&&state\.journey&&!qaSameSelectedTrain\(state\.journey,updated\)\)/);
  assert.match(src,/Your confirmed boarded service is retained/);
  assert.match(src,/Your selected departure is retained until it has departed/);
- assert.match(src,/if\(adopted\)state\.message=''/);
+ assert.match(src,/if\(adopted\)\{state\.lastChecked=new Date\(\);state\.message='';\}/);
 });
 
 test('Step 5AX standard QA enables rail safeguards without query flag and preserves refresh warning',()=>{
