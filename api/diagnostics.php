@@ -23,6 +23,22 @@ if(($_GET['action']??'')==='probe_modes'){
  }
  echo json_encode(['data'=>$out],JSON_INVALID_UTF8_SUBSTITUTE);exit;
 }
+if(($_GET['action']??'')==='probe_stop_hierarchy'){
+ $now=new DateTimeImmutable('now',new DateTimeZone('Australia/Sydney'));$out=[];
+ foreach(['Hurstville'=>'222010','Burwood'=>'213410'] as $label=>$id){
+  $params=['type_dm'=>'stop','name_dm'=>$id,'mode'=>'direct','itdDate'=>$now->format('Ymd'),'itdTime'=>$now->format('Hi'),'limit'=>100,'TfNSWDM'=>'true'];
+  $body=timed_upstream('departure_mon',$params,0);$events=val($body,'stopEvents',[]);if(!is_array($events))$events=[];
+  $locations=[];$classes=[];
+  foreach($events as $event){
+   $t=val($event,'transportation',[]);$p=val($t,'product',[]);$c=(string)val($p,'class','unknown');$classes[$c]=($classes[$c]??0)+1;
+   $loc=val($event,'location',[]);if(!is_array($loc))continue;$sid=(string)val($loc,'id','');if($sid==='')continue;
+   if(!isset($locations[$sid]))$locations[$sid]=['id'=>$sid,'name'=>val($loc,'name',''),'classes'=>[]];
+   $locations[$sid]['classes'][$c]=($locations[$sid]['classes'][$c]??0)+1;
+  }
+  $out[$label]=['stationId'=>$id,'classes'=>$classes,'childLocations'=>array_slice(array_values($locations),0,20),'messages'=>val($body,'systemMessages',[])];
+ }
+ echo json_encode(['data'=>$out],JSON_INVALID_UTF8_SUBSTITUTE|JSON_PARTIAL_OUTPUT_ON_ERROR);exit;
+}
 if(($_GET['action']??'')==='probe_exact_stops_alerts'){
  $now=new DateTimeImmutable('now',new DateTimeZone('Australia/Sydney'));
  $out=['stations'=>[],'alerts'=>[]];
