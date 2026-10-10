@@ -280,8 +280,17 @@ test('Step 5AS QA rail pilot highlights only confirmed active contextual alerts 
  const ui=fs.readFileSync('src/main.ts','utf8');
  assert.match(ui,/periodStatus==='WITHIN_ACTIVE_PERIOD'/);
  assert.match(ui,/qaRailPilot&&state\.noRoute&&!state\.noRouteLimited&&active\.length/);
- assert.match(ui,/Trackwork may affect travel; this does not confirm cancellation/);
+ assert.match(ui,/trackwork may affect your journey\. Train availability is unconfirmed/);
  assert.match(ui,/Contextual notice; impact on your selected journey is unverified/);
  assert.match(ui,/https:\/\/transportnsw\.info\/alerts/);
  assert.match(ui,/https:\/\/transportnsw\.info\/trip/);
+});
+
+test('Step 5AT mobile pilot message is concise and places TfNSW links before alert details',()=>{
+ const ui=fs.readFileSync('src/main.ts','utf8');
+ assert.match(ui,/const compact=qaRailPilot&&state\.noRoute&&!limited/);
+ assert.match(ui,/No train-only journey verified within the next 4 hours/);
+ assert.doesNotMatch(ui,/cancellation of your selected train/);
+ const message=ui.slice(ui.indexOf('function routeUnavailableMessage'),ui.indexOf('function highlightName'));
+ assert.ok(message.indexOf('qaRailPilotTravelLinks()')<message.indexOf('qaNoRouteAlertDetails()'));
 });
