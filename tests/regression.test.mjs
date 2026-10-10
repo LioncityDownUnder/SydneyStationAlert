@@ -358,3 +358,23 @@ test('Step 5AW service matching rejects ambiguous boarded refreshes',async()=>{
  assert.equal(match(journey(['trip-1']),journey([])),false);
  assert.equal(match(journey([]),journey([])),false);
 });
+
+test('Step 5AX selection lists verified QA rail options and retains explicit boarding consent',()=>{
+ const main=fs.readFileSync('src/main.ts','utf8');
+ const api=fs.readFileSync('api/index.php','utf8');
+ const client=fs.readFileSync('src/api.ts','utf8');
+ assert.match(api,/if\(\$action==='boarding-options'\)/);
+ assert.match(api,/\/qatest\/api\//);
+ assert.match(api,/qa_rail_chronology_valid\(\$candidate\)/);
+ assert.match(api,/array_slice\(\$options,0,8\)/);
+ assert.match(client,/getBoardingOptions = \(from,to\)/);
+ assert.match(main,/async function confirmDifferentTrain\(\)/);
+ assert.match(main,/candidates=await getBoardingOptions\(selected.origin,selected.destination\)/);
+ assert.match(main,/state.boardingOptions=others.slice\(0,8\)/);
+ assert.match(main,/function confirmBoardingOption\(index\)/);
+ assert.match(main,/window.confirm\('Did you board this exact train/);
+ assert.match(main,/journeyGeneration\+\+;state.journey=candidate;state.onboard=true/);
+ assert.match(main,/saveActiveTrip\(\);checkAlerts\(\);renderJourneyStable\(\)/);
+ assert.match(main,/data-board-option/);
+ assert.match(main,/cancel-boarding-choices/);
+});

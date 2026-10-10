@@ -1,0 +1,28 @@
+name: Step 5AX Feature Verification
+
+on:
+  push:
+    branches:
+      - feature/step-5ax-actual-train-boarding
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  automated-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install TypeScript
+        run: npm install --no-save typescript@5.9.3
+      - name: Run typecheck, build, and regression tests
+        run: npm run check
+      - name: Validate PHP syntax and backend fixtures
+        run: |
+          find api -name '*.php' -print0 | xargs -0 -n1 php -l
+          php tests/backend-test.php

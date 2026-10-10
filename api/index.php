@@ -12,6 +12,38 @@ try {
   $body=upstream('coord',['coord'=>(int)round($lon*1000000).':'.(int)round($lat*1000000).':EPSG:4326','type_1'=>'stop','radius_1'=>3000,'inclFilter'=>1],90);
   $found=[];foreach(val($body,'locations',[]) as $loc){$railMode=location_rail_mode($loc);if(!$railMode)continue;$s=station($loc,$railMode);if($s){$distance=2*6371000*asin(min(1,sqrt(sin(deg2rad(($s['lat']-$lat)/2))**2+cos(deg2rad($lat))*cos(deg2rad($s['lat']))*sin(deg2rad(($s['lon']-$lon)/2))**2)));if($distance<=3000)$found[]=$s;}}echo json_encode(['data'=>$found]);exit;
  }
+ // QA-only list of independently normalized rail journeys near boarding time.
+ if($action==='boarding-options'){
+  if(!str_contains((string)($_SERVER['SCRIPT_NAME']??''),'/qatest/api/'))fail('NOT_FOUND','Unavailable',404);
+  $from=(string)($_GET['from']??'');$to=(string)($_GET['to']??'');
+  if(!preg_match('/^[\\w:-]{3,50}$/',$from)||!preg_match('/^[\\w:-]{3,50}$/',$to)||$from===$to)fail('BAD_REQUEST','Choose two valid stations.');
+  $fromName=trim((string)($_GET['fromName']??$from));$toName=trim((string)($_GET['toName']??$to));
+  if($fromName===''||mb_strlen($fromName)>100)$fromName=$from;
+  if($toName===''||mb_strlen($toName)>100)$toName=$to;
+  require_once __DIR__.'/lib/qa_route_rejections.php';
+  $origin=['id'=>$from,'name'=>$fromName,'lat'=>0.0,'lon'=>0.0,'mode'=>'train'];
+  $destination=['id'=>$to,'name'=>$toName,'lat'=>0.0,'lon'=>0.0,'mode'=>'train'];
+  $now=new DateTimeImmutable('now',new DateTimeZone('Australia/Sydney'));$ts=$now->getTimestamp();
+  $params=[];
+  foreach([-90,-45,0] as $offset){
+   $probe=$now->modify(($offset<0?'':'+' ).$offset.' minutes');
+   $params[]=qa_rail_filter_params(['depArrMacro'=>'dep','itdDate'=>$probe->format('Ymd'),'itdTime'=>$probe->format('Hi'),'type_origin'=>'stop','name_origin'=>$from,'type_destination'=>'stop','name_destination'=>$to,'calcNumberOfTrips'=>30,'TfNSWTR'=>'true']);
+  }
+  $found=[];
+  foreach(timed_parallel_trip($params,15) as $body){
+   if(!is_array($body))continue;
+   foreach(normalized_journeys($body,$origin,$destination) as $candidate){
+    $departure=route_departure_ts($candidate);
+    if($departure<$ts-5400||$departure>$ts+600||!qa_rail_chronology_valid($candidate))continue;
+    $first=$candidate['legs'][0];$ids=array_values(array_filter(array_map('strval',$first['tripIds']??[])));
+    // No two timetable entries may be treated as the same service just because their line matches.
+    $key=$ids?'id:'.implode('|',array_map('strtolower',$ids)):'time:'.$departure.':'.($first['line']??'').':'.($first['origin']['id']??'');
+    if(!isset($found[$key]))$found[$key]=$candidate;
+   }
+  }
+  $options=array_values($found);usort($options,fn($a,$b)=>route_departure_ts($b)<=>route_departure_ts($a));
+  echo json_encode(['data'=>array_slice($options,0,8)],JSON_INVALID_UTF8_SUBSTITUTE);exit;
+ }
  if($action==='journey'){
   $from=(string)($_GET['from']??'');$to=(string)($_GET['to']??'');if(!preg_match('/^[\w:-]{3,50}$/',$from)||!preg_match('/^[\w:-]{3,50}$/',$to)||$from===$to)fail('BAD_REQUEST','Choose two different valid stations.');
   $fromName=trim((string)($_GET['fromName']??''));$toName=trim((string)($_GET['toName']??''));
