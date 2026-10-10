@@ -159,7 +159,7 @@ test('Step 5X no-route notices are QA-only and retry is actionable',()=>{
  assert.match(main,/periodStatus==='WITHIN_ACTIVE_PERIOD'/);
  assert.match(main,/esc\(a\.title\|\|'TfNSW service notice'\)/);
  assert.match(main,/Contextual notice; impact on your selected journey is unverified/);
- assert.match(main,/state\.noRoute=e instanceof ApiRequestError&&e\.code==='NO_ROUTE'/);
+ assert.match(main,/state\.noRoute=e instanceof ApiRequestError&&\(e\.code==='NO_ROUTE'\|\|e\.code==='SEARCH_TIME_LIMIT'\)/);
  assert.match(main,/if\(state\.noRoute\)void loadQaNoRouteAlerts\(generation\)/);
  assert.match(main,/id="retry-no-route"/);
  assert.match(main,/getElementById\('retry-no-route'\)\?\.addEventListener\('click',\(\)=>void setJourney\(\)\)/);
@@ -182,4 +182,15 @@ test('Step 5AB QA-only search budget is explicit and does not affect production 
  assert.match(api,/No train-only journey was verified within the QA search time limit/);
  assert.match(api,/journey_search_qa_diagnostics_header\(\$qaSearchDiagnostics\)/);
  assert.match(core,/time_budget_exceeded/);
+});
+
+test('Step 5AC makes incomplete QA searches distinct from confirmed no-route responses',()=>{
+ const main=fs.readFileSync('src/main.ts','utf8');
+ const api=fs.readFileSync('src/api.ts','utf8');
+ const backend=fs.readFileSync('api/index.php','utf8');
+ assert.match(backend,/fail\(\$qaSearchBudgetExceeded\?'SEARCH_TIME_LIMIT':'NO_ROUTE'/);
+ assert.match(main,/SEARCH TIME LIMIT REACHED/);
+ assert.match(main,/We could not finish checking all possible trains/);
+ assert.match(main,/state\.noRouteLimited=e instanceof ApiRequestError&&e\.code==='SEARCH_TIME_LIMIT'/);
+ assert.match(api,/32000 : 20000/);
 });
