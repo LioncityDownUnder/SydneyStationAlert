@@ -34,3 +34,25 @@ function qa_route_rejection_summary(array $body,array $origin,array $destination
  }
  return ['rawJourneys'=>count($journeys),'sampledJourneys'=>min(30,count($journeys)),'railOnlyNormalized'=>count(normalized_journeys($body,$origin,$destination)),'reasons'=>$reasons,'transportClasses'=>$classes,'journeyLegDetails'=>$journeyLegDetails];
 }
+
+/** QA-only comparative request parameters; do not use in commuter routing. */
+function qa_rail_filter_params(array $base):array{
+ return array_merge($base,['excludedMeans'=>'checkbox','exclMOT_4'=>1,'exclMOT_5'=>1,'exclMOT_7'=>1,'exclMOT_9'=>1,'exclMOT_11'=>1]);
+}
+function qa_rail_filter_comparison(?array $baseline,?array $filtered,array $origin,array $destination):array{
+ $summarize=static function(?array $body)use($origin,$destination):array{
+  if($body===null)return ['upstreamResponseReceived'=>false,'summary'=>null];
+  $s=qa_route_rejection_summary($body,$origin,$destination);
+  // Only safe aggregate counts are needed; avoid raw service IDs or journey payloads.
+  return ['upstreamResponseReceived'=>true,'summary'=>[
+   'rawJourneys'=>$s['rawJourneys'],
+   'sampledJourneys'=>$s['sampledJourneys'],
+   'railOnlyNormalized'=>$s['railOnlyNormalized'],
+   'reasons'=>$s['reasons'],
+   'transportClasses'=>$s['transportClasses']
+  ]];
+ };
+ return ['baseline'=>$summarize($baseline),'railFiltered'=>$summarize($filtered),
+  'railFilterConfirmed'=>false,
+  'note'=>'Request excludes non-rail product classes, but actual provider filter compliance and service availability are not independently verified.'];
+}
