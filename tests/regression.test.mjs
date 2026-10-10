@@ -179,7 +179,7 @@ test('Step 5AC makes incomplete QA searches distinct from confirmed no-route res
  assert.match(main,/SEARCH TIME LIMIT REACHED/);
  assert.match(main,/We could not finish checking all possible trains/);
  assert.match(main,/state\.noRouteLimited=e instanceof ApiRequestError&&e\.code==='SEARCH_TIME_LIMIT'/);
- assert.match(api,/32000 : 20000/);
+ assert.match(api,/coreOnly \? 32000 : 30000/);
 });
 
 test('Step 5AX filtered initial journey search is standard QA-only',()=>{
