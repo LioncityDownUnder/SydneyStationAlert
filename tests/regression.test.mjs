@@ -304,3 +304,15 @@ test('Step 5AU QA pilot validates missed-connection service before replacing an 
  assert.match(main,/firstDeparture>=recoveryRequestedAt/);
  assert.match(main,/if\(!qaOnwardConnectionIsValid\(onward,transfer,prior,recoveryRequestedAt\)\)throw new Error/);
 });
+
+test('Step 5AV QA-only rediscovery never auto-boards or silently adopts journey',()=>{
+ const main=fs.readFileSync('src/main.ts','utf8');
+ assert.match(main,/if\(!qaRailPilot\|\|!state\.noRoute\|\|state\.noRouteLimited\)return/);
+ assert.match(main,/document\.hidden\|\|!navigator\.onLine/);
+ assert.match(main,/window\.setInterval\(async\(\)=>\{/);
+ assert.match(main,/\},180000\)/);
+ assert.match(main,/qaRecoveredJourneyAvailable=true;\s*setup\(\)/);
+ assert.match(main,/qa-recheck-available/);
+ assert.match(main,/Search again to confirm/);
+ assert.match(main,/async function setJourney\(\)\{stopQaRecoveryWatch\(\)/);
+});
