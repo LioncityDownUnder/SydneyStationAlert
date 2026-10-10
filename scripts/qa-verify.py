@@ -51,6 +51,7 @@ try:
     probe=get("probe_modes",station=a["id"])
     with open(OUT+"/step5k-mode-probe.json","w") as f:json.dump(probe,f,indent=2)
     print("STEP 5K MODE PROBE: "+json.dumps(probe),flush=True)
+    print("STEP 5M TRANSPORT SAMPLES: "+json.dumps(probe.get("unfiltered",{}).get("samples",[])[:8],ensure_ascii=False,default=str),flush=True)
     check("Step 5K filtered and unfiltered probes",all(k in probe and isinstance(probe[k].get("count"),int) for k in ("filtered","unfiltered")),str({k:probe.get(k,{}).get("count") for k in ("filtered","unfiltered")}))
     data=get("compare",**{"from":a["id"],"to":b["id"],"fromName":a["name"],"toName":b["name"]})
     with open(OUT+"/step5-comparison.json","w") as f:json.dump(data,f,indent=2)
