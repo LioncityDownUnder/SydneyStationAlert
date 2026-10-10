@@ -71,8 +71,24 @@ function qa_rail_route_in_window(array $body,array $origin,array $destination,in
  $best=null;
  foreach(normalized_journeys($body,$origin,$destination) as $candidate){
   $departure=route_departure_ts($candidate);
-  if($departure<$earliest||$departure>$latest)continue;
+  if($departure<$earliest||$departure>$latest||!qa_rail_chronology_valid($candidate))continue;
   $best=better_route($best,$candidate);
  }
  return $best;
+}
+
+/** QA pilot: only accept journeys with complete, chronological train legs and realistic transfers. */
+function qa_rail_chronology_valid(array $route):bool{
+ $legs=val($route,'legs',[]);
+ if(!is_array($legs)||!$legs)return false;
+ $previousArrival=null;
+ foreach($legs as $leg){
+  if(!is_array($leg)||!in_array(val($leg,'mode'),['train','metro'],true))return false;
+  $departure=iso_ts(val($leg,'departure'));
+  $arrival=iso_ts(val($leg,'arrival'));
+  if($departure===null||$arrival===null||$arrival<=$departure)return false;
+  if($previousArrival!==null&&$departure<$previousArrival+120)return false;
+  $previousArrival=$arrival;
+ }
+ return true;
 }
