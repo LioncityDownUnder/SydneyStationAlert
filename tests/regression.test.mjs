@@ -172,3 +172,14 @@ test('Step 5X refuses to construct replacement-bus journeys from advisory text',
  assert.match(main,/state\.noRouteAlertsLoading=true;setup\(\)/);
  assert.match(main,/state\.noRouteAlertsLoading=false;setup\(\)/);
 });
+
+test('Step 5AB QA-only search budget is explicit and does not affect production journey search',()=>{
+ const api=fs.readFileSync('api/index.php','utf8');
+ const core=fs.readFileSync('api/lib/core.php','utf8');
+ assert.match(api,/\$qaBoundedSearch=\$coreOnly&&str_contains/);
+ assert.match(api,/\$qaSearchDeadline=\$qaBoundedSearch\?microtime\(true\)\+22\.0:INF/);
+ assert.match(api,/if\(\$qaBoundedSearch&&microtime\(true\)>=\$qaSearchDeadline\)/);
+ assert.match(api,/No train-only journey was verified within the QA search time limit/);
+ assert.match(api,/journey_search_qa_diagnostics_header\(\$qaSearchDiagnostics\)/);
+ assert.match(core,/time_budget_exceeded/);
+});
