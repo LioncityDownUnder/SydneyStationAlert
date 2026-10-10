@@ -1,5 +1,5 @@
 {
   "name":"sydney-station-alert","version":"1.0.0","private":true,"type":"module",
-  "scripts":{"typecheck":"tsc --noEmit","build":"tsc -p tsconfig.build.json && cp public/index.html dist/index.html && cp public/diagnostics.html dist/diagnostics.html && cp public/styles.css dist/styles.css && cp public/.htaccess dist/.htaccess && mkdir -p dist/api && cp -R api/. dist/api/","test":"npm run build && node --test tests/*.test.mjs","check":"npm run typecheck && npm test && npm run build"},
+  "scripts":{"typecheck":"tsc --noEmit","build":"tsc -p tsconfig.build.json && cp public/index.html dist/index.html && cp public/styles.css dist/styles.css && cp public/.htaccess dist/.htaccess && mkdir -p dist/api && cp -R api/. dist/api/","test":"npm run build && node --test tests/*.test.mjs","check":"npm run typecheck && npm test && npm run build"},
   "engines":{"node":">=20"}
 }
