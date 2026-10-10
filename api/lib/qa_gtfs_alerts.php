@@ -60,3 +60,46 @@ function qa_gtfs_alert_evidence(string $raw,int $limit=2000):array{
  }
  return ['decodedEntities'=>$total,'matchedCount'=>count($matched),'matchedSamples'=>$matched,'otherSamples'=>$examples,'causes'=>$causes,'effects'=>$effects,'note'=>'Text or raw selector match only; route IDs must be normalized and alerts checked for active dates before commuter use.'];
 }
+
+/** QA-only time-aware alert matching. GTFS-RT Alert.active_period is field 1. */
+function qa_alert_active(array $alert,int $now):array{
+ $periods=qa_pb_messages($alert,1,100);
+ if(!$periods)return ['active'=>null,'reason'=>'NO_ACTIVE_PERIOD'];
+ foreach($periods as $period){
+  $start=$period[1][0][1]??null;$end=$period[2][0][1]??null;
+  if(($start===null||$now>=(int)$start)&&($end===null||$now<(int)$end)){
+   return ['active'=>true,'reason'=>'WITHIN_ACTIVE_PERIOD'];
+  }
+ }
+ return ['active'=>false,'reason'=>'OUTSIDE_ACTIVE_PERIOD'];
+}
+function qa_gtfs_active_alerts(string $raw,int $now,string $stationId,string $stationName,string $line):array{
+ $root=qa_pb_fields($raw);$counts=['total'=>0,'active'=>0,'inactive'=>0,'undated'=>0,'relevantActive'=>0,'relevantUndated'=>0];$matching=[];
+ foreach(qa_pb_messages($root,2,2000) as $entity){
+  foreach(qa_pb_messages($entity,5,2) as $alert){
+   $counts['total']++;
+   $state=qa_alert_active($alert,$now);
+   if($state['active']===false){$counts['inactive']++;continue;}
+   if($state['active']===null)$counts['undated']++;else $counts['active']++;
+   $head=qa_pb_text($alert,10);$desc=qa_pb_text($alert,11);
+   $stopMatch=false;$routeIds=[];
+   foreach(qa_pb_messages($alert,5,150) as $selector){
+    if(qa_pb_string($selector,5)===$stationId)$stopMatch=true;
+    $route=qa_pb_string($selector,2);if($route!=='')$routeIds[$route]=true;
+   }
+   $text=strtolower($head.' '.$desc);
+   $stationText=$stationName!==''&&str_contains($text,strtolower($stationName));
+   $lineText=$line!==''&&preg_match('/(?<![a-z0-9])'.preg_quote($line,'/').'(?![a-z0-9])/i',$text)===1;
+   if(!$stopMatch&&!$stationText&&!$lineText)continue;
+   if($state['active']===true)$counts['relevantActive']++;else $counts['relevantUndated']++;
+   if(count($matching)>=15)continue;
+   $replacement=preg_match('/\\b(?:buses replace trains|replacement buses|rail replacement|change (?:at|for) buses)\\b/i',$head.' '.$desc)===1;
+   $matching[]=['id'=>qa_pb_string($entity,1),'title'=>substr($head,0,220),'description'=>substr($desc,0,450),
+    'matchReasons'=>array_values(array_filter([$stopMatch?'STOP_ID':null,$stationText?'STATION_TEXT':null,$lineText?'LINE_TEXT':null])),
+    'periodStatus'=>$state['reason'],'replacementMentioned'=>$replacement,
+    'routeIds'=>array_slice(array_keys($routeIds),0,8)];
+  }
+ }
+ return ['asOf'=>gmdate(DATE_ATOM,$now),'stationId'=>$stationId,'line'=>$line,'counts'=>$counts,'matchingAlerts'=>$matching,
+ 'warning'=>'Text matches are contextual, not proof the selected journey is affected. Alerts without active_period are not confirmed active. Replacement buses are informational only.'];
+}
