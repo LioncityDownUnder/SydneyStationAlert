@@ -29,6 +29,7 @@ jobs:
           php -l api/gtfs-update.php
           php -l api/gtfs-index.php
           php -l api/diagnostics.php
+          php -l api/lib/qa_route_rejections.php
           php tests/backend-test.php
       - uses: actions/upload-artifact@v4
         with:
@@ -237,6 +238,13 @@ jobs:
         id: verify
         continue-on-error: true
         run: python3 scripts/qa-smoke-light.py
+      - name: Optional Step 5AD route rejection evidence (manual only)
+        if: github.event_name == 'workflow_dispatch'
+        continue-on-error: true
+        run: |
+          mkdir -p qa-verification
+          curl --fail --silent --show-error --max-time 30 "https://trains.nytnetwork.work/qatest/api/diagnostics.php?action=probe_route_rejections" -o qa-verification/step5ad-route-rejections.json
+          python3 -m json.tool qa-verification/step5ad-route-rejections.json > /dev/null
       - name: Optional extended TfNSW investigation (manual only)
         if: github.event_name == 'workflow_dispatch'
         continue-on-error: true
