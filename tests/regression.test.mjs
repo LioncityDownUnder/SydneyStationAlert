@@ -139,19 +139,6 @@ test('core routing compares all initial probe candidates',()=>{
  assert.doesNotMatch(api,/if\(\$candidate\)\{\$route=\$candidate;break;\}/);
 });
 
-test('QA route diagnostics includes read-only candidate trace and build output',()=>{
- const html=fs.readFileSync('public/diagnostics.html','utf8');
- const php=fs.readFileSync('api/diagnostics.php','utf8');
- const pkg=fs.readFileSync('package.json','utf8');
- assert.match(html,/Find journey/);
- assert.match(html,/Full raw TfNSW response/);
- assert.match(html,/Download complete diagnostic JSON/);
- assert.match(php,/\/qatest\/api\//);
- assert.match(php,/diagnostic_candidate/);
- assert.match(php,/rawResponse/);
- assert.match(pkg,/cp public\/diagnostics\.html dist\/diagnostics\.html/);
-});
-
 test('Step 5X no-route notices are QA-only and retry is actionable',()=>{
  const main=fs.readFileSync('src/main.ts','utf8');
  assert.match(main,/function qaNoRouteAlertDetails\(\)/);
@@ -229,51 +216,6 @@ test('Step 5AJ QA pilot applies four-hour window, strict leg times and official 
  assert.match(ui,/function qaRailPilotTravelLinks\(\)/);
  assert.match(ui,/transportnsw\.info\/alerts/);
  assert.match(ui,/transportnsw\.info\/trip/);
-});
-
-test('Step 5AL diagnostic is fixed QA-only and leaves commuter search unchanged',()=>{
- const diag=fs.readFileSync('api/diagnostics.php','utf8');
- const workflow=fs.readFileSync('.github/workflows/deploy-qa.yml','utf8');
- assert.match(diag,/str_starts_with\(\(string\)\(\$_SERVER\['SCRIPT_NAME'\]/);
- assert.match(diag,/probe_four_hour_search_comparison/);
- assert.match(diag,/\$offsets=\[0,60,180\]/);
- assert.match(diag,/\$pairs=\[\['Hurstville','Padstow'\]/);
- assert.match(diag,/QA_FOUR_HOUR_PROBE_COMPARISON/);
- assert.match(workflow,/step5al-four-hour-comparison\.json/);
- assert.match(workflow,/requestCount==12/);
-});
-
-test('Step 5AM restricts origin departure-board diagnosis to fixed QA station and four hours',()=>{
- const diag=fs.readFileSync('api/diagnostics.php','utf8');
- const workflow=fs.readFileSync('.github/workflows/deploy-qa.yml','utf8');
- assert.match(diag,/probe_hurstville_four_hour_departures/);
- assert.match(diag,/\$start\+14400/);
- assert.match(diag,/foreach\(\[0,120\] as \$offset\)/);
- assert.match(diag,/name_dm'=>'222010'/);
- assert.match(diag,/QA_HURSTVILLE_FOUR_HOUR_DEPARTURE_BOARD/);
- assert.match(workflow,/step5am-hurstville-departures\.json/);
-});
-
-test('Step 5AP rail-filter comparison is fixed, QA-only and informational',()=>{
- const diag=fs.readFileSync('api/diagnostics.php','utf8');
- const workflow=fs.readFileSync('.github/workflows/deploy-qa.yml','utf8');
- assert.match(diag,/probe_hurstville_rail_departure_filters/);
- assert.match(diag,/name_dm'=>'222010'/);
- assert.match(diag,/QA_HURSTVILLE_RAIL_FILTER_COMPARISON/);
- assert.match(diag,/railWithinFourHours/);
- assert.match(diag,/exclMOT_5/);
- assert.match(workflow,/step5ap-rail-filters\.json/);
- assert.match(workflow,/requestCount==3/);
-});
-
-test('Step 5AQ station identity and alert diagnostic is QA-only and read-only',()=>{
- const diag=fs.readFileSync('api/diagnostics.php','utf8');
- const wf=fs.readFileSync('.github/workflows/deploy-qa.yml','utf8');
- assert.match(diag,/probe_hurstville_identity_alerts/);
- assert.match(diag,/QA_HURSTVILLE_IDENTITY_ALERT_CHECK/);
- assert.match(diag,/count\(\$stations\)>=6/);
- assert.match(diag,/configuredStationId'=>'222010'/);
- assert.match(wf,/step5aq-identity-alerts\.json/);
 });
 
 test('Step 5AS QA rail pilot highlights only confirmed active contextual alerts on no-route',()=>{

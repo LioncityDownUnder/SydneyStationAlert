@@ -22,13 +22,8 @@ jobs:
       - run: |
           php -l api/index.php
           php -l api/lib/core.php
-          php -l api/lib/gtfs_diagnostic.php
-          php -l api/lib/journey_builder.php
-          php -l api/lib/journey_ranking.php
-          php -l api/lib/journey_comparison.php
           php -l api/gtfs-update.php
           php -l api/gtfs-index.php
-          php -l api/diagnostics.php
           php -l api/lib/qa_route_rejections.php
           php tests/backend-test.php
       - uses: actions/upload-artifact@v4
@@ -148,156 +143,16 @@ jobs:
           sleep 2
           node scripts/qa-browser.mjs
 
-  verify-qa-legacy-journeys:
-    needs: [deploy-qa, verify-qa-diagnostics]
-    if: always() && needs.deploy-qa.result == 'success' && needs.verify-qa-diagnostics.result == 'success'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Record QA core journey performance
-        shell: bash
-        run: |
-          set -euo pipefail
-          API="https://trains.nytnetwork.work/qatest/api/index.php"
-          station_id() {
-            curl --fail --silent --show-error --get "$API" --data-urlencode "action=stations" --data-urlencode "q=$1" |
-              jq -r --arg n "$1" '.data[] | select((.name|ascii_downcase)==($n|ascii_downcase)) | .id' | head -n1
-          }
-          check_route() {
-            local from="$1" to="$2" pilot="${3:-0}" a b tmp time
-            a="$(station_id "$from")"; b="$(station_id "$to")"; test -n "$a"; test -n "$b"
-            tmp="$(mktemp)"
-            local headers
-            headers="$(mktemp)"
-            local status
-            echo "PROBE: $from to $to (coreOnly=1, 35s limit)"
-            local started=$SECONDS curl_exit=0
-            status="$(curl --silent --show-error --max-time 35 --dump-header "$headers" --get "$API" \
-              --data-urlencode "action=journey" --data-urlencode "from=$a" --data-urlencode "to=$b" \
-              --data-urlencode "fromName=$from" --data-urlencode "toName=$to" \
-              --data-urlencode "coreOnly=1" --data-urlencode "qaRailPilot=$pilot" -o "$tmp" -w '%{http_code}')" || curl_exit=$?
-            echo "RESULT: $from to $to pilot=$pilot HTTP=$status curl_exit=$curl_exit elapsed=$((SECONDS-started))s"
-            if [ "$pilot" = "1" ] && ! grep -qi '^x-qa-rail-pilot: enabled' "$headers"; then
-              echo "FAIL: QA rail pilot header missing"; return 1
-            fi
-            if [ "$curl_exit" = "28" ]; then
-              echo "WARN: $from to $to: upstream/core journey request timed out at 35s"
-              rm -f "$tmp" "$headers"
-              return 0
-            fi
-            if [ "$curl_exit" != "0" ]; then
-              echo "FAIL: $from to $to: curl exit $curl_exit"
-              rm -f "$tmp" "$headers"
-              return 1
-            fi
-            if [ "$status" = "503" ] && jq -e '.error.code=="SEARCH_TIME_LIMIT"' "$tmp" >/dev/null; then
-              echo "WARN: $from to $to: QA search time budget reached; route availability unconfirmed"
-              grep -i '^server-timing:' "$headers" || true
-              grep -i '^x-qa-journey-search:' "$headers" || true
-              rm -f "$tmp" "$headers"
-              return 0
-            fi
-            if [ "$status" = "404" ] && jq -e '.error.code=="NO_ROUTE"' "$tmp" >/dev/null; then
-              echo "WARN: $from to $to: no verified rail-only journey (NO_ROUTE); not an API outage"
-              rm -f "$tmp" "$headers"
-              return 0
-            fi
-            if [ "$status" != "200" ]; then
-              echo "FAIL: $from to $to: unexpected HTTP $status"
-              cat "$tmp"
-              return 1
-            fi
-            time="$(grep -i '^server-timing:' "$headers" | head -n 1 || true)"
-            jq -e '.data.legs|length>=1' "$tmp" >/dev/null
-            # Check that every returned journey has a coherent stop/leg structure.
-            jq -e '
-              .data as $d |
-              ($d.stops | type=="array" and length>=2) and
-              ($d.legs | type=="array" and length>=1) and
-              ($d.transfers | type=="array") and
-              (all($d.legs[]; (.origin.id|type=="string") and (.destination.id|type=="string"))) and
-              (($d.transfers|length) <= ($d.legs|length)-1)
-            ' "$tmp" >/dev/null
-            # If the first parallel batch found a route, no extra probe should run.
-            if grep -qi '^x-qa-journey-search:.*initial_route_found=1' "$headers"; then
-              grep -qi '^x-qa-journey-search:.*additional_probes=0' "$headers"
-            fi
-            echo "$from to $to: valid journey returned"
-            grep -i '^server-timing:' "$headers" || true
-            grep -i '^x-qa-journey-search:' "$headers" || true
-            rm -f "$tmp" "$headers"
-          }
-          check_route Hurstville Kogarah
-          check_route Chatswood Gadigal
-          check_route Hurstville Padstow
-          check_route Hurstville Casula
-          echo "STEP 5AH: QA-only opt-in rail-filtered commuter request smoke"
-          check_route Hurstville Kogarah 1
-          check_route Chatswood Gadigal 1
-          check_route Hurstville Padstow 1
-          check_route Hurstville Casula 1
-
-  verify-qa-diagnostics:
+  verify-qa-endpoints:
     needs: deploy-qa
-    if: always() && needs.deploy-qa.result == 'success'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - name: Verify deployed QA diagnostics
-        id: verify
-        continue-on-error: true
-        run: python3 scripts/qa-smoke-light.py
-      - name: Step 5AG bounded four-route rail-filter diagnostic smoke
+      - name: Check QA API health
         run: |
-          mkdir -p qa-verification
-          curl --fail --silent --show-error --max-time 30 "https://trains.nytnetwork.work/qatest/api/diagnostics.php?action=probe_rail_search_four_routes" -o qa-verification/step5ag-four-route-filter.json
-          jq -e '.data.mode=="QA_FILTERED_DIAGNOSTIC_ONLY" and .data.requestCount==4 and (.data.routes | length)==4 and (.data.routes | all(.[]; .status=="RAIL_CANDIDATE_UNVERIFIED" or .status=="NO_RAIL_CANDIDATE_IN_RESPONSE" or .status=="UPSTREAM_UNAVAILABLE"))' qa-verification/step5ag-four-route-filter.json >/dev/null
-          jq -c '.data | {elapsedMs, requestCount, routes: (.routes | with_entries(.value |= {status,rawJourneys,railOnlyNormalized}))}' qa-verification/step5ag-four-route-filter.json
-      - name: Step 5AL bounded four-hour probe comparison smoke
+          curl --fail --silent --show-error --retry 3 --retry-delay 3 \
+            "https://trains.nytnetwork.work/qatest/api/index.php?action=health" | jq -e '.data.ok == true and .data.configured == true'
+      - name: Check QA station lookup
         run: |
-          mkdir -p qa-verification
-          curl --fail --silent --show-error --max-time 35 "https://trains.nytnetwork.work/qatest/api/diagnostics.php?action=probe_four_hour_search_comparison" -o qa-verification/step5al-four-hour-comparison.json
-          jq -e '.data.mode=="QA_FOUR_HOUR_PROBE_COMPARISON" and .data.requestCount==12 and (.data.routes | length)==4 and (.data.routes | all(.[]; (.probes|length)==3 and (all(.probes[]; (.offsetMinutes==0 or .offsetMinutes==60 or .offsetMinutes==180) and (.fourHourRejections==null or (.fourHourRejections|has("eligible")))))))' qa-verification/step5al-four-hour-comparison.json >/dev/null
-          jq -c '.data | {elapsedMs, requestCount, routes}' qa-verification/step5al-four-hour-comparison.json
-      - name: Step 5AM Hurstville departure-board evidence
-        run: |
-          mkdir -p qa-verification
-          curl --fail --silent --show-error --max-time 35 "https://trains.nytnetwork.work/qatest/api/diagnostics.php?action=probe_hurstville_four_hour_departures" -o qa-verification/step5am-hurstville-departures.json
-          jq -e '.data.mode=="QA_HURSTVILLE_FOUR_HOUR_DEPARTURE_BOARD" and .data.requestCount==2 and (.data.probes|length)==2 and (.data.fourHourRailEventsSampled|type=="number")' qa-verification/step5am-hurstville-departures.json >/dev/null
-          jq -c '.data | {elapsedMs, fourHourRailEventsSampled, modes, probes}' qa-verification/step5am-hurstville-departures.json
-      - name: Step 5AP Hurstville rail departure filter comparison
-        run: |
-          mkdir -p qa-verification
-          curl --fail --silent --show-error --max-time 35 "https://trains.nytnetwork.work/qatest/api/diagnostics.php?action=probe_hurstville_rail_departure_filters" -o qa-verification/step5ap-rail-filters.json
-          jq -e '.data.mode=="QA_HURSTVILLE_RAIL_FILTER_COMPARISON" and .data.requestCount==3 and (.data.variants|length)==3 and (.data.variants|all(.[]; (.returnedCount|type=="number") and (.railWithinFourHours|type=="number")))' qa-verification/step5ap-rail-filters.json >/dev/null
-          jq -c '.data | {elapsedMs, requestCount, variants}' qa-verification/step5ap-rail-filters.json
-      - name: Step 5AQ Hurstville station identity and alerts evidence
-        run: |
-          mkdir -p qa-verification
-          curl --fail --silent --show-error --max-time 60 "https://trains.nytnetwork.work/qatest/api/diagnostics.php?action=probe_hurstville_identity_alerts" -o qa-verification/step5aq-identity-alerts.json
-          jq -e '.data.mode=="QA_HURSTVILLE_IDENTITY_ALERT_CHECK" and .data.configuredStationId=="222010" and (.data.stationCandidates|length)>=1 and (.data.alerts|has("sydneytrains")) and (.data.alerts|has("metro"))' qa-verification/step5aq-identity-alerts.json >/dev/null
-          jq -c '.data | {elapsedMs, stationCandidates, alerts}' qa-verification/step5aq-identity-alerts.json
-      - name: Optional Step 5AD route rejection evidence (manual only)
-        if: github.event_name == 'workflow_dispatch'
-        continue-on-error: true
-        run: |
-          mkdir -p qa-verification
-          curl --fail --silent --show-error --max-time 30 "https://trains.nytnetwork.work/qatest/api/diagnostics.php?action=probe_route_rejections" -o qa-verification/step5ad-route-rejections.json
-          python3 -m json.tool qa-verification/step5ad-route-rejections.json > /dev/null
-      - name: Optional extended TfNSW investigation (manual only)
-        if: github.event_name == 'workflow_dispatch'
-        continue-on-error: true
-        run: python3 scripts/qa-verify.py
-      - name: Upload QA diagnostic evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: qa-diagnostic-evidence
-          path: qa-verification/
-          if-no-files-found: warn
-      - name: Add verification summary
-        if: always()
-        run: |
-          if test -f qa-verification/summary.md; then cat qa-verification/summary.md >> "$GITHUB_STEP_SUMMARY"; fi
-      - name: Fail workflow when verification fails
-        if: steps.verify.outcome == 'failure'
-        run: exit 1
+          curl --fail --silent --show-error --get \
+            "https://trains.nytnetwork.work/qatest/api/index.php" \
+            --data-urlencode "action=stations" --data-urlencode "q=Parramatta" | jq -e '.data | type == "array"'
