@@ -23,6 +23,29 @@ if(($_GET['action']??'')==='probe_modes'){
  }
  echo json_encode(['data'=>$out],JSON_INVALID_UTF8_SUBSTITUTE);exit;
 }
+if(($_GET['action']??'')==='probe_alerts_v2_platforms'){
+ $out=['alerts'=>[],'platformLookups'=>[]];
+ $key=source_key();
+ foreach(['sydneytrains','metro'] as $feed){
+  $url='https://api.transport.nsw.gov.au/v2/gtfs/alerts/'.$feed;
+  $h=curl_init($url);
+  curl_setopt_array($h,[CURLOPT_RETURNTRANSFER=>true,CURLOPT_TIMEOUT=>12,CURLOPT_CONNECTTIMEOUT=>3,CURLOPT_FOLLOWLOCATION=>false,CURLOPT_HTTPHEADER=>['Authorization: apikey '.$key,'Accept: application/x-protobuf']]);
+  $body=curl_exec($h);$code=(int)curl_getinfo($h,CURLINFO_RESPONSE_CODE);$type=(string)curl_getinfo($h,CURLINFO_CONTENT_TYPE);$err=curl_errno($h);curl_close($h);
+  $out['alerts'][$feed]=['httpStatus'=>$code,'contentType'=>$type,'bytes'=>is_string($body)?strlen($body):0,'curlErrorCode'=>$err,'format'=>'GTFS-realtime protobuf; not decoded by this probe'];
+ }
+ foreach(['Hurstville Station, Platform','Burwood Station, Platform'] as $term){
+  $body=timed_upstream('stop_finder',['type_sf'=>'stop','name_sf'=>$term,'anyMaxSizeHitList'=>100,'TfNSWSF'=>'true'],0);
+  $locs=val($body,'locations',[]);if(!is_array($locs))$locs=[];
+  $matches=[];foreach($locs as $loc){
+   if(!is_array($loc))continue;
+   $name=(string)val($loc,'name','');if(!str_contains(strtolower($name),'platform'))continue;
+   $matches[]=['id'=>val($loc,'id'),'name'=>$name,'modes'=>val($loc,'modes',[])];
+   if(count($matches)>=16)break;
+  }
+  $out['platformLookups'][$term]=['matches'=>$matches,'totalLocations'=>count($locs),'messages'=>val($body,'systemMessages',[])];
+ }
+ echo json_encode(['data'=>$out],JSON_INVALID_UTF8_SUBSTITUTE|JSON_PARTIAL_OUTPUT_ON_ERROR);exit;
+}
 if(($_GET['action']??'')==='probe_stop_hierarchy'){
  $now=new DateTimeImmutable('now',new DateTimeZone('Australia/Sydney'));$out=[];
  foreach(['Hurstville'=>'222010','Burwood'=>'213410'] as $label=>$id){
