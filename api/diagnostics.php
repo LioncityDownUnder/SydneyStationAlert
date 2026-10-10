@@ -8,6 +8,37 @@ require __DIR__.'/lib/core.php';
 if(!str_starts_with((string)($_SERVER['SCRIPT_NAME']??''),'/qatest/api/')){http_response_code(404);echo json_encode(['error'=>['code'=>'NOT_FOUND','message'=>'QA diagnostics only']]);exit;}
 
 if(($_SERVER['REQUEST_METHOD']??'')!=='GET')fail('BAD_REQUEST','GET only',405);
+if(($_GET['action']??'')==='probe_hurstville_rail_departure_filters'){
+ $now=new DateTimeImmutable('now',new DateTimeZone('Australia/Sydney'));$start=$now->getTimestamp();
+ $base=['type_dm'=>'stop','name_dm'=>'222010','mode'=>'direct','depArrMacro'=>'dep',
+  'itdDate'=>$now->format('Ymd'),'itdTime'=>$now->format('Hi'),'limit'=>100,'TfNSWDM'=>'true'];
+ $variants=[
+  'unfiltered'=>$base,
+  'exclude_non_rail'=>array_merge($base,['excludedMeans'=>'checkbox','exclMOT_4'=>1,'exclMOT_5'=>1,'exclMOT_7'=>1,'exclMOT_9'=>1,'exclMOT_11'=>1]),
+  'rail_only_explicit'=>array_merge($base,['excludedMeans'=>'checkbox','exclMOT_0'=>1,'exclMOT_3'=>1,'exclMOT_4'=>1,'exclMOT_5'=>1,'exclMOT_6'=>1,'exclMOT_7'=>1,'exclMOT_8'=>1,'exclMOT_9'=>1,'exclMOT_10'=>1,'exclMOT_11'=>1])
+ ];
+ $out=[];$started=microtime(true);
+ foreach($variants as $label=>$params){
+  $body=timed_upstream('departure_mon',$params,0);
+  $events=val($body,'stopEvents',[]);$classes=[];$railWithinFourHours=0;$railOutsideWindow=0;
+  foreach(is_array($events)?$events:[] as $event){
+   $transport=val($event,'transportation',[]);$class=(string)val(val($transport,'product',[]),'class','unknown');
+   $classes[$class]=($classes[$class]??0)+1;
+   if(!in_array(mode($transport),['train','metro'],true))continue;
+   $departure=iso_ts(val($event,'departureTimeEstimated'))??iso_ts(val($event,'departureTimePlanned'));
+   if($departure!==null&&$departure>=$start&&$departure<=$start+14400)$railWithinFourHours++;
+   else $railOutsideWindow++;
+  }
+  $out[$label]=['upstreamResponseReceived'=>is_array($body),
+   'returnedCount'=>is_array($events)?count($events):0,
+   'transportClasses'=>$classes,'railWithinFourHours'=>$railWithinFourHours,
+   'railOutsideWindowOrUnknownTime'=>$railOutsideWindow];
+ }
+ echo json_encode(['data'=>['mode'=>'QA_HURSTVILLE_RAIL_FILTER_COMPARISON',
+  'requestCount'=>3,'elapsedMs'=>(int)round((microtime(true)-$started)*1000),
+  'station'=>'Hurstville','variants'=>$out,
+  'note'=>'Rail mode selection is experimental and TfNSW filter compliance is not guaranteed. Results are a sample, not evidence that services do not operate. QA diagnostics only; commuter routing and production unchanged.']],JSON_INVALID_UTF8_SUBSTITUTE);exit;
+}
 if(($_GET['action']??'')==='probe_hurstville_four_hour_departures'){
  $now=new DateTimeImmutable('now',new DateTimeZone('Australia/Sydney'));$start=$now->getTimestamp();$end=$start+14400;
  $counts=['train'=>0,'metro'=>0];$probes=[];$started=microtime(true);
