@@ -214,3 +214,8 @@ assertit($windowRoute!==null,'Step 5AJ accepts chronological train journey withi
 assertit(qa_rail_route_in_window($windowRaw,$windowOrigin,$windowDest,$baseTime-18000,$baseTime-3600)===null,'Step 5AJ rejects departures more than four hours ahead');
 $invalidTimeline=['legs'=>[['mode'=>'train','departure'=>'2026-10-07T14:00:00+11:00','arrival'=>'2026-10-07T14:10:00+11:00'],['mode'=>'train','departure'=>'2026-10-07T14:09:00+11:00','arrival'=>'2026-10-07T14:20:00+11:00']]];
 assertit(!qa_rail_chronology_valid($invalidTimeline),'Step 5AJ rejects impossible one-minute interchange');
+
+$counts=qa_window_rejection_counts($windowRaw,$windowOrigin,$windowDest,$baseTime);
+assertit(($counts['eligible']??0)===1,'Step 5AK categorizes eligible four-hour candidate');
+$lateCounts=qa_window_rejection_counts($windowRaw,$windowOrigin,$windowDest,$baseTime-18000);
+assertit(($lateCounts['beyond_four_hours']??0)===1,'Step 5AK categorizes departure beyond four hours');
