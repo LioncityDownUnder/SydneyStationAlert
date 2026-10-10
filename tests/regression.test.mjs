@@ -294,3 +294,13 @@ test('Step 5AT mobile pilot message is concise and places TfNSW links before ale
  const message=ui.slice(ui.indexOf('function routeUnavailableMessage'),ui.indexOf('function highlightName'));
  assert.ok(message.indexOf('qaRailPilotTravelLinks()')<message.indexOf('qaNoRouteAlertDetails()'));
 });
+
+test('Step 5AU QA pilot validates missed-connection service before replacing an onboard route',()=>{
+ const main=fs.readFileSync('src/main.ts','utf8');
+ assert.match(main,/function qaOnwardConnectionIsValid\(onward,transfer,prior,recoveryRequestedAt\)/);
+ assert.match(main,/if\(!qaRailPilot\)return true/);
+ assert.match(main,/String\(first\.origin\?\.id\|\|''\)!==String\(transfer\?\.id\|\|''\)/);
+ assert.match(main,/departure<previousArrival\+2\*60000/);
+ assert.match(main,/firstDeparture>=recoveryRequestedAt/);
+ assert.match(main,/if\(!qaOnwardConnectionIsValid\(onward,transfer,prior,recoveryRequestedAt\)\)throw new Error/);
+});
