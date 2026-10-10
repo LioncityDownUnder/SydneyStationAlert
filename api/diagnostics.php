@@ -8,6 +8,24 @@ require __DIR__.'/lib/core.php';
 if(!str_starts_with((string)($_SERVER['SCRIPT_NAME']??''),'/qatest/api/')){http_response_code(404);echo json_encode(['error'=>['code'=>'NOT_FOUND','message'=>'QA diagnostics only']]);exit;}
 
 if(($_SERVER['REQUEST_METHOD']??'')!=='GET')fail('BAD_REQUEST','GET only',405);
+if(($_GET['action']??'')==='probe_route_rejections'){
+ require_once __DIR__.'/lib/qa_route_rejections.php';
+ $now=new DateTimeImmutable('now',new DateTimeZone('Australia/Sydney'));
+ $origin=['id'=>'222010','name'=>'Hurstville','mode'=>'train','lat'=>0.0,'lon'=>0.0];
+ $destinations=[
+  ['id'=>'221310','name'=>'Padstow','mode'=>'train','lat'=>0.0,'lon'=>0.0],
+  ['id'=>'216610','name'=>'Casula','mode'=>'train','lat'=>0.0,'lon'=>0.0]
+ ];
+ // Fixed two-request budget; this probe cannot be used to generate arbitrary TfNSW traffic.
+ $params=[];
+ foreach($destinations as $to)$params[]=['depArrMacro'=>'dep','itdDate'=>$now->format('Ymd'),'itdTime'=>$now->format('Hi'),'type_origin'=>'stop','name_origin'=>$origin['id'],'type_destination'=>'stop','name_destination'=>$to['id'],'calcNumberOfTrips'=>22,'TfNSWTR'=>'true'];
+ $started=microtime(true);$bodies=timed_parallel_trip($params,0);$out=[];
+ foreach($destinations as $i=>$to){
+  $body=$bodies[$i]??null;
+  $out[$to['name']]=['originId'=>$origin['id'],'destinationId'=>$to['id'],'upstreamResponseReceived'=>is_array($body),'summary'=>is_array($body)?qa_route_rejection_summary($body,$origin,$to):null];
+ }
+ echo json_encode(['data'=>['elapsedMs'=>(int)round((microtime(true)-$started)*1000),'routes'=>$out]],JSON_INVALID_UTF8_SUBSTITUTE);exit;
+}
 if(($_GET['action']??'')==='probe_modes'){
  $id=(string)($_GET['station']??'');
  if(!preg_match('/^[0-9]{3,12}$/',$id))fail('BAD_REQUEST','Invalid station');
