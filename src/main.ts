@@ -15,7 +15,7 @@ let qaRecoveryTimer=null;
 let qaRecoverySearching=false;
 let qaRecoveredJourneyAvailable=false;
 const isQaEnvironment = /^\/qatest(?:\/|$)/.test(window.location.pathname);
-const qaRailPilot = isQaEnvironment && new URLSearchParams(window.location.search).get('qaRailPilot') === '1';
+const qaRailPilot = isQaEnvironment;
 const STATION_CACHE_KEY = isQaEnvironment ? 'sydstnalert:qa:stations:v1' : 'sydney-station-alert:stations:v1';
 const ACTIVE_TRIP_KEY = isQaEnvironment ? 'sydstnalert:qa:active-trip:v1' : 'sydney-station-alert:active-trip:v1';
 function activeTripExpiry(j){const arrival=j?.legs?.[j.legs.length-1]?.arrival;const ts=arrival?+new Date(arrival):NaN;return Number.isFinite(ts)?ts+4*60*60*1000:Date.now()+8*60*60*1000;}
