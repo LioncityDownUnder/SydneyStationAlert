@@ -322,6 +322,9 @@ test('Step 5AW QA refresh keeps boarded service and unboarded selected departure
  assert.match(src,/function qaSameSelectedTrain\(a,b\)/);
  assert.match(src,/if\(!qaRailPilot\)return sameService\(a,b\)/);
  assert.match(src,/Math\.abs\(aTime-bTime\)<=3\*60000/);
+ assert.match(src,/if\(ids\.length\|\|otherIds\.length\)return ids\.length>0/);
+ assert.match(src,/!state\.onboard&&leg\.line===other\.line/);
+ assert.match(src,/Live train details could not be verified/);
  assert.match(src,/if\(qaRailPilot&&state\.journey&&!qaSameSelectedTrain\(state\.journey,updated\)\)/);
  assert.match(src,/Your confirmed boarded service is retained/);
  assert.match(src,/Your selected departure is retained until it has departed/);
@@ -333,5 +336,25 @@ test('Step 5AX standard QA enables rail safeguards without query flag and preser
  const backend=fs.readFileSync('api/index.php','utf8');
  assert.match(main,/const qaRailPilot = isQaEnvironment;/);
  assert.match(backend,/\$qaRailPilot=\$qaBoundedSearch;/);
- assert.match(main,/const adopted=adoptJourneyUpdate\(updated\);state\.lastChecked=new Date\(\);if\(adopted\)state\.message='';checkAlerts\(\);/);
+ assert.match(main,/const adopted=adoptJourneyUpdate\(updated\);if\(adopted\)\{state\.lastChecked=new Date\(\);state\.message='';\}checkAlerts\(\);/);
+});
+
+test('Step 5AW service matching rejects ambiguous boarded refreshes',async()=>{
+ const vm=await import('node:vm');
+ const main=fs.readFileSync('src/main.ts','utf8');
+ const begin=main.indexOf('function qaSameSelectedTrain(a,b){');
+ const end=main.indexOf('function adoptJourneyUpdate(updated){',begin);
+ assert.ok(begin>=0&&end>begin);
+ const match=vm.runInNewContext(main.slice(begin,end)+';qaSameSelectedTrain',
+  {qaRailPilot:true,state:{onboard:true},sameService:()=>false});
+ const station=id=>({id});
+ const leg=(ids,time='2026-10-11T10:00:00+11:00')=>({
+  origin:station('A'),destination:station('B'),line:'T4',
+  tripIds:ids,departure:time
+ });
+ const journey=(ids,time)=>({legs:[leg(ids,time)]});
+ assert.equal(match(journey(['trip-1']),journey(['trip-1'])),true);
+ assert.equal(match(journey(['trip-1']),journey(['trip-2'])),false);
+ assert.equal(match(journey(['trip-1']),journey([])),false);
+ assert.equal(match(journey([]),journey([])),false);
 });
