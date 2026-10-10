@@ -378,3 +378,16 @@ test('Step 5AX selection lists verified QA rail options and retains explicit boa
  assert.match(main,/data-board-option/);
  assert.match(main,/cancel-boarding-choices/);
 });
+
+test('QA alert reliability notice stays collapsible above journey footer',()=>{
+ const main=fs.readFileSync('src/main.ts','utf8');
+ assert.match(main,/noticeExpanded: false/);
+ assert.match(main,/id="alert-reliability-notice"/);
+ assert.match(main,/<summary>Alert Reliability Notice<\/summary>/);
+ assert.match(main,/state\.noticeExpanded\?' open':''/);
+ assert.match(main,/addEventListener\('toggle',e=>\{state\.noticeExpanded=e\.currentTarget\.open;\}\)/);
+ const render=main.slice(main.indexOf('function renderJourney(){'));
+ assert.ok(render.indexOf('${notificationReliabilityNotice()}')>render.indexOf('<section class="panel">'));
+ assert.ok(render.indexOf('${notificationReliabilityNotice()}')<render.indexOf('${footer}</main>'));
+ assert.ok(!render.includes('${notificationReliabilityNotice()}${serviceUpdate(j)}'));
+});
