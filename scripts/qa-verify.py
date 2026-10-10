@@ -45,6 +45,21 @@ try:
     check("Step 5F unmatched departure diagnostics",all(isinstance(row.get("departureDiagnostics"),dict) and row["departureDiagnostics"].get("diagnosis") in ("NO_RAIL_ONLY_LEGACY_REFERENCE","DEPARTURE_WINDOW_MISMATCH","WITHIN_FIVE_MINUTES_REVIEW_ROUTE") and isinstance(row["departureDiagnostics"].get("independentLegs"),list) for row in rows),str([(row.get("departureDiagnostics",{}).get("diagnosis"),row.get("departureDiagnostics",{}).get("closestLegacyGapSeconds")) for row in rows]))
     diagnoses=("NO_TIME_ALIGNED_LEGACY","TRANSFER_COUNT_DIFFERS","STATION_LABEL_FORMAT_DIFFERS","TRANSFER_STATIONS_DIFFER","TRANSFER_STRUCTURE_ALIGNED")
     check("Step 5G structural evidence",all(isinstance(row.get("structureEvidence"),dict) and row["structureEvidence"].get("diagnosis") in diagnoses and isinstance(row["structureEvidence"].get("independentLegs"),list) and isinstance(row["structureEvidence"].get("normalizedIndependentTransfers"),list) for row in rows),str([(row.get("structureEvidence",{}).get("diagnosis"),row.get("structureEvidence",{}).get("independentLegCount"),row.get("structureEvidence",{}).get("legacyLegCount")) for row in rows]))
+    # Surface structural disagreements in the CI log for daytime review, without asserting train identity.
+    for i,row in enumerate(rows,1):
+        evidence=row.get("structureEvidence",{})
+        print("STRUCTURE REVIEW "+str(i)+": "+json.dumps({
+            "matchStatus":row.get("matchStatus"),
+            "departureGapSeconds":row.get("nearestLegacyDepartureGapSeconds"),
+            "diagnosis":evidence.get("diagnosis"),
+            "independentLegCount":evidence.get("independentLegCount"),
+            "legacyLegCount":evidence.get("legacyLegCount"),
+            "independentTransfers":evidence.get("independentTransferStations"),
+            "legacyTransfers":evidence.get("legacyTransferStations"),
+            "normalizedIndependentTransfers":evidence.get("normalizedIndependentTransfers"),
+            "normalizedLegacyTransfers":evidence.get("normalizedLegacyTransfers"),
+            "legacyLines":evidence.get("legacyLines")
+        },ensure_ascii=False),flush=True)
     check("Comparison rows match shortlist",len(data.get("comparisons",[]))==len(independent.get("ranked",[])),str(len(data.get("comparisons",[])))+" rows")
 except Exception as e:
     check("QA diagnostic execution",False,type(e).__name__+": "+str(e))
