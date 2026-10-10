@@ -23,6 +23,19 @@ if(($_GET['action']??'')==='probe_modes'){
  }
  echo json_encode(['data'=>$out],JSON_INVALID_UTF8_SUBSTITUTE);exit;
 }
+if(($_GET['action']??'')==='probe_hurstville_windows'){
+ $now=new DateTimeImmutable('now',new DateTimeZone('Australia/Sydney'));
+ $out=[];
+ foreach([0,60,180,360] as $minutes){
+  $at=$now->modify('+'.$minutes.' minutes');
+  $params=['type_dm'=>'stop','name_dm'=>'222010','mode'=>'direct','itdDate'=>$at->format('Ymd'),'itdTime'=>$at->format('Hi'),'limit'=>100,'TfNSWDM'=>'true'];
+  $body=timed_upstream('departure_mon',$params,0);
+  $events=val($body,'stopEvents',[]);$counts=[];
+  foreach(is_array($events)?$events:[] as $event){$t=val($event,'transportation',[]);$p=val($t,'product',[]);$c=(string)val($p,'class','unknown');$counts[$c]=($counts[$c]??0)+1;}
+  $out[(string)$minutes]=['count'=>is_array($events)?count($events):0,'classes'=>$counts,'messages'=>val($body,'systemMessages',[])];
+ }
+ echo json_encode(['data'=>$out]);exit;
+}
 if(($_GET['action']??'')==='probe_hurstville_limits'){
  $now=new DateTimeImmutable('now',new DateTimeZone('Australia/Sydney'));
  $out=[];
