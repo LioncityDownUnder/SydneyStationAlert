@@ -23,6 +23,19 @@ if(($_GET['action']??'')==='probe_modes'){
  }
  echo json_encode(['data'=>$out],JSON_INVALID_UTF8_SUBSTITUTE);exit;
 }
+if(($_GET['action']??'')==='probe_hurstville_filters'){
+ $now=new DateTimeImmutable('now',new DateTimeZone('Australia/Sydney'));
+ $base=['type_dm'=>'stop','name_dm'=>'222010','mode'=>'direct','itdDate'=>$now->format('Ymd'),'itdTime'=>$now->format('Hi'),'limit'=>100,'TfNSWDM'=>'true'];
+ $variants=['baseline'=>$base,'rail_only'=>array_merge($base,['includedMeans'=>'checkbox','inclMOT_1'=>1,'inclMOT_2'=>1]),'no_buses'=>array_merge($base,['excludedMeans'=>'checkbox','exclMOT_5'=>1])];
+ $out=[];
+ foreach($variants as $label=>$params){
+  $body=timed_upstream('departure_mon',$params,0);$events=val($body,'stopEvents',[]);if(!is_array($events))$events=[];
+  $classes=[];$ids=[];
+  foreach($events as $event){$t=val($event,'transportation',[]);$p=val($t,'product',[]);$c=(string)val($p,'class','unknown');$classes[$c]=($classes[$c]??0)+1;$loc=val($event,'location',[]);$id=(string)val($loc,'id','');if($id!=='')$ids[$id]=true;}
+  $out[$label]=['count'=>count($events),'classes'=>$classes,'locationIds'=>array_slice(array_keys($ids),0,8),'messages'=>val($body,'systemMessages',[])];
+ }
+ echo json_encode(['data'=>$out]);exit;
+}
 if(($_GET['action']??'')==='probe_hurstville_windows'){
  $now=new DateTimeImmutable('now',new DateTimeZone('Australia/Sydney'));
  $out=[];
