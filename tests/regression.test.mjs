@@ -358,3 +358,18 @@ test('Step 5AW service matching rejects ambiguous boarded refreshes',async()=>{
  assert.equal(match(journey(['trip-1']),journey([])),false);
  assert.equal(match(journey([]),journey([])),false);
 });
+
+test('Step 5AX alternative train boarding is QA-only and explicitly confirmed',()=>{
+ const main=fs.readFileSync('src/main.ts','utf8');
+ assert.match(main,/async function confirmDifferentTrain\(\)/);
+ assert.match(main,/if\(!qaRailPilot\|\|state\.onboard\|\|state\.checking/);
+ assert.match(main,/candidate=await getJourney\(selected\.origin,selected\.destination,true\)/);
+ assert.match(main,/qaSameSelectedTrain\(selected,candidate\)/);
+ assert.match(main,/departure>now\+2\*60000\|\|departure<now-90\*60000/);
+ assert.match(main,/window\.confirm\('Did you board this exact train/);
+ assert.match(main,/if\(generation!==journeyGeneration\|\|state\.journey!==selected\)return/);
+ assert.match(main,/journeyGeneration\+\+;state\.journey=candidate;state\.onboard=true/);
+ assert.match(main,/saveActiveTrip\(\);checkAlerts\(\)/);
+ assert.match(main,/qaRailPilot\?'<button id="different-train"/);
+ assert.match(main,/getElementById\('different-train'\)/);
+});
