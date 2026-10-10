@@ -123,6 +123,12 @@ jobs:
           php -r '$v=json_decode(file_get_contents("/tmp/qa-health.json"),true); if(($v["data"]["ok"]??false)!==true || ($v["data"]["configured"]??false)!==true)exit(1);'
           curl --fail --silent --show-error "https://trains.nytnetwork.work/qatest/" -o /dev/null
 
+
+  verify-qa-legacy-journeys:
+    needs: deploy-qa
+    if: always() && needs.deploy-qa.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
       - name: Record QA core journey performance
         shell: bash
         run: |
