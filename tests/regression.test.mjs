@@ -34,7 +34,7 @@ test('overnight journey preserves calendar transition in time calculations',()=>
 test('confirmed boarding only adopts updates for the same service',()=>{
  const main=fs.readFileSync('src/main.ts','utf8');
  assert.match(main,/function adoptJourneyUpdate\(updated\)/);
- assert.match(main,/if\(!sameService\(state\.journey,updated\)\)return false/);
+ assert.match(main,/if\(!qaSameSelectedTrain\(state\.journey,updated\)\)return false/);
  assert.match(main,/state\.onboard=true;saveActiveTrip\(\)/);
  assert.match(main,/const restoredTrip=loadActiveTrip\(\)/);
  assert.match(main,/clearActiveTrip\(\);stopTracking\(\)/);
@@ -77,7 +77,7 @@ test('unboarded departed service advances only to an upcoming journey',()=>{
  assert.match(main,/if\(!state\.onboard\)\{/);
  assert.match(main,/oldDeparted&&!replacementIsUpcoming\)return false/);
  assert.match(main,/oldDeparted&&replacementIsUpcoming&&!sameService\(previous,updated\)/);
- assert.match(main,/if\(!sameService\(state\.journey,updated\)\)return false/);
+ assert.match(main,/if\(!qaSameSelectedTrain\(state\.journey,updated\)\)return false/);
  assert.match(main,/state\.alert='Your previous train has departed/);
 });
 
