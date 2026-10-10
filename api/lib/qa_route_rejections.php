@@ -92,3 +92,15 @@ function qa_rail_chronology_valid(array $route):bool{
  }
  return true;
 }
+
+function qa_window_rejection_counts(array $body,array $from,array $to,int $now):array{
+ $counts=['past'=>0,'beyond_four_hours'=>0,'invalid_connection'=>0,'eligible'=>0];
+ foreach(array_slice(normalized_journeys($body,$from,$to),0,30) as $route){
+  $departure=route_departure_ts($route);
+  if($departure<$now)$counts['past']++;
+  elseif($departure>$now+14400)$counts['beyond_four_hours']++;
+  elseif(!qa_rail_chronology_valid($route))$counts['invalid_connection']++;
+  else $counts['eligible']++;
+ }
+ return $counts;
+}
