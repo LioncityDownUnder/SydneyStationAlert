@@ -349,3 +349,12 @@ test('Production release enables 4-hour rail-only routing and Step 5AX while sep
  assert.match(workflow,/test -f dist\/api\/lib\/qa_route_rejections\.php/);
  assert.match(workflow,/--exclude='\/qatest\/'/);
 });
+
+test('Production release Step 5AX dialog uses real line breaks',()=>{
+ const main=fs.readFileSync('src/main.ts','utf8');
+ const start=main.indexOf("if(!window.confirm('Did you board this exact train?");
+ assert.ok(start>=0);
+ const fragment=main.slice(start,start+235);
+ assert.ok(fragment.includes("'Did you board this exact train?\\n'+detail+'\\n\\nConfirm only"));
+ assert.ok(!fragment.includes("'Did you board this exact train?\\\\n'"));
+});
