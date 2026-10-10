@@ -124,6 +124,29 @@ jobs:
           curl --fail --silent --show-error "https://trains.nytnetwork.work/qatest/" -o /dev/null
 
 
+  verify-qa-browser:
+    needs: deploy-qa
+    if: always() && needs.deploy-qa.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: qa-dist
+          path: qa-site/qatest
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: npm install --no-save playwright@1.56.1
+      - run: npx playwright install --with-deps chromium
+      - name: Verify no-route display and retry in Chromium (mocked API)
+        run: |
+          python3 -m http.server 8765 --directory qa-site > /tmp/qa-browser-server.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
+          sleep 2
+          node scripts/qa-browser.mjs
+
   verify-qa-legacy-journeys:
     needs: deploy-qa
     if: always() && needs.deploy-qa.result == 'success'
