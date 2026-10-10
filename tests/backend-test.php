@@ -184,3 +184,13 @@ assertit(($qaDetails[0]['legs'][1]['kind']??'')==='train','Step 5AE distinguishe
 $qaWalk=['journeys'=>[['legs'=>[['transportation'=>['product'=>['class'=>100],'name'=>'Walk']]]]]];
 $qaWalkDetails=qa_route_rejection_summary($qaWalk,$qaOrigin,$qaDest)['journeyLegDetails'][0]['legs']??[];
 assertit(($qaWalkDetails[0]['kind']??'')==='walk','Step 5AE does not classify walking interchange as non-rail transport');
+
+$baseFilter=['name_origin'=>'222010','name_destination'=>'221110','calcNumberOfTrips'=>22];
+$qaFiltered=qa_rail_filter_params($baseFilter);
+assertit(($qaFiltered['name_origin']??'')==='222010'&&($qaFiltered['name_destination']??'')==='221110','Step 5AF filter preserves station pair');
+assertit(($qaFiltered['excludedMeans']??'')==='checkbox'&&($qaFiltered['exclMOT_5']??0)===1,'Step 5AF filter requests exclusion of bus class');
+assertit(!isset($qaFiltered['exclMOT_1'])&&!isset($qaFiltered['exclMOT_2']),'Step 5AF does not exclude train or metro');
+$comparison=qa_rail_filter_comparison($qaMixed,$qaMixed,$qaOrigin,$qaDest);
+assertit(($comparison['baseline']['summary']['rawJourneys']??0)===1&&($comparison['railFiltered']['summary']['railOnlyNormalized']??-1)===0,'Step 5AF reports counts without falsely accepting mixed fixture');
+assertit(($comparison['railFilterConfirmed']??null)===false,'Step 5AF does not claim that TfNSW applied the filter');
+assertit(!isset($comparison['baseline']['summary']['journeyLegDetails']),'Step 5AF comparison excludes raw per-leg journey evidence');
