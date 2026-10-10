@@ -1,0 +1,31 @@
+name: Release Candidate Cleanup Verification
+
+on:
+  push:
+    branches: [release/qa-cleanup-production-candidate]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  release-checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm install --no-save typescript@5.9.3
+      - name: Typecheck, build and commuter regression suite
+        run: npm run check
+      - name: Check PHP source and fixture tests
+        run: |
+          find api -name '*.php' -print0 | xargs -0 -n1 php -l
+          php tests/backend-test.php
+      - name: Verify no retired diagnostic endpoints in build
+        run: |
+          test ! -e dist/diagnostics.html
+          test ! -e dist/api/diagnostics.php
+          ! find dist -iname '*diagnostic*' | grep .
