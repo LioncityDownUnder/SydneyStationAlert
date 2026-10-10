@@ -52,7 +52,7 @@ test('missed connection recovery remains explicit and guarded',()=>{
 test('core journey fast path includes sixth probe without repeating it serially',()=>{
  const api=fs.readFileSync('api/index.php','utf8');
  assert.match(api,/if\(\$coreOnly&&count\(\$searchTimes\)>=6\)/);
- assert.match(api,/array_slice\(\$searchTimes,0,6\)/);
+ assert.match(api,/array_slice\(\$searchTimes,0,\$qaRailPilot\?7:6\)/);
  assert.match(api,/array_slice\(\$searchTimes,6\)/);
 });
 
