@@ -26,7 +26,9 @@ if(($_GET['action']??'')==='probe_modes'){
 if(($_GET['action']??'')==='probe_exact_stops_alerts'){
  $now=new DateTimeImmutable('now',new DateTimeZone('Australia/Sydney'));
  $out=['stations'=>[],'alerts'=>[]];
- foreach(['Hurstville'=>'222010','Burwood'=>'213010'] as $label=>$id){
+ foreach(['Hurstville'=>'222010','Burwood'=>''] as $label=>$id){
+  if($id===''){foreach(station_search($label) as $candidate){if(stripos((string)val($candidate,'name',''),$label)!==false){$id=(string)val($candidate,'id','');break;}}}
+  if($id===''){$out['stations'][$label]=['error'=>'Station ID not resolved'];continue;}
   $body=timed_upstream('stop_finder',['type_sf'=>'stop','name_sf'=>$id,'anyMaxSizeHitList'=>30,'TfNSWSF'=>'true'],0);
   $locs=val($body,'locations',[]);if(!is_array($locs))$locs=[];
   $stops=[];
