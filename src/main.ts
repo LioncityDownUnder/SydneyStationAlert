@@ -72,8 +72,9 @@ function qaNoRouteAlertDetails(){
  const assessment=state.noRouteAlerts?.sydneytrains?.assessment;
  if(!assessment)return '<p class="notice">Disruption information is unavailable. This does not mean trains are cancelled.</p>';
  const active=(assessment.matchingAlerts||[]).filter(a=>a.periodStatus==='WITHIN_ACTIVE_PERIOD');
+ const pilotNotice=qaRailPilot&&state.noRoute&&!state.noRouteLimited&&active.length?'<div class="alarm" role="status">⚠ TfNSW has an active T4 service notice. Trackwork may affect travel; this does not confirm cancellation of your selected train.</div>':'';
  const details=active.slice(0,3).map(a=>'<details class="notice"><summary>'+esc(a.title||'TfNSW service notice')+'</summary><p>'+esc(a.description||'')+'</p><p>Contextual notice; impact on your selected journey is unverified.</p></details>').join('');
- return '<section aria-label="Service disruption information"><h3>Relevant TfNSW service notices</h3>'+(details||'<p class="notice">No matching active alert found. Train availability remains unconfirmed.</p>')+'<p class="muted">Replacement buses are informational only; their departures are not verified here.</p></section>';
+ return '<section aria-label="Service disruption information">'+pilotNotice+'<h3>Relevant TfNSW service notices</h3>'+(details||'<p class="notice">No matching active alert found. Train availability remains unconfirmed.</p>')+'<p class="muted">Replacement buses are informational only; their departures are not verified here.</p></section>';
 }
 async function loadQaNoRouteAlerts(generation){
  if(!isQaEnvironment||state.origin?.id!=='222010')return;
