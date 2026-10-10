@@ -8,6 +8,49 @@ require __DIR__.'/lib/core.php';
 if(!str_starts_with((string)($_SERVER['SCRIPT_NAME']??''),'/qatest/api/')){http_response_code(404);echo json_encode(['error'=>['code'=>'NOT_FOUND','message'=>'QA diagnostics only']]);exit;}
 
 if(($_SERVER['REQUEST_METHOD']??'')!=='GET')fail('BAD_REQUEST','GET only',405);
+if(($_GET['action']??'')==='probe_hurstville_identity_alerts'){
+ require_once __DIR__.'/lib/qa_gtfs_alerts.php';
+ $now=new DateTimeImmutable('now',new DateTimeZone('Australia/Sydney'));$matches=station_search('Hurstville');
+ $stations=[];$seen=[];$started=microtime(true);
+ foreach($matches as $candidate){
+  if(stripos((string)val($candidate,'name',''),'Hurstville')===false)continue;
+  $id=(string)val($candidate,'id','');
+  if($id===''||isset($seen[$id]))continue;
+  $seen[$id]=true;$stations[]=['id'=>$id,'name'=>(string)val($candidate,'name','')];
+  if(count($stations)>=6)break;
+ }
+ if(!isset($seen['222010']))$stations[]=['id'=>'222010','name'=>'Hurstville (current configured ID)'];
+ $results=[];
+ foreach($stations as $station){
+  $params=['mode'=>'direct','type_dm'=>'stop','name_dm'=>$station['id'],
+   'itdDate'=>$now->format('Ymd'),'itdTime'=>$now->format('Hi'),'limit'=>100,'TfNSWDM'=>'true',
+   'excludedMeans'=>'checkbox','exclMOT_4'=>1,'exclMOT_5'=>1,'exclMOT_7'=>1,'exclMOT_9'=>1,'exclMOT_11'=>1];
+  $body=timed_upstream('departure_mon',$params,0);$events=val($body,'stopEvents',[]);
+  $classes=[];$railWithinFourHours=0;
+  foreach(is_array($events)?$events:[] as $event){
+   $transport=val($event,'transportation',[]);$class=(string)val(val($transport,'product',[]),'class','unknown');
+   $classes[$class]=($classes[$class]??0)+1;
+   if(!in_array(mode($transport),['train','metro'],true))continue;
+   $ts=iso_ts(val($event,'departureTimeEstimated'))??iso_ts(val($event,'departureTimePlanned'));
+   if($ts!==null&&$ts>=$now->getTimestamp()&&$ts<=$now->getTimestamp()+14400)$railWithinFourHours++;
+  }
+  $results[]=['id'=>$station['id'],'name'=>$station['name'],'upstreamResponseReceived'=>is_array($body),
+   'returnedCount'=>is_array($events)?count($events):0,'classes'=>$classes,'railWithinFourHours'=>$railWithinFourHours];
+ }
+ $alerts=[];$key=source_key();
+ foreach(['sydneytrains','metro'] as $feed){
+  $handle=curl_init('https://api.transport.nsw.gov.au/v2/gtfs/alerts/'.$feed);
+  curl_setopt_array($handle,[CURLOPT_RETURNTRANSFER=>true,CURLOPT_TIMEOUT=>15,CURLOPT_CONNECTTIMEOUT=>3,CURLOPT_FOLLOWLOCATION=>false,
+   CURLOPT_HTTPHEADER=>['Authorization: apikey '.$key,'Accept: application/x-protobuf']]);
+  $raw=curl_exec($handle);$status=(int)curl_getinfo($handle,CURLINFO_RESPONSE_CODE);curl_close($handle);
+  $assessment=($status===200&&is_string($raw))?qa_gtfs_active_alerts($raw,time(),'222010','Hurstville','T4'):null;
+  $alerts[$feed]=['httpStatus'=>$status,'matchingAlertCount'=>is_array($assessment)?count(val($assessment,'matchingAlerts',[])):null,
+   'activeMatchingAlertCount'=>is_array($assessment)?count(array_filter(val($assessment,'matchingAlerts',[]),static fn($a)=>val($a,'periodStatus')==='WITHIN_ACTIVE_PERIOD')):null];
+ }
+ echo json_encode(['data'=>['mode'=>'QA_HURSTVILLE_IDENTITY_ALERT_CHECK','configuredStationId'=>'222010',
+  'stationCandidates'=>$results,'alerts'=>$alerts,'elapsedMs'=>(int)round((microtime(true)-$started)*1000),
+  'note'=>'Station matching and alerts are diagnostic evidence only. No departure or alert result alone proves service cancellation. QA only; routing unchanged.']],JSON_INVALID_UTF8_SUBSTITUTE|JSON_PARTIAL_OUTPUT_ON_ERROR);exit;
+}
 if(($_GET['action']??'')==='probe_hurstville_rail_departure_filters'){
  $now=new DateTimeImmutable('now',new DateTimeZone('Australia/Sydney'));$start=$now->getTimestamp();
  $base=['type_dm'=>'stop','name_dm'=>'222010','mode'=>'direct','depArrMacro'=>'dep',
