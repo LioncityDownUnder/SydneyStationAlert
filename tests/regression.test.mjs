@@ -378,3 +378,12 @@ test('Step 5AX selection lists verified QA rail options and retains explicit boa
  assert.match(main,/data-board-option/);
  assert.match(main,/cancel-boarding-choices/);
 });
+
+test('Step 5AX confirmation prompt uses actual line breaks',()=>{
+ const main=fs.readFileSync('src/main.ts','utf8');
+ const start=main.indexOf("if(!window.confirm('Did you board this exact train?");
+ assert.ok(start>=0);
+ const fragment=main.slice(start,start+230);
+ assert.ok(fragment.includes("'Did you board this exact train?\\n'+detail+'\\n\\nConfirm only"));
+ assert.ok(!fragment.includes("'Did you board this exact train?\\\\n'"));
+});

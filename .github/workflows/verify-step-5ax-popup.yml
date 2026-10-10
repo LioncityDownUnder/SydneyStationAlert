@@ -1,0 +1,21 @@
+name: Step 5AX Popup Fix Verification
+
+on:
+  push:
+    branches: [fix/step-5ax-confirmation-newlines]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm install --no-save typescript@5.9.3
+      - run: npm run check
+      - run: php tests/backend-test.php
