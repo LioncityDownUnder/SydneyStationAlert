@@ -191,6 +191,24 @@ function transferDisplay(j,s){
  const waitLabel=Number.isFinite(wait)&&wait>=0?' · '+wait+' min to change':'';
  return `<div class="transfer-detail"><small><span class="transfer-label">ARRIVE · ${esc(displayLineName(arriving.line))}</span>${esc(format(arrival,arrivalPlatform))}</small><small><span class="transfer-label">CONNECT · ${esc(displayLineName(connecting.line))}</span>${esc(format(departure,departurePlatform))}</small><span class="transfer">↗ Change trains here${esc(waitLabel)}</span></div>`;
 }
+function qaOnwardConnectionIsValid(onward,transfer,prior,recoveryRequestedAt){
+ if(!qaRailPilot)return true;
+ const first=onward?.legs?.[0];
+ if(!first||!Array.isArray(onward.legs)||!onward.legs.length)return false;
+ if(String(first.origin?.id||'')!==String(transfer?.id||''))return false;
+ const priorArrival=Date.parse(prior[prior.length-1]?.arrival||prior[prior.length-1]?.destination?.arrival||'');
+ if(!Number.isFinite(priorArrival))return false;
+ let previousArrival=priorArrival;
+ for(const leg of onward.legs){
+  if(leg.mode!=='train'&&leg.mode!=='metro')return false;
+  const departure=Date.parse(leg.departure||leg.origin?.departure||'');
+  const arrival=Date.parse(leg.arrival||leg.destination?.arrival||'');
+  if(!Number.isFinite(departure)||!Number.isFinite(arrival)||arrival<=departure||departure<previousArrival+2*60000)return false;
+  previousArrival=arrival;
+ }
+ const firstDeparture=Date.parse(first.departure||first.origin?.departure||'');
+ return firstDeparture>=recoveryRequestedAt;
+}
 async function recoverMissedConnection(legIndex){
  if(!state.onboard||state.checking||!state.journey||legIndex<1)return;
  const original=state.journey,prior=original.legs.slice(0,legIndex),transfer=original.legs[legIndex]?.origin;
@@ -201,6 +219,7 @@ async function recoverMissedConnection(legIndex){
   if(generation!==journeyGeneration||state.journey!==original)return;
   const departure=Date.parse(onward.legs?.[0]?.departure||onward.legs?.[0]?.origin?.departure||'');
   if(!Number.isFinite(departure)||departure<recoveryRequestedAt)throw new Error('No connection departing after your recovery request was verified. Please retry shortly.');
+  if(!qaOnwardConnectionIsValid(onward,transfer,prior,recoveryRequestedAt))throw new Error('The proposed interchange connection could not be verified. Keep your existing journey and check TfNSW Trip Planner.');
   const legs=[...prior,...onward.legs];
   const stops=[];for(const leg of legs)for(const station of leg.stops||[leg.origin,leg.destination]){if(!station)continue;const last=stops[stops.length-1];if(last&&(last.id===station.id||last.name===station.name)){stops[stops.length-1]={...last,...station,arrival:last.arrival||station.arrival,departure:station.departure||last.departure};}else stops.push(station);}
   const transfers=[];for(let i=1;i<legs.length;i++){const previous=legs[i-1].destination,current=legs[i].origin;transfers.push({id:current.id,name:current.name,mode:current.mode,lat:current.lat,lon:current.lon,arrivalPlatform:previous.platform,departurePlatform:current.platform});}
