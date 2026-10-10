@@ -8,6 +8,34 @@ require __DIR__.'/lib/core.php';
 if(!str_starts_with((string)($_SERVER['SCRIPT_NAME']??''),'/qatest/api/')){http_response_code(404);echo json_encode(['error'=>['code'=>'NOT_FOUND','message'=>'QA diagnostics only']]);exit;}
 
 if(($_SERVER['REQUEST_METHOD']??'')!=='GET')fail('BAD_REQUEST','GET only',405);
+if(($_GET['action']??'')==='probe_hurstville_four_hour_departures'){
+ $now=new DateTimeImmutable('now',new DateTimeZone('Australia/Sydney'));$start=$now->getTimestamp();$end=$start+14400;
+ $counts=['train'=>0,'metro'=>0];$probes=[];$started=microtime(true);
+ foreach([0,120] as $offset){
+  $at=$now->modify('+'.$offset.' minutes');
+  $params=['mode'=>'direct','type_dm'=>'stop','name_dm'=>'222010','depArrMacro'=>'dep',
+   'itdDate'=>$at->format('Ymd'),'itdTime'=>$at->format('Hi'),'limit'=>100,'TfNSWDM'=>'true'];
+  $body=timed_upstream('departure_mon',$params,0);
+  $events=val($body,'stopEvents',[]);
+  $sampleCount=is_array($events)?count($events):0;$eligible=0;$past=0;$future=0;$nonRail=0;$missingTime=0;
+  foreach(is_array($events)?$events:[] as $event){
+   $kind=mode(val($event,'transportation',[]));
+   if($kind!=='train'&&$kind!=='metro'){$nonRail++;continue;}
+   $timestamp=iso_ts(val($event,'departureTimeEstimated'))??iso_ts(val($event,'departureTimePlanned'));
+   if($timestamp===null){$missingTime++;continue;}
+   if($timestamp<$start){$past++;continue;}
+   if($timestamp>$end){$future++;continue;}
+   $eligible++;$counts[$kind]++;
+  }
+  $probes[]=['offsetMinutes'=>$offset,'upstreamResponseReceived'=>is_array($body),
+   'rawEvents'=>$sampleCount,'trainMetroWithinFourHours'=>$eligible,'past'=>$past,
+   'laterThanFourHours'=>$future,'nonRail'=>$nonRail,'missingTime'=>$missingTime];
+ }
+ echo json_encode(['data'=>['mode'=>'QA_HURSTVILLE_FOUR_HOUR_DEPARTURE_BOARD',
+  'station'=>'Hurstville','requestCount'=>2,'elapsedMs'=>(int)round((microtime(true)-$started)*1000),
+  'fourHourRailEventsSampled'=>array_sum($counts),'modes'=>$counts,'probes'=>$probes,
+  'note'=>'Counts are sampled departure events and may duplicate trains across the two probes. A departure does not prove a route to any selected destination or an operating service. Commuter routing and production unchanged.']],JSON_INVALID_UTF8_SUBSTITUTE);exit;
+}
 if(($_GET['action']??'')==='probe_four_hour_search_comparison'){
  require_once __DIR__.'/lib/qa_route_rejections.php';
  $now=new DateTimeImmutable('now',new DateTimeZone('Australia/Sydney'));
