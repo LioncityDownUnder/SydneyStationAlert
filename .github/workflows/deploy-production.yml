@@ -34,6 +34,16 @@ jobs:
       - name: PHP fixture tests
         run: php tests/backend-test.php
 
+      - name: Remove QA-only administrative files from production artifact
+        run: |
+          rm -f dist/api/gtfs-update.php dist/api/gtfs-index.php
+          rm -f dist/api/lib/qa_route_rejections.php
+          test ! -e dist/api/gtfs-update.php
+          test ! -e dist/api/gtfs-index.php
+          test ! -e dist/api/lib/qa_route_rejections.php
+          test ! -e dist/api/diagnostics.php
+          test ! -e dist/diagnostics.html
+
       - name: Upload production build
         uses: actions/upload-artifact@v4
         with:
@@ -100,6 +110,7 @@ jobs:
           NAMECHEAP_DEPLOY_PATH: ${{ secrets.NAMECHEAP_DEPLOY_PATH }}
         run: |
           sshpass -e rsync -az --delete \
+            --exclude='/qatest/' \
             --exclude='api/config.local.php' \
             --exclude='api/cache/' \
             --exclude='*.log' \
