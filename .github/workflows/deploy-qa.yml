@@ -238,6 +238,12 @@ jobs:
         id: verify
         continue-on-error: true
         run: python3 scripts/qa-smoke-light.py
+      - name: Step 5AG bounded four-route rail-filter diagnostic smoke
+        run: |
+          mkdir -p qa-verification
+          curl --fail --silent --show-error --max-time 30 "https://trains.nytnetwork.work/qatest/api/diagnostics.php?action=probe_rail_search_four_routes" -o qa-verification/step5ag-four-route-filter.json
+          jq -e '.data.mode=="QA_FILTERED_DIAGNOSTIC_ONLY" and .data.requestCount==4 and (.data.routes | length)==4 and (all(.[]; .status=="RAIL_CANDIDATE_UNVERIFIED" or .status=="NO_RAIL_CANDIDATE_IN_RESPONSE" or .status=="UPSTREAM_UNAVAILABLE"))' qa-verification/step5ag-four-route-filter.json >/dev/null
+          jq -c '.data | {elapsedMs, requestCount, routes: (.routes | with_entries(.value |= {status,rawJourneys,railOnlyNormalized}))}' qa-verification/step5ag-four-route-filter.json
       - name: Optional Step 5AD route rejection evidence (manual only)
         if: github.event_name == 'workflow_dispatch'
         continue-on-error: true
