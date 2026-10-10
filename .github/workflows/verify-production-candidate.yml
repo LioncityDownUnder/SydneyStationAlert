@@ -1,0 +1,44 @@
+name: Production Release Candidate Verification
+
+on:
+  push:
+    branches: [release/production-readiness-v1]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install TypeScript
+        run: npm install --no-save typescript@5.9.3
+      - name: Build and commuter regression checks
+        run: npm run check
+      - name: Backend regression checks
+        run: |
+          find api -name '*.php' -print0 | xargs -0 -n1 php -l
+          php tests/backend-test.php
+      - name: Simulate protected production artifact
+        run: |
+          rm -f dist/api/gtfs-update.php dist/api/gtfs-index.php
+          rm -f dist/api/lib/qa_route_rejections.php
+          test ! -e dist/api/diagnostics.php
+          test ! -e dist/diagnostics.html
+          test ! -e dist/api/gtfs-update.php
+          test ! -e dist/api/gtfs-index.php
+          test ! -e dist/api/lib/qa_route_rejections.php
+          test -f dist/api/index.php
+          test -f dist/api/lib/core.php
+      - name: Assert production deployment safeguards
+        run: |
+          grep -F -- "--exclude='/qatest/'" .github/workflows/deploy-production.yml
+          grep -F -- "--exclude='api/config.local.php'" .github/workflows/deploy-production.yml
+          grep -F -- "--exclude='api/cache/'" .github/workflows/deploy-production.yml
+          grep -F -- "rm -f dist/api/gtfs-update.php" .github/workflows/deploy-production.yml
