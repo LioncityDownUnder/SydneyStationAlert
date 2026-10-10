@@ -56,3 +56,12 @@ function qa_rail_filter_comparison(?array $baseline,?array $filtered,array $orig
   'railFilterConfirmed'=>false,
   'note'=>'Request excludes non-rail product classes, but actual provider filter compliance and service availability are not independently verified.'];
 }
+
+/** Step 5AG: result metadata only, never returns raw journey or changes commuter routing. */
+function qa_rail_search_result(?array $body,array $origin,array $destination):array{
+ if($body===null)return ['upstreamResponseReceived'=>false,'railOnlyNormalized'=>0,'rawJourneys'=>0,'reasons'=>[],'status'=>'UPSTREAM_UNAVAILABLE'];
+ $s=qa_route_rejection_summary($body,$origin,$destination);
+ return ['upstreamResponseReceived'=>true,'rawJourneys'=>$s['rawJourneys'],
+  'railOnlyNormalized'=>$s['railOnlyNormalized'],'reasons'=>$s['reasons'],
+  'status'=>$s['railOnlyNormalized']>0?'RAIL_CANDIDATE_UNVERIFIED':'NO_RAIL_CANDIDATE_IN_RESPONSE'];
+}
