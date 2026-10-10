@@ -23,6 +23,18 @@ if(($_GET['action']??'')==='probe_modes'){
  }
  echo json_encode(['data'=>$out],JSON_INVALID_UTF8_SUBSTITUTE);exit;
 }
+if(($_GET['action']??'')==='probe_active_alerts'){
+ require_once __DIR__.'/lib/qa_gtfs_alerts.php';
+ $now=time();$key=source_key();$out=[];
+ foreach(['sydneytrains','metro'] as $feed){
+  $h=curl_init('https://api.transport.nsw.gov.au/v2/gtfs/alerts/'.$feed);
+  curl_setopt_array($h,[CURLOPT_RETURNTRANSFER=>true,CURLOPT_TIMEOUT=>15,CURLOPT_CONNECTTIMEOUT=>3,CURLOPT_FOLLOWLOCATION=>false,CURLOPT_HTTPHEADER=>['Authorization: apikey '.$key,'Accept: application/x-protobuf']]);
+  $raw=curl_exec($h);$status=(int)curl_getinfo($h,CURLINFO_RESPONSE_CODE);curl_close($h);
+  $out[$feed]=['httpStatus'=>$status];
+  if($status===200&&is_string($raw))$out[$feed]['assessment']=qa_gtfs_active_alerts($raw,$now,'222010','Hurstville','T4');
+ }
+ echo json_encode(['data'=>$out],JSON_INVALID_UTF8_SUBSTITUTE|JSON_PARTIAL_OUTPUT_ON_ERROR);exit;
+}
 if(($_GET['action']??'')==='probe_decoded_alerts'){
  require_once __DIR__.'/lib/qa_gtfs_alerts.php';
  $key=source_key();$results=[];
