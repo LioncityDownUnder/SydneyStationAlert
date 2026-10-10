@@ -8,6 +8,43 @@ require __DIR__.'/lib/core.php';
 if(!str_starts_with((string)($_SERVER['SCRIPT_NAME']??''),'/qatest/api/')){http_response_code(404);echo json_encode(['error'=>['code'=>'NOT_FOUND','message'=>'QA diagnostics only']]);exit;}
 
 if(($_SERVER['REQUEST_METHOD']??'')!=='GET')fail('BAD_REQUEST','GET only',405);
+if(($_GET['action']??'')==='probe_four_hour_search_comparison'){
+ require_once __DIR__.'/lib/qa_route_rejections.php';
+ $now=new DateTimeImmutable('now',new DateTimeZone('Australia/Sydney'));
+ $pairs=[['Hurstville','Padstow'],['Hurstville','Casula'],['Hurstville','Kogarah'],['Chatswood','Gadigal']];
+ $offsets=[0,60,180];$params=[];$meta=[];
+ foreach($pairs as [$fromName,$toName]){
+  $resolved=[];
+  foreach([$fromName,$toName] as $name){
+   $match=null;
+   foreach(station_search($name) as $candidate)if(strcasecmp((string)val($candidate,'name',''),$name)===0){$match=$candidate;break;}
+   if(!$match)fail('STATION_LOOKUP_FAILED','Unable to resolve fixed QA station',503);
+   $resolved[]=$match;
+  }
+  [$from,$to]=$resolved;
+  foreach($offsets as $offset){
+   $probe=$now->modify('+'.$offset.' minutes');
+   $params[]=qa_rail_filter_params(['depArrMacro'=>'dep','itdDate'=>$probe->format('Ymd'),'itdTime'=>$probe->format('Hi'),
+    'type_origin'=>'stop','name_origin'=>$from['id'],'type_destination'=>'stop','name_destination'=>$to['id'],
+    'calcNumberOfTrips'=>22,'TfNSWTR'=>'true']);
+   $meta[]=['label'=>$fromName.' to '.$toName,'from'=>$from,'to'=>$to,'offsetMinutes'=>$offset];
+  }
+ }
+ $started=microtime(true);$bodies=timed_parallel_trip($params,0);$routes=[];
+ foreach($meta as $i=>$pair){
+  $label=$pair['label'];$body=$bodies[$i]??null;
+  if(!isset($routes[$label]))$routes[$label]=['probes'=>[],'anyEligible'=>false];
+  $counts=is_array($body)?qa_window_rejection_counts($body,$pair['from'],$pair['to'],$now->getTimestamp()):null;
+  $routes[$label]['probes'][]=['offsetMinutes'=>$pair['offsetMinutes'],'upstreamResponseReceived'=>is_array($body),
+   'railCandidateCount'=>is_array($body)?count(normalized_journeys($body,$pair['from'],$pair['to'])):null,
+   'fourHourRejections'=>$counts];
+  if(($counts['eligible']??0)>0)$routes[$label]['anyEligible']=true;
+ }
+ echo json_encode(['data'=>['mode'=>'QA_FOUR_HOUR_PROBE_COMPARISON','requestCount'=>count($params),
+  'elapsedMs'=>(int)round((microtime(true)-$started)*1000),'offsetMinutes'=>$offsets,
+  'note'=>'Fixed QA-only query comparison. Missing candidates do not prove that no trains operate. Pilot commuter routing is unchanged.',
+  'routes'=>$routes]],JSON_INVALID_UTF8_SUBSTITUTE|JSON_PARTIAL_OUTPUT_ON_ERROR);exit;
+}
 if(($_GET['action']??'')==='probe_rail_search_four_routes'){
  require_once __DIR__.'/lib/qa_route_rejections.php';
  $now=new DateTimeImmutable('now',new DateTimeZone('Australia/Sydney'));
