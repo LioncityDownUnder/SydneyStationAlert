@@ -204,3 +204,13 @@ assertit(($qaMissingResult['status']??'')==='UPSTREAM_UNAVAILABLE','Step 5AG dis
 $qaRailFixture=json_decode(file_get_contents(__DIR__.'/fixtures/success.json'),true);
 $qaGoodResult=qa_rail_search_result($qaRailFixture,$qaOrigin,$qaDest);
 assertit(($qaGoodResult['status']??'')==='RAIL_CANDIDATE_UNVERIFIED'&&$qaGoodResult['railOnlyNormalized']>0,'Step 5AG keeps valid train-only candidate explicitly unverified');
+
+$windowOrigin=['id'=>'101','name'=>'Central','lat'=>-33.883,'lon'=>151.206,'mode'=>'train'];
+$windowDest=['id'=>'103','name'=>'Town Hall','lat'=>-33.873,'lon'=>151.207,'mode'=>'train'];
+$windowRaw=json_decode(file_get_contents(__DIR__.'/fixtures/success.json'),true);
+$baseTime=strtotime('2026-10-07T14:00:00+11:00');
+$windowRoute=qa_rail_route_in_window($windowRaw,$windowOrigin,$windowDest,$baseTime,$baseTime+14400);
+assertit($windowRoute!==null,'Step 5AJ accepts chronological train journey within four hours');
+assertit(qa_rail_route_in_window($windowRaw,$windowOrigin,$windowDest,$baseTime-18000,$baseTime-3600)===null,'Step 5AJ rejects departures more than four hours ahead');
+$invalidTimeline=['legs'=>[['mode'=>'train','departure'=>'2026-10-07T14:00:00+11:00','arrival'=>'2026-10-07T14:10:00+11:00'],['mode'=>'train','departure'=>'2026-10-07T14:09:00+11:00','arrival'=>'2026-10-07T14:20:00+11:00']]];
+assertit(!qa_rail_chronology_valid($invalidTimeline),'Step 5AJ rejects impossible one-minute interchange');
