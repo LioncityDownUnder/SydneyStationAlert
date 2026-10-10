@@ -55,6 +55,8 @@ try:
     check("Step 5K filtered and unfiltered probes",all(k in probe and isinstance(probe[k].get("count"),int) for k in ("filtered","unfiltered")),str({k:probe.get(k,{}).get("count") for k in ("filtered","unfiltered")}))
     hierarchy=get("probe_stop_hierarchy")
     print("STEP 5T STOP HIERARCHY: "+json.dumps(hierarchy),flush=True)
+    with open(OUT+"/step5t-stop-hierarchy.json","w") as f:json.dump(hierarchy,f,indent=2)
+    check("Step 5T hierarchy results",all(k in hierarchy for k in ("Hurstville","Burwood")),str(list(hierarchy)))
     exact=get("probe_exact_stops_alerts")
     with open(OUT+"/step5s-exact-stops-alerts.json","w") as f:json.dump(exact,f,indent=2)
     print("STEP 5S EXACT STOPS ALERTS: "+json.dumps(exact,ensure_ascii=False),flush=True)
