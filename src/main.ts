@@ -24,7 +24,30 @@ function clearActiveTrip(){try{localStorage.removeItem(ACTIVE_TRIP_KEY);}catch{}
 function loadActiveTrip(){try{const raw=localStorage.getItem(ACTIVE_TRIP_KEY);if(!raw)return null;const p=JSON.parse(raw);if(!p||p.version!==1||!p.journey||!Array.isArray(p.journey.legs)||!Array.isArray(p.journey.stops)||Number(p.expiresAt)<=Date.now()){clearActiveTrip();return null;}return p.journey;}catch{clearActiveTrip();return null;}}
 function sameService(a,b){if(!a||!b||!Array.isArray(a.legs)||!Array.isArray(b.legs)||a.legs.length!==b.legs.length)return false;return a.legs.every((leg,i)=>{const other=b.legs[i];const ids=(leg.tripIds||[]).map(x=>String(x).toLowerCase());const otherIds=(other?.tripIds||[]).map(x=>String(x).toLowerCase());if(ids.length&&otherIds.length)return ids.some(id=>otherIds.includes(id));return leg.line===other?.line&&leg.origin?.id===other?.origin?.id&&leg.destination?.id===other?.destination?.id;});}
 function firstDepartureTime(j){return Date.parse(j?.legs?.[0]?.departure||j?.legs?.[0]?.origin?.departure||'');}
+function qaSameSelectedTrain(a,b){
+ if(!qaRailPilot)return sameService(a,b);
+ if(!a||!b||!Array.isArray(a.legs)||!Array.isArray(b.legs)||a.legs.length!==b.legs.length)return false;
+ return a.legs.every((leg,i)=>{
+  const other=b.legs[i];if(!other||leg.origin?.id!==other.origin?.id||leg.destination?.id!==other.destination?.id)return false;
+  const ids=(leg.tripIds||[]).map(x=>String(x).toLowerCase()),otherIds=(other.tripIds||[]).map(x=>String(x).toLowerCase());
+  if(ids.length&&otherIds.length)return ids.some(id=>otherIds.includes(id));
+  const aTime=Date.parse(leg.departure||leg.origin?.departure||''),bTime=Date.parse(other.departure||other.origin?.departure||'');
+  return leg.line===other.line&&Number.isFinite(aTime)&&Number.isFinite(bTime)&&Math.abs(aTime-bTime)<=3*60000;
+ });
+}
+
 function adoptJourneyUpdate(updated){
+ if(qaRailPilot&&state.journey&&!qaSameSelectedTrain(state.journey,updated)){
+  if(state.onboard){
+   state.message='The latest search returned a different train. Your confirmed boarded service is retained; live details for that service could not be verified.';
+   return false;
+  }
+  const departure=firstDepartureTime(state.journey);
+  if(!Number.isFinite(departure)||departure>=Date.now()-60000){
+   state.message='The latest search returned a different train. Your selected departure is retained until it has departed; use New journey to select another service.';
+   return false;
+  }
+ }
  if(!state.onboard){
   const previous=state.journey;
   const oldDeparture=firstDepartureTime(previous),newDeparture=firstDepartureTime(updated);
@@ -39,7 +62,7 @@ function adoptJourneyUpdate(updated){
   }
   return true;
  }
- if(!sameService(state.journey,updated))return false;
+ if(!qaSameSelectedTrain(state.journey,updated))return false;
  state.journey=updated;saveActiveTrip();updateDelayConnectionWarning();void suggestOnwardConnection();return true;
 }
 
@@ -139,7 +162,7 @@ function pickStation(field,index){const chosen=state.searchResults[index];if(!ch
 function syncButton(){const button=document.getElementById('set');if(button)button.disabled=!state.origin||!state.destination||state.origin.id===state.destination.id||state.busy;}
 async function locate(){state.locating=true;state.message='';state.noRoute=false;setup();if(!navigator.geolocation){state.locating=false;state.manual=true;state.message='Location is not available in this browser. Choose your boarding station manually.';return setup();}navigator.geolocation.getCurrentPosition(async p=>{try{state.location={lat:p.coords.latitude,lon:p.coords.longitude};const stations=await nearbyStations(state.location);const nearest=nearestStation(stations,state.location);state.locating=false;if(nearest){state.origin=nearest;state.detected=true;state.manual=false;state.message='';}else{state.manual=true;state.message='We could not find a supported train or metro station nearby. Choose your boarding station manually.';}}catch{state.locating=false;state.manual=true;state.message='We could not check nearby stations just now. You can still choose your boarding station manually.';}setup();},()=>{state.locating=false;state.manual=true;state.message='Location permission was not available. Choose your boarding station manually.';setup();},GEO.options);}
 function renderJourneyStable(){const x=window.scrollX,y=window.scrollY;renderJourney();requestAnimationFrame(()=>window.scrollTo(x,y));}
-async function enrichJourney(generation){if(!state.journey)return;state.enriching=true;renderJourneyStable();const statusTimer=window.setTimeout(()=>{if(generation===journeyGeneration&&state.enriching){state.enriching=false;renderJourneyStable();}},5000);try{const updated=await getJourney(state.journey.origin,state.journey.destination,qaRailPilot);if(generation!==journeyGeneration||!state.journey)return;adoptJourneyUpdate(updated);state.lastChecked=new Date();state.message='';checkAlerts();}catch{}finally{clearTimeout(statusTimer);if(generation===journeyGeneration){state.enriching=false;renderJourneyStable();}}}
+async function enrichJourney(generation){if(!state.journey)return;state.enriching=true;renderJourneyStable();const statusTimer=window.setTimeout(()=>{if(generation===journeyGeneration&&state.enriching){state.enriching=false;renderJourneyStable();}},5000);try{const updated=await getJourney(state.journey.origin,state.journey.destination,qaRailPilot);if(generation!==journeyGeneration||!state.journey)return;const adopted=adoptJourneyUpdate(updated);state.lastChecked=new Date();if(adopted)state.message='';checkAlerts();}catch{}finally{clearTimeout(statusTimer);if(generation===journeyGeneration){state.enriching=false;renderJourneyStable();}}}
 async function setJourney(){stopQaRecoveryWatch();if(!state.origin||!state.destination||state.origin.id===state.destination.id)return;const generation=++journeyGeneration;state.busy=true;state.enriching=false;state.message='';state.noRoute=false;state.noRouteLimited=false;state.noRouteAlerts=null;state.noRouteAlertsLoading=false;setup();try{const j=await getJourney(state.origin,state.destination,true);if(generation!==journeyGeneration)return;state.journey=j;state.suggestedConnection=null;state.lastSuggestionCheck=0;state.onboard=false;clearActiveTrip();state.busy=false;state.paused=false;state.lastChecked=new Date();state.alert='';fired.clear();startTracking();startPolling();renderJourney();void enrichJourney(generation);}catch(e){if(generation!==journeyGeneration)return;state.busy=false;state.enriching=false;state.journey=null;state.noRoute=e instanceof ApiRequestError&&(e.code==='NO_ROUTE'||e.code==='SEARCH_TIME_LIMIT');state.noRouteLimited=e instanceof ApiRequestError&&e.code==='SEARCH_TIME_LIMIT';state.message=e.message;setup();if(state.noRoute){void loadQaNoRouteAlerts(generation);startQaRecoveryWatch();}}}
 function stopTracking(){if(watchId!==null&&navigator.geolocation)navigator.geolocation.clearWatch(watchId);watchId=null;clearInterval(pollId);pollId=undefined;}
 function startTracking(){if(watchId!==null||!navigator.geolocation||state.paused)return;try{watchId=navigator.geolocation.watchPosition(p=>{state.location={lat:p.coords.latitude,lon:p.coords.longitude};checkAlerts();renderJourneyStable();},()=>{},{...GEO.options,maximumAge:20000});}catch{}}
