@@ -208,10 +208,25 @@ test('Step 5AH opt-in filtered initial journey search is QA-only',()=>{
 test('Step 5AI QA pilot rejects departed first-leg services and labels overnight departures',()=>{
  const backend=fs.readFileSync('api/index.php','utf8');
  const main=fs.readFileSync('src/main.ts','utf8');
- assert.match(backend,/\$qaRailPilot\?earliest_future_route\(\$body,\$originSeed,\$destinationSeed,\$now->getTimestamp\(\)\)/);
+ assert.match(backend,/\$qaRailPilot\?qa_rail_route_in_window\(\$body,\$originSeed,\$destinationSeed,\$now->getTimestamp\(\),\$qaRailLatestDeparture\)/);
  assert.match(backend,/if\(\$qaRailPilot&&\$route&&route_departure_ts\(\$route\)<\$now->getTimestamp\(\)\)\$route=null/);
  assert.match(main,/function sydneyDayLabel\(value,now=new Date\(\)\)/);
  assert.match(main,/timeZone:'Australia\/Sydney'/);
  assert.match(main,/return 'Tomorrow, '/);
  assert.match(main,/I boarded the \$\{esc\(datedTrainTime\(/);
+});
+
+test('Step 5AJ QA pilot applies four-hour window, strict leg times and official travel links',()=>{
+ const api=fs.readFileSync('api/index.php','utf8');
+ const qa=fs.readFileSync('api/lib/qa_route_rejections.php','utf8');
+ const ui=fs.readFileSync('src/main.ts','utf8');
+ assert.match(api,/\$qaRailLatestDeparture=\$qaRailPilot\?\$now->getTimestamp\(\)\+4\*3600/);
+ assert.match(api,/\$fastProbes=array_slice\(\$searchTimes,0,\$qaRailPilot\?7:6\)/);
+ assert.match(api,/if\(!\$route&&!\$qaRailPilot\)/);
+ assert.match(api,/No train-only journey departing .*in the next 4 hours/);
+ assert.match(qa,/function qa_rail_chronology_valid\(array \$route\):bool/);
+ assert.match(qa,/\$previousArrival\+120/);
+ assert.match(ui,/function qaRailPilotTravelLinks\(\)/);
+ assert.match(ui,/transportnsw\.info\/alerts/);
+ assert.match(ui,/transportnsw\.info\/trip/);
 });
