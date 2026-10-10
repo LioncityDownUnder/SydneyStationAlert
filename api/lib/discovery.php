@@ -6,7 +6,7 @@ function qa_discover(array $from,array $to,DateTimeImmutable $now):array{
  foreach($windows as $window){
   $start=$snapshot+$window[0]*60;$end=$snapshot+$window[1]*60;
   $at=(new DateTimeImmutable('@'.$start))->setTimezone(new DateTimeZone('Australia/Sydney'));
-  $params=['type_dm'=>'stop','name_dm'=>$from['id'],'mode'=>'direct','itdDate'=>$at->format('Ymd'),'itdTime'=>$at->format('Hi'),'limit'=>100,'TfNSWDM'=>'true','excludedMeans'=>'checkbox','exclMOT_4'=>1,'exclMOT_5'=>1,'exclMOT_7'=>1,'exclMOT_9'=>1,'exclMOT_11'=>1];
+  $params=['type_dm'=>'stop','name_dm'=>$from['id'],'mode'=>'direct','itdDate'=>$at->format('Ymd'),'itdTime'=>$at->format('Hi'),'limit'=>100,'TfNSWDM'=>'true'];
   $body=timed_upstream('departure_mon',$params,0);
   $events=val($body,'stopEvents',[]);
   $entry=['stage'=>'discovery_window','window'=>implode('-',$window).' min','request'=>$params,'rawResponse'=>$body,'candidates'=>[],'returnedCount'=>is_array($events)?count($events):0];
