@@ -163,7 +163,7 @@ jobs:
               jq -r --arg n "$1" '.data[] | select((.name|ascii_downcase)==($n|ascii_downcase)) | .id' | head -n1
           }
           check_route() {
-            local from="$1" to="$2" a b tmp time
+            local from="$1" to="$2" pilot="${3:-0}" a b tmp time
             a="$(station_id "$from")"; b="$(station_id "$to")"; test -n "$a"; test -n "$b"
             tmp="$(mktemp)"
             local headers
@@ -174,8 +174,11 @@ jobs:
             status="$(curl --silent --show-error --max-time 35 --dump-header "$headers" --get "$API" \
               --data-urlencode "action=journey" --data-urlencode "from=$a" --data-urlencode "to=$b" \
               --data-urlencode "fromName=$from" --data-urlencode "toName=$to" \
-              --data-urlencode "coreOnly=1" -o "$tmp" -w '%{http_code}')" || curl_exit=$?
-            echo "RESULT: $from to $to HTTP=$status curl_exit=$curl_exit elapsed=$((SECONDS-started))s"
+              --data-urlencode "coreOnly=1" --data-urlencode "qaRailPilot=$pilot" -o "$tmp" -w '%{http_code}')" || curl_exit=$?
+            echo "RESULT: $from to $to pilot=$pilot HTTP=$status curl_exit=$curl_exit elapsed=$((SECONDS-started))s"
+            if [ "$pilot" = "1" ] && ! grep -qi '^x-qa-rail-pilot: enabled' "$headers"; then
+              echo "FAIL: QA rail pilot header missing"; return 1
+            fi
             if [ "$curl_exit" = "28" ]; then
               echo "WARN: $from to $to: upstream/core journey request timed out at 35s"
               rm -f "$tmp" "$headers"
@@ -227,6 +230,11 @@ jobs:
           check_route Chatswood Gadigal
           check_route Hurstville Padstow
           check_route Hurstville Casula
+          echo "STEP 5AH: QA-only opt-in rail-filtered commuter request smoke"
+          check_route Hurstville Kogarah 1
+          check_route Chatswood Gadigal 1
+          check_route Hurstville Padstow 1
+          check_route Hurstville Casula 1
 
   verify-qa-diagnostics:
     needs: deploy-qa
