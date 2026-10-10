@@ -40,6 +40,10 @@ try:
         evidence["windows"][i]["locations"]=locations[:5] if isinstance(locations,list) else locations
         allowed=("type_dm","name_dm","mode","itdDate","itdTime","limit","TfNSWDM","excludedMeans","exclMOT_4","exclMOT_5","exclMOT_7","exclMOT_9","exclMOT_11")
         evidence["windows"][i]["request"]={k:v for k,v in window.get("request",{}).items() if k in allowed}
+    # Step 5K baseline: identify the transport-filter settings used in each request.
+    for w in evidence["windows"]:
+        request=w.get("request",{})
+        w["filterSummary"]={"excludedMeans":request.get("excludedMeans"),"excludedModeIds":sorted(k for k in request if k.startswith("exclMOT_"))}
     print("STEP 5J RESPONSE: "+json.dumps(evidence["windows"],ensure_ascii=False,default=str),flush=True)
     with open(OUT+"/step5i-departure-monitor.json","w") as f:json.dump(evidence,f,indent=2)
     print("STEP 5I DEPARTURE MONITOR: "+json.dumps(evidence),flush=True)
