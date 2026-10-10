@@ -194,3 +194,13 @@ test('Step 5AC makes incomplete QA searches distinct from confirmed no-route res
  assert.match(main,/state\.noRouteLimited=e instanceof ApiRequestError&&e\.code==='SEARCH_TIME_LIMIT'/);
  assert.match(api,/32000 : 20000/);
 });
+
+test('Step 5AH opt-in filtered initial journey search is QA-only',()=>{
+ const backend=fs.readFileSync('api/index.php','utf8');
+ const api=fs.readFileSync('src/api.ts','utf8');
+ assert.match(backend,/\$qaRailPilot=\$qaBoundedSearch&&\(string\)\(\$_GET\['qaRailPilot'\]/);
+ assert.match(backend,/if\(\$qaRailPilot\)\$fastParams=array_map\('qa_rail_filter_params',\$fastParams\)/);
+ assert.match(backend,/timed_normalized_journey\(\$body,\$originSeed,\$destinationSeed\)/);
+ assert.match(api,/new URLSearchParams\(window\.location\.search\)\.get\('qaRailPilot'\)/);
+ assert.match(api,/qaRailPilot:'1'/);
+});
