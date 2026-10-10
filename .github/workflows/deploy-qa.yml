@@ -264,6 +264,12 @@ jobs:
           curl --fail --silent --show-error --max-time 35 "https://trains.nytnetwork.work/qatest/api/diagnostics.php?action=probe_hurstville_four_hour_departures" -o qa-verification/step5am-hurstville-departures.json
           jq -e '.data.mode=="QA_HURSTVILLE_FOUR_HOUR_DEPARTURE_BOARD" and .data.requestCount==2 and (.data.probes|length)==2 and (.data.fourHourRailEventsSampled|type=="number")' qa-verification/step5am-hurstville-departures.json >/dev/null
           jq -c '.data | {elapsedMs, fourHourRailEventsSampled, modes, probes}' qa-verification/step5am-hurstville-departures.json
+      - name: Step 5AP Hurstville rail departure filter comparison
+        run: |
+          mkdir -p qa-verification
+          curl --fail --silent --show-error --max-time 35 "https://trains.nytnetwork.work/qatest/api/diagnostics.php?action=probe_hurstville_rail_departure_filters" -o qa-verification/step5ap-rail-filters.json
+          jq -e '.data.mode=="QA_HURSTVILLE_RAIL_FILTER_COMPARISON" and .data.requestCount==3 and (.data.variants|length)==3 and (.data.variants|all(.[]; (.returnedCount|type=="number") and (.railWithinFourHours|type=="number")))' qa-verification/step5ap-rail-filters.json >/dev/null
+          jq -c '.data | {elapsedMs, requestCount, variants}' qa-verification/step5ap-rail-filters.json
       - name: Optional Step 5AD route rejection evidence (manual only)
         if: github.event_name == 'workflow_dispatch'
         continue-on-error: true
