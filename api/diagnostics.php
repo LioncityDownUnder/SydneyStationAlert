@@ -24,7 +24,7 @@ if(($_GET['action']??'')==='probe_modes'){
  echo json_encode(['data'=>$out],JSON_INVALID_UTF8_SUBSTITUTE);exit;
 }
 if(($_GET['action']??'')==='probe_station_classes'){
- $stations=['Hurstville'=>'222010','Central'=>'200060','Town Hall'=>'200070'];
+ $stations=['Hurstville'=>'222010'];foreach(['Central','Town Hall'] as $label){$matches=station_search($label);foreach($matches as $candidate){if(stripos((string)val($candidate,'name',''),$label)!==false){$stations[$label]=(string)val($candidate,'id','');break;}}}
  $now=new DateTimeImmutable('now',new DateTimeZone('Australia/Sydney'));
  $out=[];
  foreach($stations as $label=>$id){
