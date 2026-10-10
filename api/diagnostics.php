@@ -8,6 +8,20 @@ require __DIR__.'/lib/core.php';
 if(!str_starts_with((string)($_SERVER['SCRIPT_NAME']??''),'/qatest/api/')){http_response_code(404);echo json_encode(['error'=>['code'=>'NOT_FOUND','message'=>'QA diagnostics only']]);exit;}
 
 if(($_SERVER['REQUEST_METHOD']??'')!=='GET')fail('BAD_REQUEST','GET only',405);
+if(($_GET['action']??'')==='probe_modes'){
+ $id=(string)($_GET['station']??'');
+ if(!preg_match('/^[0-9]{3,12}$/',$id))fail('BAD_REQUEST','Invalid station');
+ $now=new DateTimeImmutable('now',new DateTimeZone('Australia/Sydney'));
+ $base=['type_dm'=>'stop','name_dm'=>$id,'mode'=>'direct','itdDate'=>$now->format('Ymd'),'itdTime'=>$now->format('Hi'),'limit'=>100,'TfNSWDM'=>'true'];
+ $filtered=$base+['excludedMeans'=>'checkbox','exclMOT_4'=>1,'exclMOT_5'=>1,'exclMOT_7'=>1,'exclMOT_9'=>1,'exclMOT_11'=>1];
+ $out=[];
+ foreach(['filtered'=>$filtered,'unfiltered'=>$base] as $label=>$params){
+  $body=timed_upstream('departure_mon',$params,0);
+  $events=val($body,'stopEvents',[]);
+  $out[$label]=['count'=>is_array($events)?count($events):0,'messages'=>val($body,'systemMessages',[])];
+ }
+ echo json_encode(['data'=>$out],JSON_INVALID_UTF8_SUBSTITUTE);exit;
+}
 if(($_GET['action']??'')==='stations'){
  $q=trim((string)($_GET['q']??''));if(mb_strlen($q)<2||mb_strlen($q)>70)fail('BAD_REQUEST','Enter 2-70 characters');
  echo json_encode(['data'=>station_search($q)],JSON_INVALID_UTF8_SUBSTITUTE);exit;
