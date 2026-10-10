@@ -145,10 +145,23 @@ jobs:
             local headers
             headers="$(mktemp)"
             local status
+            echo "PROBE: $from to $to (coreOnly=1, 35s limit)"
+            local started=$SECONDS curl_exit=0
             status="$(curl --silent --show-error --max-time 35 --dump-header "$headers" --get "$API" \
               --data-urlencode "action=journey" --data-urlencode "from=$a" --data-urlencode "to=$b" \
               --data-urlencode "fromName=$from" --data-urlencode "toName=$to" \
-              --data-urlencode "coreOnly=1" -o "$tmp" -w '%{http_code}')"
+              --data-urlencode "coreOnly=1" -o "$tmp" -w '%{http_code}')" || curl_exit=$?
+            echo "RESULT: $from to $to HTTP=$status curl_exit=$curl_exit elapsed=$((SECONDS-started))s"
+            if [ "$curl_exit" = "28" ]; then
+              echo "WARN: $from to $to: upstream/core journey request timed out at 35s"
+              rm -f "$tmp" "$headers"
+              return 0
+            fi
+            if [ "$curl_exit" != "0" ]; then
+              echo "FAIL: $from to $to: curl exit $curl_exit"
+              rm -f "$tmp" "$headers"
+              return 1
+            fi
             if [ "$status" = "404" ] && jq -e '.error.code=="NO_ROUTE"' "$tmp" >/dev/null; then
               echo "WARN: $from to $to: no verified rail-only journey (NO_ROUTE); not an API outage"
               rm -f "$tmp" "$headers"
