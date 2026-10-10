@@ -26,6 +26,15 @@ try:
     with open(OUT+"/step5-comparison.json","w") as f:json.dump(data,f,indent=2)
     independent=data.get("independent",{})
     check("Step 5 response version",data.get("version")=="5G",str(data.get("version")))
+    # Step 5H: explain empty independent shortlists from per-departure GTFS matching.
+    evaluations=independent.get("evaluations",[])
+    from collections import Counter
+    status_counts=dict(Counter(str(e.get("status","UNKNOWN")) for e in evaluations))
+    first_leg_counts=dict(Counter(str((e.get("firstLegEvidence") or {}).get("status","UNKNOWN")) for e in evaluations))
+    investigation={"snapshotAt":data.get("snapshotAt"),"discoveredCandidates":independent.get("candidateCount"),"evaluatedCandidates":independent.get("evaluatedCandidateCount"),"candidateLimit":independent.get("candidateLimit"),"evaluationStatuses":status_counts,"firstLegStatuses":first_leg_counts,"evaluations":[{"candidateIndex":e.get("candidateIndex"),"status":e.get("status"),"firstLegEvidence":e.get("firstLegEvidence"),"returnedRoutes":e.get("returnedRoutes"),"rejectedConnections":e.get("rejectedConnections")} for e in evaluations]}
+    with open(OUT+"/step5h-investigation.json","w") as f:json.dump(investigation,f,indent=2)
+    print("STEP 5H DISCOVERY: "+json.dumps(investigation),flush=True)
+    check("Step 5H candidate accounting",isinstance(independent.get("candidateCount"),int) and len(evaluations)==independent.get("evaluatedCandidateCount") and independent.get("evaluatedCandidateCount",0)<=independent.get("candidateLimit",10),str({"discovered":independent.get("candidateCount"),"evaluated":len(evaluations),"statuses":status_counts}))
     check("Independent engine returns shortlist",len(independent.get("ranked",[]))>0,str(len(independent.get("ranked",[])))+" journeys",advisory=True)
     complete=independent.get("searchCompleteness",{})
     check("All discovered departures evaluated",complete.get("evaluatedAllDiscoveredDepartures") is True,str(complete))
