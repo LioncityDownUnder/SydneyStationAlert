@@ -195,13 +195,13 @@ test('Step 5AC makes incomplete QA searches distinct from confirmed no-route res
  assert.match(api,/32000 : 20000/);
 });
 
-test('Step 5AH opt-in filtered initial journey search is QA-only',()=>{
+test('Step 5AX filtered initial journey search is standard QA-only',()=>{
  const backend=fs.readFileSync('api/index.php','utf8');
  const api=fs.readFileSync('src/api.ts','utf8');
- assert.match(backend,/\$qaRailPilot=\$qaBoundedSearch&&\(string\)\(\$_GET\['qaRailPilot'\]/);
+ assert.match(backend,/\$qaRailPilot=\$qaBoundedSearch;/);
  assert.match(backend,/if\(\$qaRailPilot\)\$fastParams=array_map\('qa_rail_filter_params',\$fastParams\)/);
  assert.match(backend,/timed_normalized_journey\(\$body,\$originSeed,\$destinationSeed\)/);
- assert.match(api,/new URLSearchParams\(window\.location\.search\)\.get\('qaRailPilot'\)/);
+ assert.doesNotMatch(api,/new URLSearchParams\(window\.location\.search\)\.get\('qaRailPilot'\)/);
  assert.match(api,/qaRailPilot:'1'/);
 });
 
@@ -326,4 +326,12 @@ test('Step 5AW QA refresh keeps boarded service and unboarded selected departure
  assert.match(src,/Your confirmed boarded service is retained/);
  assert.match(src,/Your selected departure is retained until it has departed/);
  assert.match(src,/if\(adopted\)state\.message=''/);
+});
+
+test('Step 5AX standard QA enables rail safeguards without query flag and preserves refresh warning',()=>{
+ const main=fs.readFileSync('src/main.ts','utf8');
+ const backend=fs.readFileSync('api/index.php','utf8');
+ assert.match(main,/const qaRailPilot = isQaEnvironment;/);
+ assert.match(backend,/\$qaRailPilot=\$qaBoundedSearch;/);
+ assert.match(main,/const adopted=adoptJourneyUpdate\(updated\);state\.lastChecked=new Date\(\);if\(adopted\)state\.message='';checkAlerts\(\);/);
 });
