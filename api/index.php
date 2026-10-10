@@ -22,6 +22,10 @@ try {
   $destinationSeed=['id'=>$to,'name'=>$toName,'lat'=>0.0,'lon'=>0.0,'mode'=>'train'];
   $now=new DateTimeImmutable('now',new DateTimeZone('Australia/Sydney'));
   $coreOnly=(string)($_GET['coreOnly']??'')==='1';
+  // QA-only budget: prevent disrupted rail searches from traversing every 24-hour probe.
+  $qaBoundedSearch=$coreOnly&&str_contains((string)($_SERVER['SCRIPT_NAME']??''),'/qatest/api/');
+  $qaSearchDeadline=$qaBoundedSearch?microtime(true)+22.0:INF;
+  $qaSearchBudgetExceeded=false;
   $tripCount=$coreOnly?22:30;
   $fallbackTripCount=$coreOnly?8:16;
   $route=null;
@@ -61,7 +65,7 @@ try {
     }
    }
   }
-  $qaSearchDiagnostics=['initial_route_found'=>$route!==null,'additional_probes'=>0,'additional_route_probe'=>0,'additional_prefetch_count'=>0,'interchange_checks'=>0];
+  $qaSearchDiagnostics=['initial_route_found'=>$route!==null,'additional_probes'=>0,'additional_route_probe'=>0,'additional_prefetch_count'=>0,'interchange_checks'=>0,'time_budget_exceeded'=>0];
   journey_perf_phase('additional_search');
   $remainingSearchTimes=($coreOnly&&count($searchTimes)>=6)?array_slice($searchTimes,6):$searchTimes;
   // The initial batch has already verified a train-only route. Avoid an extra
@@ -79,6 +83,7 @@ try {
    $prefetchedBodies=timed_parallel_trip($prefetchParams,25);
   }
   foreach($remainingSearchTimes as $probeIndex=>$probe){
+   if($qaBoundedSearch&&microtime(true)>=$qaSearchDeadline){$qaSearchBudgetExceeded=true;break;}
    $qaSearchDiagnostics['additional_probes']++;
    $body=array_key_exists($probeIndex,$prefetchedBodies)&&is_array($prefetchedBodies[$probeIndex])
     ?$prefetchedBodies[$probeIndex]
@@ -88,6 +93,7 @@ try {
    if($needsInterchangeCheck)$qaSearchDiagnostics['interchange_checks']++;
    $candidateList=$needsInterchangeCheck?timed_transfer_candidates($route,$body,$originSeed,$destinationSeed,1):[];
    foreach($candidateList as $transfer){
+    if($qaBoundedSearch&&microtime(true)>=$qaSearchDeadline){$qaSearchBudgetExceeded=true;break;}
     $firstBody=timed_upstream('trip',['depArrMacro'=>'dep','itdDate'=>$probe->format('Ymd'),'itdTime'=>$probe->format('Hi'),'type_origin'=>'stop','name_origin'=>$from,'type_destination'=>'stop','name_destination'=>$transfer['id'],'calcNumberOfTrips'=>$fallbackTripCount,'TfNSWTR'=>'true'],25);
     $firstRoute=timed_normalized_journey($firstBody,$originSeed,$transfer);if(!$firstRoute)continue;
     $arrival=route_arrival_ts($firstRoute);if($arrival===PHP_INT_MAX)continue;
@@ -99,7 +105,12 @@ try {
    }
    if($route){$qaSearchDiagnostics['additional_route_probe']=$probeIndex+1;break;}
   }
-  if(!$route)fail('NO_ROUTE','No verified train-only journey could be found from '.$fromName.' to '.$toName.' in the next 24 hours. Train services may still be running; please retry or check TripView.',404);
+  if(!$route){
+   $qaSearchDiagnostics['time_budget_exceeded']=$qaSearchBudgetExceeded?1:0;
+   if($qaBoundedSearch){journey_perf_qa_header();journey_search_qa_diagnostics_header($qaSearchDiagnostics);}
+   $message=$qaSearchBudgetExceeded?'No train-only journey was verified within the QA search time limit. Other services may be available; check official TfNSW information or retry.':'No verified train-only journey could be found from '.$fromName.' to '.$toName.' in the next 24 hours. Train services may still be running; please retry or check TripView.';
+   fail('NO_ROUTE',$message,404);
+  }
   if($coreOnly){
    journey_perf_phase('response');
    $route['serviceStatus']=['level'=>'unavailable','hasMaterialChange'=>false,'updatedAt'=>gmdate('c'),'alerts'=>[],'revalidationAttempted'=>false,'replacementFound'=>false];
