@@ -148,8 +148,8 @@ jobs:
           node scripts/qa-browser.mjs
 
   verify-qa-legacy-journeys:
-    needs: deploy-qa
-    if: always() && needs.deploy-qa.result == 'success'
+    needs: [deploy-qa, verify-qa-diagnostics]
+    if: always() && needs.deploy-qa.result == 'success' && needs.verify-qa-diagnostics.result == 'success'
     runs-on: ubuntu-latest
     steps:
       - name: Record QA core journey performance
@@ -219,10 +219,6 @@ jobs:
           check_route Chatswood Gadigal
           check_route Hurstville Padstow
           check_route Hurstville Casula
-          # Repeat the problem route to expose cache and upstream variability.
-          # Diagnostic only: keep a single slow TfNSW response from failing deployment.
-          check_route Hurstville Padstow
-          check_route Hurstville Padstow
 
   verify-qa-diagnostics:
     needs: deploy-qa
