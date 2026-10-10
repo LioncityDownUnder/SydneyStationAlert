@@ -229,6 +229,10 @@ jobs:
       - name: Verify deployed QA diagnostics
         id: verify
         continue-on-error: true
+        run: python3 scripts/qa-smoke-light.py
+      - name: Optional extended TfNSW investigation (manual only)
+        if: github.event_name == 'workflow_dispatch'
+        continue-on-error: true
         run: python3 scripts/qa-verify.py
       - name: Upload QA diagnostic evidence
         if: always()
