@@ -209,7 +209,7 @@ test('Step 5AI QA pilot rejects departed first-leg services and labels overnight
  const backend=fs.readFileSync('api/index.php','utf8');
  const main=fs.readFileSync('src/main.ts','utf8');
  assert.match(backend,/\$qaRailPilot\?qa_rail_route_in_window\(\$body,\$originSeed,\$destinationSeed,\$now->getTimestamp\(\),\$qaRailLatestDeparture\)/);
- assert.match(backend,/if\(\$qaRailPilot&&\$route&&route_departure_ts\(\$route\)<\$now->getTimestamp\(\)\)\$route=null/);
+ assert.match(backend,/if\(\$qaRailPilot\)\$route=\$qaRouteWithinWindow\(\$route\)/);
  assert.match(main,/function sydneyDayLabel\(value,now=new Date\(\)\)/);
  assert.match(main,/timeZone:'Australia\/Sydney'/);
  assert.match(main,/return 'Tomorrow, '/);
