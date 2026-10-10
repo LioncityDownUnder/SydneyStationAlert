@@ -65,3 +65,14 @@ function qa_rail_search_result(?array $body,array $origin,array $destination):ar
   'railOnlyNormalized'=>$s['railOnlyNormalized'],'reasons'=>$s['reasons'],
   'status'=>$s['railOnlyNormalized']>0?'RAIL_CANDIDATE_UNVERIFIED':'NO_RAIL_CANDIDATE_IN_RESPONSE'];
 }
+
+/** Search every normalized journey before applying the QA four-hour departure window. */
+function qa_rail_route_in_window(array $body,array $origin,array $destination,int $earliest,int $latest):?array{
+ $best=null;
+ foreach(normalized_journeys($body,$origin,$destination) as $candidate){
+  $departure=route_departure_ts($candidate);
+  if($departure<$earliest||$departure>$latest)continue;
+  $best=better_route($best,$candidate);
+ }
+ return $best;
+}
