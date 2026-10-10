@@ -253,3 +253,15 @@ test('Step 5AM restricts origin departure-board diagnosis to fixed QA station an
  assert.match(diag,/QA_HURSTVILLE_FOUR_HOUR_DEPARTURE_BOARD/);
  assert.match(workflow,/step5am-hurstville-departures\.json/);
 });
+
+test('Step 5AP rail-filter comparison is fixed, QA-only and informational',()=>{
+ const diag=fs.readFileSync('api/diagnostics.php','utf8');
+ const workflow=fs.readFileSync('.github/workflows/deploy-qa.yml','utf8');
+ assert.match(diag,/probe_hurstville_rail_departure_filters/);
+ assert.match(diag,/name_dm'=>'222010'/);
+ assert.match(diag,/QA_HURSTVILLE_RAIL_FILTER_COMPARISON/);
+ assert.match(diag,/railWithinFourHours/);
+ assert.match(diag,/exclMOT_5/);
+ assert.match(workflow,/step5ap-rail-filters\.json/);
+ assert.match(workflow,/requestCount==3/);
+});
