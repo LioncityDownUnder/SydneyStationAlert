@@ -8,6 +8,28 @@ require __DIR__.'/lib/core.php';
 if(!str_starts_with((string)($_SERVER['SCRIPT_NAME']??''),'/qatest/api/')){http_response_code(404);echo json_encode(['error'=>['code'=>'NOT_FOUND','message'=>'QA diagnostics only']]);exit;}
 
 if(($_SERVER['REQUEST_METHOD']??'')!=='GET')fail('BAD_REQUEST','GET only',405);
+if(($_GET['action']??'')==='probe_rail_filter_comparison'){
+ require_once __DIR__.'/lib/qa_route_rejections.php';
+ $now=new DateTimeImmutable('now',new DateTimeZone('Australia/Sydney'));
+ $origin=['id'=>'222010','name'=>'Hurstville','mode'=>'train','lat'=>0.0,'lon'=>0.0];
+ $params=[];$targets=[];
+ foreach(['Padstow','Casula'] as $stationName){
+  $to=null;
+  foreach(station_search($stationName) as $candidate)if(strcasecmp((string)val($candidate,'name',''),$stationName)===0){$to=$candidate;break;}
+  if(!$to)fail('STATION_LOOKUP_FAILED','Unable to resolve diagnostic station',503);
+  $targets[]=$to;
+  $base=['depArrMacro'=>'dep','itdDate'=>$now->format('Ymd'),'itdTime'=>$now->format('Hi'),
+   'type_origin'=>'stop','name_origin'=>$origin['id'],'type_destination'=>'stop',
+   'name_destination'=>$to['id'],'calcNumberOfTrips'=>22,'TfNSWTR'=>'true'];
+  $params[]=$base;$params[]=qa_rail_filter_params($base);
+ }
+ // Exactly four bounded upstream requests: baseline and filtered for each fixed station pair.
+ $started=microtime(true);$bodies=timed_parallel_trip($params,0);$out=[];
+ foreach($targets as $i=>$to)$out[$to['name']]=qa_rail_filter_comparison($bodies[$i*2]??null,$bodies[$i*2+1]??null,$origin,$to);
+ echo json_encode(['data'=>['elapsedMs'=>(int)round((microtime(true)-$started)*1000),
+  'requestCount'=>4,'filterClassesExcluded'=>[4,5,7,9,11],
+  'routes'=>$out]],JSON_INVALID_UTF8_SUBSTITUTE|JSON_PARTIAL_OUTPUT_ON_ERROR);exit;
+}
 if(($_GET['action']??'')==='probe_route_rejections'){
  require_once __DIR__.'/lib/qa_route_rejections.php';
  $now=new DateTimeImmutable('now',new DateTimeZone('Australia/Sydney'));
