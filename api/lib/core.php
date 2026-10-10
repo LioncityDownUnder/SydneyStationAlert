@@ -33,7 +33,7 @@ function journey_perf_phase(string $phase):void{
 }
 function journey_search_qa_diagnostics_header(array $diagnostics):void{
  if(headers_sent()||!str_contains((string)($_SERVER['SCRIPT_NAME']??''),'/qatest/api/'))return;
- $fields=['initial_route_found','additional_probes','additional_route_probe','additional_prefetch_count','interchange_checks'];
+ $fields=['initial_route_found','additional_probes','additional_route_probe','additional_prefetch_count','interchange_checks','time_budget_exceeded'];
  $parts=[];
  foreach($fields as $field){
   $value=$diagnostics[$field]??0;
