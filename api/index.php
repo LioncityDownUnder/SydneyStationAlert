@@ -26,7 +26,7 @@ try {
   $qaBoundedSearch=$coreOnly&&str_contains((string)($_SERVER['SCRIPT_NAME']??''),'/qatest/api/');
   $qaSearchDeadline=$qaBoundedSearch?microtime(true)+22.0:INF;
   // Explicit opt-in on QA only; production and ordinary QA requests follow the legacy path.
-  $qaRailPilot=$qaBoundedSearch&&(string)($_GET['qaRailPilot']??'')==='1';
+  $qaRailPilot=$qaBoundedSearch;
   if($qaRailPilot)require_once __DIR__.'/lib/qa_route_rejections.php';
   $qaRailLatestDeparture=$qaRailPilot?$now->getTimestamp()+4*3600:PHP_INT_MAX;
   $qaRouteWithinWindow=static function(?array $candidate)use($qaRailPilot,$now,$qaRailLatestDeparture):?array{
