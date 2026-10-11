@@ -92,8 +92,10 @@ test('GPS missed-connection inference is removed without removing manual recover
 test('onboard delay-aware connection warning uses arrival and departure with interchange buffer',()=>{
  const main=fs.readFileSync('src/main.ts','utf8');
  assert.match(main,/function connectionAtRisk\(j\)/);
- assert.match(main,/if\(!state\.onboard\|\|state\.paused/);
- assert.match(main,/arrival\+3\*60000>departure/);
+ // The risk calculation is now tested behaviourally in journey-monitoring.test.mjs.
+ // Keep this regression focused on main.ts passing live onboarding/pause state.
+ assert.match(main,/import \{ findConnectionAtRisk, calculateDisplayedProgress \} from '\.\/journey-monitoring\.js'/);
+ assert.match(main,/function connectionAtRisk\(j\)\{return findConnectionAtRisk\(j,state\.onboard,state\.paused\);\}/);
  assert.match(main,/updateDelayConnectionWarning\(\);void suggestOnwardConnection\(\);return true/);
  assert.match(main,/Connection at risk at /);
 });
