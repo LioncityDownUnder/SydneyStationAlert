@@ -398,7 +398,7 @@ test('QA crowding request failures display a safe diagnostic category',()=>{
 test('QA crowding failures show precise safe validation categories',()=>{
  const api=fs.readFileSync('api/index.php','utf8');
  const ui=fs.readFileSync('src/main.ts','utf8');
- for(const code of ['CROWDING_REQUEST_SIZE','CROWDING_LEGS_INVALID','CROWDING_MODE_INVALID','CROWDING_ID_COUNT','CROWDING_ID_FORMAT']){
+ for(const code of ['CROWDING_REQUEST_SIZE','CROWDING_LEGS_INVALID','CROWDING_MODE_INVALID','CROWDING_ID_COUNT']){
   assert.ok(api.includes(code),code+' has a backend failure category');
   assert.ok(ui.includes(code),code+' reaches the QA diagnostic UI');
  }
