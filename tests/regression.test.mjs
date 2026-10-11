@@ -358,3 +358,32 @@ test('Production release Step 5AX dialog uses real line breaks',()=>{
  assert.ok(fragment.includes("'Did you board this exact train?\\n'+detail+'\\n\\nConfirm only"));
  assert.ok(!fragment.includes("'Did you board this exact train?\\\\n'"));
 });
+
+test('production crowding uses selected train IDs and excludes QA diagnostic UI',()=>{
+ const api=fs.readFileSync('api/index.php','utf8');
+ const client=fs.readFileSync('src/main.ts','utf8');
+ const transport=fs.readFileSync('src/api.ts','utf8');
+ assert.match(api,/if\(\$action==='crowding'\)/);
+ assert.match(api,/journey_crowding_status\(\['legs'=>\$normalized\]\)/);
+ assert.match(api,/if\(!is_string\(\$id\)&&!is_int\(\$id\)\)/);
+ assert.match(transport,/export const getCrowding = \(journey\)/);
+ assert.match(client,/function selectedCrowdingIdentity\(j\)/);
+ assert.match(client,/async function refreshCrowding\(generation=journeyGeneration\)/);
+ assert.match(client,/\$\{carriageCrowding\(j\)\}\$\{crowdingUnavailable\(j\)\}/);
+ assert.doesNotMatch(client,/qaCrowdingDiagnosticDetails|feedFreshness|matchHistory|previouslyMatched/);
+ assert.doesNotMatch(api,/qaCrowdingDiagnostic|CROWDING_ID_TOO_LONG|feedFreshness/);
+});
+test('production refresh visibly spins and does not select another train after boarding',()=>{
+ const ui=fs.readFileSync('src/main.ts','utf8');
+ const i=ui.indexOf('async function refresh(){'),j=ui.indexOf('// A stale or distant GPS',i);
+ const code=ui.slice(i,j);
+ assert.ok(i>=0&&j>i);
+ assert.match(code,/if\(state\.onboard\)\{/);
+ assert.match(code,/await refreshCrowding\(generation\)/);
+ assert.match(code,/const updated=await getJourney/);
+ assert.ok(code.indexOf('await refreshCrowding(generation)')<code.indexOf('const updated=await getJourney'));
+ assert.match(code,/state\.checking=true;[\s\S]*renderJourneyStable\(\)/);
+ assert.match(code,/state\.checking=false/);
+ assert.match(ui,/journey-spinner.*Refreshing…/);
+ assert.match(ui,/state\.checking\?'Refreshing selected service…'/);
+});
