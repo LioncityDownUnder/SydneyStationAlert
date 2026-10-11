@@ -1,0 +1,86 @@
+name: Publish Production Deployment Status
+
+on:
+  workflow_run:
+    workflows: ["Deploy Production"]
+    types: [completed]
+  schedule:
+    - cron: '17 * * * *'
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  issues: write
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Read latest production run and publish status to issue 9
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const issue_number = 9;
+            let run = context.eventName === 'workflow_run'
+              ? context.payload.workflow_run
+              : null;
+            if (!run) {
+              const response = await github.rest.actions.listWorkflowRuns({
+                owner, repo, workflow_id: 'deploy-production.yml',
+                branch: 'main', status: 'completed', per_page: 5
+              });
+              run = response.data.workflow_runs[0];
+            }
+            if (!run || run.status !== 'completed') {
+              core.info('No completed production run to report.');
+              return;
+            }
+            if (run.head_branch !== 'main') {
+              core.info('Skipping non-production branch run.');
+              return;
+            }
+            const marker = `<!-- production-run:${run.id}:attempt:${run.run_attempt} -->`;
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner, repo, issue_number, per_page: 100
+            });
+            if (comments.some(c => (c.body || '').includes(marker))) {
+              core.info('Run already published.');
+              return;
+            }
+            const jobs = await github.paginate(github.rest.actions.listJobsForWorkflowRun, {
+              owner, repo, run_id: run.id, per_page: 100
+            });
+            const bad = jobs.filter(j => j.conclusion !== 'success' && j.conclusion !== 'skipped');
+            const failures = bad.map(j => {
+              const steps = (j.steps || []).filter(s =>
+                s.conclusion === 'failure' || s.conclusion === 'cancelled' || s.conclusion === 'timed_out'
+              ).map(s => s.name).slice(0, 8);
+              const clean = value => String(value || '').replace(/[\r\n|]/g, ' ').slice(0, 150);
+              return `- **${clean(j.name)}**: ${clean(j.conclusion)}${steps.length ? ' — '+steps.map(clean).join(', ') : ''}`;
+            }).slice(0, 12);
+            const success = run.conclusion === 'success' &&
+              jobs.some(j => j.name === 'deploy' && j.conclusion === 'success');
+            const outcome = success ? 'PASS' : 'FAIL';
+            const body = [
+              marker,
+              `### Production deployment: ${outcome}`,
+              `- Commit: \`${run.head_sha}\``,
+              `- Workflow conclusion: \`${run.conclusion || 'unknown'}\``,
+              `- Completed: ${run.updated_at || 'unknown'}`,
+              `- Run: ${run.html_url}`,
+              `- Run ID: ${run.id} (attempt ${run.run_attempt})`,
+              success
+                ? '- Result: production deploy job and its automated health/staging checks passed.'
+                : '- Result: production deploy is not verified. Review failed jobs below.',
+              ...failures
+            ].join('\n');
+            await github.rest.issues.createComment({
+              owner, repo, issue_number, body
+            });
+            core.summary.addHeading(`Production deployment: ${outcome}`);
+            await core.summary.addRaw(body).write();
+            if (!success) core.warning('Production deployment did not pass; see issue #9.');
