@@ -376,3 +376,21 @@ test('QA crowding diagnostics are privacy-safe and disabled outside staging',()=
  assert.match(main,/selected IDs:/);
  assert.doesNotMatch(main,/d\.tripId\}/);
 });
+
+test('QA crowding details persist during same-service journey refresh',()=>{
+ const main=fs.readFileSync('src/main.ts','utf8');
+ const adopt=main.slice(main.indexOf('function adoptJourneyUpdate('),main.indexOf('function loadStationCache('));
+ assert.match(adopt,/selectedCrowdingIdentity\(previous\)===selectedCrowdingIdentity\(updated\)/);
+ assert.match(adopt,/if\(sameSelected&&previous\.crowding\)updated\.crowding=previous\.crowding/);
+ assert.match(adopt,/if\(state\.journey\?\.crowding\)updated\.crowding=state\.journey\.crowding/);
+ assert.match(adopt,/else state\.crowdingChecked=false/);
+});
+test('QA crowding request failures display a safe diagnostic category',()=>{
+ const main=fs.readFileSync('src/main.ts','utf8');
+ const region=main.slice(main.indexOf('async function refreshCrowding('),main.indexOf('async function enrichJourney('));
+ assert.match(region,/e instanceof ApiRequestError&&e\.code==='BAD_REQUEST'\?'request_rejected'/);
+ assert.match(region,/diagnostics:isQaEnvironment\?/);
+ assert.match(region,/request_rejected:'Crowding request rejected by API validation'/);
+ assert.match(region,/request_unavailable:'Crowding lookup failed or timed out'/);
+ assert.doesNotMatch(region,/error\.message|e\.message|JSON\.stringify\(e\)/);
+});
