@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {highlightName,optionMarkup,stationField} from '../dist/assets/station-markup.js';
 
 test('station names are escaped and matching text is highlighted',()=>{
- assert.equal(highlightName('Town & Hall','hall'),'Town & <mark>Hall</mark>');
+ assert.equal(highlightName('Town & Hall','hall'),'Town &amp; <mark>Hall</mark>');
  assert.equal(highlightName('<Central>','absent'),'&lt;Central&gt;');
  assert.equal(highlightName('Central',''),'Central');
 });
