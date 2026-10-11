@@ -2,7 +2,7 @@
 declare(strict_types=1);
 // Read-only, one-off timetable sample. Runs on existing production host with the
 // already-configured TfNSW credential; never prints a credential or raw payload.
-require_once getcwd().'/api/lib/core.php';
+require_once getcwd().'/qatest/api/lib/core.php';
 $key=source_key();
 if($key===''){fwrite(STDERR,"Configured transport key unavailable\n");exit(2);}
 $tz=new DateTimeZone('Australia/Sydney');
@@ -27,6 +27,7 @@ $checks=[
  ['Circular Quay','Padstow','20261012','1200']
 ];
 $ok=0;
+$verified=0;
 foreach($checks as [$from,$to,$date,$clock]){
  $params=['outputFormat'=>'rapidJSON','coordOutputFormat'=>'EPSG:4326','depArrMacro'=>'dep',
   'itdDate'=>$date,'itdTime'=>$clock,'type_origin'=>'stop','name_origin'=>$stations[$from]['id'],
@@ -44,6 +45,28 @@ foreach($checks as [$from,$to,$date,$clock]){
   ++$ok;
   $routes=normalized_journeys($json,$stations[$from],$stations[$to]);
   $out['normalizedRailOnlyCount']=count($routes);
+  $expectedStops=[
+   'Circular Quay|International Airport'=>8,
+   'International Airport|Padstow'=>10,
+   'International Airport|Circular Quay'=>8,
+   'Circular Quay|Padstow'=>17
+  ];
+  $key="$from|$to";
+  if(!$routes){$out['failure']='No normalized rail journey from valid TfNSW daytime results';}
+  else {
+   $ids=array_column($routes[0]['stops'],'id');
+   $names=array_column($routes[0]['stops'],'name');
+   $bad=array_values(array_filter($names,fn($n)=>preg_match('/^platform\\s*\\d+$/i',$n)));
+   $expected=$expectedStops[$key]??0;
+   $airportId=$from==='International Airport'||$to==='International Airport'?'2020102':'2020102';
+   if(count($routes[0]['stops'])!==$expected)$out['failure']='Unexpected stop count';
+   elseif($bad)$out['failure']='Platform-only station names still present';
+   elseif(!in_array($airportId,$ids,true))$out['failure']='International Airport platform ID absent';
+   elseif($key==='Circular Quay|Padstow'&&
+      (!in_array('202092',$ids,true)||array_search('202092',$ids,true)>=array_search('2020102',$ids,true))) {
+     $out['failure']='Distinct Domestic/International stations not ordered';
+   }else{$out['verification']='PASS: expected source stops preserved and airport label resolved';$verified++;}
+  }
   foreach(array_slice($routes,0,2) as $route){
    $legs=[];foreach(($route['legs']??[]) as $leg){
     $legs[]=['line'=>$leg['line']??null,'mode'=>$leg['mode']??null,
@@ -83,4 +106,4 @@ foreach($checks as [$from,$to,$date,$clock]){
  }
  echo json_encode($out,JSON_INVALID_UTF8_SUBSTITUTE|JSON_UNESCAPED_SLASHES)."\n";
 }
-if(!$ok)exit(1);
+if(!$ok||$verified!==count($checks))exit(1);
