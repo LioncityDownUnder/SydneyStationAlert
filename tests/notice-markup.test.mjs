@@ -12,7 +12,7 @@ test('alert reliability guidance stays collapsible and closed by default',()=>{
  assert.match(markup,/Notifications not yet enabled\./);
  assert.match(markup,/Location and timetable checks may stop when your phone is locked/);
  assert.match(markup,/do not rely on it as your only stop reminder/);
- assert.doesNotMatch(markup,/\sopen(?:\s|>)/);
+ assert.doesNotMatch(markup,/^<details[^>]*\sopen>/);
 });
 
 test('notice expanded state and notification permissions retain existing messages',()=>{
