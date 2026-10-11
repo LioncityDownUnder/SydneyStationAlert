@@ -33,11 +33,11 @@ export function sameService(
 ): boolean {
   if (!a || !b || !Array.isArray(a.legs) || !Array.isArray(b.legs)
     || a.legs.length !== b.legs.length) return false;
-  return a.legs.every((leg, i) => {
+  return a.legs.every((leg: JourneyLegIdentity, i: number) => {
     const other = b.legs?.[i];
-    const ids = (leg.tripIds || []).map(x => String(x).toLowerCase());
-    const otherIds = (other?.tripIds || []).map(x => String(x).toLowerCase());
-    if (ids.length && otherIds.length) return ids.some(id => otherIds.includes(id));
+    const ids = (leg.tripIds || []).map((x: string | number) => String(x).toLowerCase());
+    const otherIds = (other?.tripIds || []).map((x: string | number) => String(x).toLowerCase());
+    if (ids.length && otherIds.length) return ids.some((id: string) => otherIds.includes(id));
     return leg.line === other?.line
       && leg.origin?.id === other?.origin?.id
       && leg.destination?.id === other?.destination?.id;
