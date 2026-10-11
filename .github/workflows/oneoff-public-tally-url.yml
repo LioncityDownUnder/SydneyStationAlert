@@ -1,0 +1,39 @@
+name: One-off read-only public Tally link verification
+on:
+  push:
+    branches: [diagnostic/verify-public-tally-9qLvLp]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check public Tally form GET and QA compiled destination (no submissions)
+        run: |
+          set -euo pipefail
+          output="$(mktemp)"
+          status="$(curl --silent --show-error --location --max-time 25 --retry 1 \
+            --user-agent 'Mozilla/5.0 (compatible; SydneyStationAlert/1.0; read-only QA form verification)' \
+            'https://tally.so/r/9qLvLp' -o "$output" -w '%{http_code}')"
+          echo "Tally public form GET status: $status"
+          echo "Response bytes: $(wc -c < "$output")"
+          if [[ "$status" != 200 ]]; then
+            echo "::warning::Tally public form content could not be confirmed (status $status); do not conclude form is live."
+          else
+            python3 - "$output" <<'PY'
+          import sys, html, re
+          s=open(sys.argv[1],encoding='utf-8',errors='replace').read()
+          title=re.search(r'<title[^>]*>(.*?)</title>',s,re.I|re.S)
+          print('HTML title:',html.unescape(re.sub('<[^>]+>','',title.group(1)).strip())[:120] if title else '(not found)')
+          print('HTML recaptcha marker:',bool(re.search('recaptcha|g-recaptcha',s,re.I)),'(not proof of enabled CAPTCHA)')
+          PY
+          fi
+          qa="$(mktemp)"
+          qastatus="$(curl --silent --show-error --max-time 20 \
+            'https://trains.nytnetwork.work/qatest/assets/community-footer.js' -o "$qa" -w '%{http_code}')"
+          echo "QA community-footer.js status: $qastatus"
+          test "$qastatus" = 200
+          grep -Fq 'https://tally.so/r/9qLvLp' "$qa"
+          grep -Eq "coffee:[[:space:]]*''" "$qa"
+          echo "PASS: deployed QA asset contains exact Tally URL and empty Ko-fi"
