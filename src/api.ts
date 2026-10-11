@@ -36,3 +36,10 @@ export const getJourney = (from, to, coreOnly = false) => get('journey', { from:
 
 // QA-only: full normalized journeys that the commuter may explicitly confirm.
 export const getBoardingOptions = (from,to) => get('boarding-options',{from:from.id,to:to.id,fromName:from.name,toName:to.name},undefined,32000);
+
+// Crowding data is fetched independently; route selection and boarding state never change.
+export const getCrowding = (journey) => get('crowding', {
+    legs: JSON.stringify((journey.legs || []).map(leg => ({
+        mode: leg.mode, tripIds: (leg.tripIds || []).slice(0,8)
+    })).slice(0,6))
+}, undefined, 12000);
