@@ -6,6 +6,7 @@ import { loadStationIndex, saveStationIndex, findStationMatches, mergeStationEnt
 import { optionMarkup as stationOptionMarkup, stationField as stationFieldMarkup } from './station-markup.js';
 import { renderServiceUpdate, renderServiceDetails } from './service-notice-markup.js';
 import { crowdingSummary, carriageCrowding } from './crowding-markup.js';
+import { saveConfirmedTrip, loadConfirmedTrip, clearConfirmedTrip } from './active-trip.js';
 const root = document.getElementById('app');
 const state = { origin: null, destination: null, detected: false, manual: false, locating: false, location: null, journey: null, onboard: false, paused: false, busy: false, checking: false, recoveringConnection: false, noticeExpanded: false, suggestedConnection: null, suggestingConnection: false, boardingOptions: null, lastSuggestionCheck: 0, enriching: false, crowdingChecked: false, message: '', alert: '', searchResults: [], activeField: null, searchLoading: false, searchQuery: '', searchError: '', highlightedIndex: -1, lastChecked: null, offline: !navigator.onLine, noRoute: false, noRouteAlerts: null, noRouteAlertsLoading: false };
 let queryController = null;
@@ -23,10 +24,9 @@ const isQaEnvironment = /^\/qatest(?:\/|$)/.test(window.location.pathname);
 const qaRailPilot = true; // Released rail-only search, service identity and alternative boarding on both sites.
 const STATION_CACHE_KEY = isQaEnvironment ? 'sydstnalert:qa:stations:v1' : 'sydney-station-alert:stations:v1';
 const ACTIVE_TRIP_KEY = isQaEnvironment ? 'sydstnalert:qa:active-trip:v1' : 'sydney-station-alert:active-trip:v1';
-function activeTripExpiry(j){const arrival=j?.legs?.[j.legs.length-1]?.arrival;const ts=arrival?+new Date(arrival):NaN;return Number.isFinite(ts)?ts+4*60*60*1000:Date.now()+8*60*60*1000;}
-function saveActiveTrip(){if(!state.onboard||!state.journey)return;try{localStorage.setItem(ACTIVE_TRIP_KEY,JSON.stringify({version:1,savedAt:Date.now(),expiresAt:activeTripExpiry(state.journey),journey:state.journey}));}catch{}}
-function clearActiveTrip(){try{localStorage.removeItem(ACTIVE_TRIP_KEY);}catch{}}
-function loadActiveTrip(){try{const raw=localStorage.getItem(ACTIVE_TRIP_KEY);if(!raw)return null;const p=JSON.parse(raw);if(!p||p.version!==1||!p.journey||!Array.isArray(p.journey.legs)||!Array.isArray(p.journey.stops)||Number(p.expiresAt)<=Date.now()){clearActiveTrip();return null;}return p.journey;}catch{clearActiveTrip();return null;}}
+function saveActiveTrip(){if(!state.onboard||!state.journey)return;saveConfirmedTrip(localStorage,ACTIVE_TRIP_KEY,state.journey);}
+function clearActiveTrip(){clearConfirmedTrip(localStorage,ACTIVE_TRIP_KEY);}
+function loadActiveTrip(){return loadConfirmedTrip(localStorage,ACTIVE_TRIP_KEY);}
 function sameService(a,b){if(!a||!b||!Array.isArray(a.legs)||!Array.isArray(b.legs)||a.legs.length!==b.legs.length)return false;return a.legs.every((leg,i)=>{const other=b.legs[i];const ids=(leg.tripIds||[]).map(x=>String(x).toLowerCase());const otherIds=(other?.tripIds||[]).map(x=>String(x).toLowerCase());if(ids.length&&otherIds.length)return ids.some(id=>otherIds.includes(id));return leg.line===other?.line&&leg.origin?.id===other?.origin?.id&&leg.destination?.id===other?.destination?.id;});}
 function firstDepartureTime(j){return Date.parse(j?.legs?.[0]?.departure||j?.legs?.[0]?.origin?.departure||'');}
 function qaSameSelectedTrain(a,b){
