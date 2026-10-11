@@ -47,6 +47,8 @@ Mobile-first, accessible Sydney Trains / Sydney Metro rail journey utility. Warm
 
 ## Current baseline
 
-This repository baseline combines the **locked v16 UI** with the **v17 validated rail-routing backend**.
+Baseline **17.0.1** preserves the locked v16 visual system and validated v17 rail-routing behaviour while splitting frontend display/state helpers and PHP upstream/routing/station/alert/crowding responsibilities into independently tested modules.
+
+Production deploys from `main`, QA from `develop` under `/qatest/`. Refactoring and cleanup must pass automated checks before production promotion; production deployments protect QA, private API configuration, and caches. Selected-service real-time timetable and delay tracking (SSA-01) is a separate future enhancement.
 
 The v16 visual system is considered locked unless a future change explicitly requests a UI revision.
