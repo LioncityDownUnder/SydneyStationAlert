@@ -104,10 +104,10 @@ test('proactive onward lookup is bounded and preserves confirmed journey',()=>{
  const main=fs.readFileSync('src/main.ts','utf8');
  assert.match(main,/async function suggestOnwardConnection\(\)/);
  assert.match(main,/Date\.now\(\)-state\.lastSuggestionCheck<120000/);
- assert.match(main,/departure<risk\.arrival\+3\*60000/);
+ assert.match(main,/const notBefore=earliestCatchableDeparture\(prior,Date\.now\(\)\)/);
  assert.match(main,/state\.journey!==original\|\|!state\.onboard/);
  assert.match(main,/void suggestOnwardConnection\(\)/);
- assert.match(main,/Use “I missed my connection” to update your route/);
+ assert.match(main,/Review before changing your onward train/);
 });
 
 test('background alert limitations are disclosed and foreground checks resume',()=>{
@@ -122,7 +122,7 @@ test('background alert limitations are disclosed and foreground checks resume',(
 
 test('missed connection recovery stays on interchange stops without duplicate top panel',()=>{
  const main=fs.readFileSync('src/main.ts','utf8');
- assert.doesNotMatch(main,/missedConnectionActions|connection-recovery/);
+ assert.doesNotMatch(main,/missedConnectionActions|id="connection-recovery"/);
  assert.match(main,/transfer&&state.onboard/);
  assert.match(main,/data-recover-leg/);
  assert.match(main,/window\.confirm\('Confirm missed connection at '/);
@@ -131,7 +131,7 @@ test('missed connection recovery stays on interchange stops without duplicate to
 test('late missed connection recovery requires departure after request',()=>{
  const main=fs.readFileSync('src/main.ts','utf8');
  assert.match(main,/const recoveryRequestedAt=Date\.now\(\)/);
- assert.match(main,/departure<recoveryRequestedAt/);
+ assert.match(main,/notBefore=earliestCatchableDeparture\(prior,recoveryRequestedAt\)/);
  assert.match(main,/window\.confirm\('Confirm missed connection at '/);
  assert.match(main,/transfer&&state\.onboard/);
 });
@@ -250,14 +250,18 @@ test('Step 5AT mobile pilot message is concise and places TfNSW links before ale
  assert.ok(message.indexOf('qaRailPilotTravelLinks()')<message.indexOf('qaNoRouteAlertDetails()'));
 });
 
-test('Step 5AU QA pilot validates missed-connection service before replacing an onboard route',()=>{
+test('SSA-02 validates the earliest catchable onward rail journey before replacement',()=>{
  const main=fs.readFileSync('src/main.ts','utf8');
+ const api=fs.readFileSync('api/index.php','utf8');
+ const client=fs.readFileSync('src/api.ts','utf8');
  assert.match(main,/function qaOnwardConnectionIsValid\(onward,transfer,prior,recoveryRequestedAt\)/);
- assert.match(main,/if\(!qaRailPilot\)return true/);
- assert.match(main,/String\(first\.origin\?\.id\|\|''\)!==String\(transfer\?\.id\|\|''\)/);
- assert.match(main,/departure<previousArrival\+2\*60000/);
- assert.match(main,/firstDeparture>=recoveryRequestedAt/);
- assert.match(main,/if\(!qaOnwardConnectionIsValid\(onward,transfer,prior,recoveryRequestedAt\)\)throw new Error/);
+ assert.match(main,/return validOnwardConnection\(onward,transfer,state\.journey\?\.destination,prior,recoveryRequestedAt\)/);
+ assert.match(main,/const recoveryRequestedAt=Date\.now\(\),notBefore=earliestCatchableDeparture\(prior,recoveryRequestedAt\)/);
+ assert.match(main,/getOnwardOptions\(transfer,original\.destination,notBefore\)/);
+ assert.match(main,/qaOnwardConnectionIsValid\(candidate,transfer,prior,notBefore\)/);
+ assert.match(main,/applyRecoveredConnection\(original,legIndex,onward,recoveryRequestedAt,transfer\.name\)/);
+ assert.match(api,/if\(\$action==='onward-options'\)onward_recovery_endpoint\(\)/);
+ assert.match(client,/export const getOnwardOptions =/);
 });
 
 test('Step 5AV QA-only rediscovery never auto-boards or silently adopts journey',()=>{
