@@ -262,6 +262,39 @@ try{
  else putenv('TFNSW_API_BASE='.$previousBase);
 }
 
+// Backend Batch 3C: optional requests still fail safely without contacting
+// external hosts, and continue sharing the same transport/cache module.
+foreach(['upstream_optional','upstream_binary_optional'] as $fn){
+ $definition=new ReflectionFunction($fn);
+ assertit(realpath((string)$definition->getFileName())===$upstreamModule,"$fn is loaded from the shared upstream transport module");
+}
+$jsonOptional=new ReflectionFunction('upstream_optional');
+$binaryOptional=new ReflectionFunction('upstream_binary_optional');
+assertit($jsonOptional->getParameters()[2]->getDefaultValue()===60,'Optional JSON response cache keeps 60-second default TTL');
+assertit($binaryOptional->getParameters()[1]->getDefaultValue()===15,'Optional vehicle feed keeps 15-second default TTL');
+$previousKey=getenv('TFNSW_API_KEY');
+$previousBase=getenv('TFNSW_API_BASE');
+try{
+ putenv('TFNSW_API_KEY=qa-optional-upstream-fixture');
+ foreach([
+  'http://api.transport.nsw.gov.au/v2/gtfs/vehiclepos/metro',
+  'https://api.transport.nsw.gov.au.evil.test/v2/gtfs/vehiclepos/metro',
+  'https://api.transport.nsw.gov.au/v2/gtfs/vehiclepos/unknown',
+  'https://api.transport.nsw.gov.au/v2/gtfs/vehiclepos/metro?test=1'
+ ] as $invalidUrl){
+  assertit(upstream_binary_optional($invalidUrl)===null,'Optional GTFS vehicle request rejects unapproved URL');
+ }
+ putenv('TFNSW_API_BASE=http://api.transport.nsw.gov.au/v1/tp');
+ assertit(upstream_optional('add_info',[])===null,'Optional JSON request rejects HTTP transport');
+ putenv('TFNSW_API_BASE=https://api.transport.nsw.gov.au.evil.test/v1/tp');
+ assertit(upstream_optional('add_info',[])===null,'Optional JSON request rejects lookalike TfNSW host');
+}finally{
+ if($previousKey===false)putenv('TFNSW_API_KEY');
+ else putenv('TFNSW_API_KEY='.$previousKey);
+ if($previousBase===false)putenv('TFNSW_API_BASE');
+ else putenv('TFNSW_API_BASE='.$previousBase);
+}
+
 $cacheDir=upstream_cache_directory();
 assertit($cacheDir===sys_get_temp_dir().'/sydney_station_alert_'.substr(hash('sha256',dirname(__DIR__).'/api/lib'),0,8),'Shared cache directory retains original path');
 assertit(is_dir($cacheDir),'Shared cache directory exists');
