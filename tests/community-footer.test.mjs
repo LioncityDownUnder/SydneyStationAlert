@@ -3,11 +3,20 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { communityDestinations, safeCommunityUrl, renderCommunityFooter } from '../dist/assets/community-footer.js';
 
-test('unconfigured Tally and Ko-fi links stay hidden (never send commuters to provider homepages)',()=>{
-  assert.deepEqual(communityDestinations,{feedback:'',coffee:''});
+test('owner-supplied Tally feedback link appears, while Ko-fi stays hidden until user configures it',()=>{
+  assert.deepEqual(communityDestinations,{feedback:'https://tally.so/r/9qLvLp',coffee:''});
   const markup=renderCommunityFooter();
-  assert.doesNotMatch(markup,/<nav|<a\b|https:\/\//);
+  assert.match(markup,/href="https:\/\/tally\.so\/r\/9qLvLp"/);
+  assert.match(markup,/Feedback &amp; report an issue/);
+  assert.equal((markup.match(/<a\b/g)||[]).length,1);
+  assert.match(markup,/target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer"/);
+  assert.doesNotMatch(markup,/ko-fi\.com|Buy me a coffee|<iframe|<form/);
   assert.match(markup,/Designed for Sydney commuters by Y\.T\. Ng/);
+});
+
+test('optional community links are both hidden if destinations are explicitly blank',()=>{
+  const markup=renderCommunityFooter({feedback:'',coffee:''});
+  assert.doesNotMatch(markup,/<nav|<a\b|https:\/\//);
   assert.match(markup,/<footer class="footer">/);
 });
 
