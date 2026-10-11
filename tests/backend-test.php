@@ -227,3 +227,8 @@ $unmatched=journey_crowding_from_feeds($crowdingRoute,['metro'=>['other-trip'=>[
 assertit(($unmatched['available']??true)===false,'Selected crowding never matches a different trip');
 $matched=journey_crowding_from_feeds($crowdingRoute,['metro'=>['selected-trip'=>['level'=>'moderate','carriages'=>[['level'=>'moderate']],'timestamp'=>time()]]]);
 assertit(($matched['available']??false)===true,'Selected crowding retains exact trip matching');
+
+$cacheDir=upstream_cache_directory();
+assertit($cacheDir===sys_get_temp_dir().'/sydney_station_alert_'.substr(hash('sha256',dirname(__DIR__).'/api/lib'),0,8),'Shared cache directory retains original path');
+assertit(is_dir($cacheDir),'Shared cache directory exists');
+assertit($cacheDir===upstream_cache_directory(),'Shared cache directory is stable across calls');
