@@ -22,6 +22,7 @@ jobs:
       - run: |
           php -l api/index.php
           php -l api/lib/core.php
+          php -l api/lib/journey-performance.php
           php -l api/gtfs-update.php
           php -l api/gtfs-index.php
           php -l api/lib/qa_route_rejections.php
