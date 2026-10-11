@@ -342,7 +342,7 @@ test('QA crowding fetch does not repeat the four-hour journey search',()=>{
  assert.match(client,/tripIds: \(leg\.tripIds \|\| \[\]\)\.slice\(0,8\)/);
  assert.match(server,/if\(\$action==='crowding'\)/);
  assert.match(server,/count\(\$legs\)>6/);
- assert.match(server,/journey_crowding_status\(\['legs'=>\$normalized\],\$qaCrowdingDiagnostic\)/);
+ assert.match(server,/journey_crowding_status\(\['legs'=>\$normalized\]\)/);
  assert.match(ui,/void refreshCrowding\(generation\)/);
  assert.match(ui,/void refreshCrowding\(journeyGeneration\)/);
  assert.match(ui,/selectedCrowdingIdentity\(state\.journey\)!==identity/);
@@ -363,19 +363,7 @@ test('QA selected-service crowding does not change confirmed boarding',()=>{
  assert.match(segment,/if\(state\.onboard\)saveActiveTrip\(\)/);
 });
 
-test('QA crowding diagnostics are privacy-safe and disabled outside staging',()=>{
- const backend=fs.readFileSync('api/index.php','utf8');
- const core=fs.readFileSync('api/lib/core.php','utf8');
- const main=fs.readFileSync('src/main.ts','utf8');
- assert.match(backend,/\$qaCrowdingDiagnostic=str_contains\(\(string\)\(\$_SERVER\['SCRIPT_NAME'\]\?\?''\),'\/qatest\/api\/'\)/);
- assert.match(backend,/journey_crowding_status\(\['legs'=>\$normalized\],\$qaCrowdingDiagnostic\)/);
- assert.match(core,/function crowding_match_diagnostics\(/);
- assert.match(core,/if\(\$includeDiagnostics\)\$result\['diagnostics'\]/);
- assert.match(main,/if\(!isQaEnvironment\|\|!Array\.isArray\(j\?\.crowding\?\.diagnostics\)\)return ''/);
- assert.match(main,/QA crowding diagnostics/);
- assert.match(main,/selected IDs:/);
- assert.doesNotMatch(main,/d\.tripId\}/);
-});
+
 
 test('QA crowding details persist during same-service journey refresh',()=>{
  const main=fs.readFileSync('src/main.ts','utf8');
@@ -385,49 +373,13 @@ test('QA crowding details persist during same-service journey refresh',()=>{
  assert.match(adopt,/if\(state\.journey\?\.crowding\)updated\.crowding=state\.journey\.crowding/);
  assert.match(adopt,/else state\.crowdingChecked=false/);
 });
-test('QA crowding request failures display a safe diagnostic category',()=>{
- const main=fs.readFileSync('src/main.ts','utf8');
- const region=main.slice(main.indexOf('async function refreshCrowding('),main.indexOf('async function enrichJourney('));
- assert.match(region,/e instanceof ApiRequestError&&e\.code==='BAD_REQUEST'\?'request_rejected'/);
- assert.match(region,/diagnostics:isQaEnvironment\?/);
- assert.match(region,/request_rejected:'Crowding request rejected by API validation'/);
- assert.match(region,/request_unavailable:'Crowding lookup failed or timed out'/);
- assert.doesNotMatch(region,/error\.message|e\.message|JSON\.stringify\(e\)/);
-});
 
-test('QA crowding failures show precise safe validation categories',()=>{
- const api=fs.readFileSync('api/index.php','utf8');
- const ui=fs.readFileSync('src/main.ts','utf8');
- for(const code of ['CROWDING_REQUEST_SIZE','CROWDING_LEGS_INVALID','CROWDING_MODE_INVALID','CROWDING_ID_COUNT']){
-  assert.ok(api.includes(code),code+' has a backend failure category');
-  assert.ok(ui.includes(code),code+' reaches the QA diagnostic UI');
- }
- assert.match(ui,/request_size:'Crowding request exceeded the API size limit'/);
- assert.match(ui,/id_format:'Crowding trip-ID format or length rejected'/);
- assert.match(ui,/diagnostics:isQaEnvironment\?/);
-});
 
-test('QA crowding identifies precise invalid ID category without revealing value',()=>{
- const core=fs.readFileSync('api/lib/core.php','utf8');
- const api=fs.readFileSync('api/index.php','utf8');
- const ui=fs.readFileSync('src/main.ts','utf8');
- for(const kind of ['CROWDING_ID_NOT_STRING','CROWDING_ID_TOO_LONG','CROWDING_ID_BLANK','CROWDING_ID_CONTROL']){
-  assert.ok(core.includes(kind),kind+' defined in validator');
-  assert.ok(ui.includes(kind),kind+' shown in QA diagnostics');
- }
- assert.match(api,/crowding_trip_id_invalid_reason\(\$id\)/);
- assert.match(core,/function crowding_trip_id_valid\(mixed \$id\):bool/);
- assert.match(ui,/id_control:'A selected trip identifier contains control characters'/);
-});
 
-test('QA crowding normalizes numeric TfNSW IDs without changing train selection',()=>{
- const api=fs.readFileSync('api/index.php','utf8');
- const core=fs.readFileSync('api/lib/core.php','utf8');
- assert.match(api,/\$valid\[\]=crowding_trip_id_normalize\(\$id\)/);
- assert.match(core,/if\(is_int\(\$id\)\)\$id=\(string\)\$id/);
- assert.match(core,/return is_int\(\$id\)\?\(string\)\$id:\$id/);
- assert.match(core,/function crowding_trip_id_invalid_reason\(mixed \$id\)/);
-});
+
+
+
+
 
 test('QA onboard refresh stays on selected service without searching for a replacement',()=>{
  const src=fs.readFileSync('src/main.ts','utf8');
@@ -448,15 +400,16 @@ test('Refresh button displays busy spinner and live status',()=>{
  assert.match(src,/Monitoring is paused\. Tap Resume before refreshing\./);
 });
 
-test('QA crowding freshness and previous match indicators are privacy-safe',()=>{
+
+
+test('QA remains free of old crowding diagnostic code and visual panels',()=>{
  const core=fs.readFileSync('api/lib/core.php','utf8');
+ const api=fs.readFileSync('api/index.php','utf8');
  const ui=fs.readFileSync('src/main.ts','utf8');
- assert.match(core,/function crowding_feed_freshness\(array \$vehicles,int \$now\):string/);
- assert.match(core,/'feedFreshness'=>array_key_exists\(\$mode,\$feeds\)/);
- assert.match(ui,/result\.matchHistory=\(result\.legs\|\|\[\]\)\.map/);
- assert.match(ui,/previous\?\.matchHistory\?\.\[i\]/);
- assert.match(ui,/previouslyMatched:!d\.matched&&Boolean\(result\.matchHistory\[i\]\)/);
- assert.match(ui,/Feed freshness:/);
- assert.match(ui,/Previously matched selected service:/);
- assert.match(ui,/if\(isQaEnvironment\)\{/);
+ for(const v of [core,api,ui]){
+  assert.doesNotMatch(v,/crowding_match_diagnostics|crowding_feed_freshness|qaCrowdingDiagnosticDetails|previouslyMatched|matchHistory|feedFreshness/);
+ }
+ assert.match(ui,/Crowding data unavailable for this service/);
+ assert.match(api,/if\(\$action==='crowding'\)/);
+ assert.match(api,/journey_crowding_status\(\['legs'=>\$normalized\]\)/);
 });
