@@ -1,0 +1,41 @@
+name: One-off Circular Quay to Padstow route diagnosis
+on:
+  push:
+    branches:
+      - diagnostic/circular-quay-padstow-platform-2
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - name: Query actual production and QA station and journey APIs
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo '== CURRENT SYDNEY TIME =='
+          TZ=Australia/Sydney date '+%Y-%m-%d %H:%M:%S %Z'
+          root=https://trains.nytnetwork.work
+          for name in 'Circular Quay' 'Padstow'; do
+            echo "== LOOKUP $name =="
+            curl -fsS --get --max-time 20 --data-urlencode action=stations --data-urlencode "q=$name" "$root/api/index.php" | jq --arg n "$name" '{stations:[.data[]? | select((.name|ascii_downcase)==($n|ascii_downcase)) | {id,name,mode}]}'
+          done
+          FROM="$(curl -fsS --get --max-time 20 --data-urlencode action=stations --data-urlencode 'q=Circular Quay' "$root/api/index.php" | jq -r '.data[]? | select(.name=="Circular Quay") | .id' | head -1)"
+          TO="$(curl -fsS --get --max-time 20 --data-urlencode action=stations --data-urlencode 'q=Padstow' "$root/api/index.php" | jq -r '.data[]? | select(.name=="Padstow") | .id' | head -1)"
+          test -n "$FROM" && test -n "$TO"
+          for env in prod qatest; do
+            if [ "$env" = prod ]; then api="$root/api/index.php"; else api="$root/qatest/api/index.php"; fi
+            for type in core full; do
+              echo "== ROUTE $env $type Circular Quay ($FROM) -> Padstow ($TO) =="
+              extra=()
+              if [ "$type" = core ]; then extra=(--data-urlencode 'coreOnly=1'); fi
+              result="$(curl --silent --show-error --max-time 75 --get "$api" --data-urlencode 'action=journey' --data-urlencode "from=$FROM" --data-urlencode "to=$TO" --data-urlencode 'fromName=Circular Quay' --data-urlencode 'toName=Padstow' "${extra[@]}" -o /tmp/route.json -w '%{http_code} %{time_total}')"
+              echo "HTTP / seconds: $result"
+              jq -c '{error: .error,route: (if .data.legs? then {origin:.data.origin,destination:.data.destination, source:.data.source,legCount:(.data.legs|length),legs:[.data.legs[] | {mode,line,origin:{name:.origin.name,id:.origin.id,platform:.origin.platform,departure:.origin.departure},destination:{name:.destination.name,id:.destination.id,platform:.destination.platform,arrival:.destination.arrival},stopCount:(.stops|length)}],transfers:.data.transfers,stops:[.data.stops[]|{name,id,mode,platform,arrival,departure}]} else null end)}' /tmp/route.json
+              echo "== POTENTIAL PLATFORM-AS-STATION NAME $env $type =="
+              jq -c '[.data.stops[]? | select((.name//""|ascii_downcase|test("^\\s*(platform|plat\\.?|pl\\.?)[[:space:]]+[0-9]+")))] | {name,id,platform}]' /tmp/route.json
+            done
+          done
+          echo 'ROUTE-DIAGNOSTIC-COMPLETE'
