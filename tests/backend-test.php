@@ -30,6 +30,69 @@ $origin=['id'=>'101','name'=>'Central','lat'=>-33.883,'lon'=>151.206,'mode'=>'tr
 $fixtures=['success','transfer','mixed','no-route','partial','missing-platform'];foreach($fixtures as $key){$body=json_decode(file_get_contents(__DIR__.'/fixtures/'.$key.'.json'),true);$fixtureDest=$key==='transfer'?['id'=>'105','name'=>'Barangaroo','lat'=>-33.862,'lon'=>151.202,'mode'=>'metro']:$dest;$result=normalized_journey($body,$origin,$fixtureDest);if(in_array($key,['no-route','partial','mixed'])){assertit($result===null,"$key is rejected safely");continue;}assertit($result!==null,"$key normalized");if($key==='success'){assertit(count($result['stops'])===3,'intermediate stops retained');assertit(count($result['legs'][0]['path'])===3,'rail geometry retained');assertit($result['legs'][0]['platform']==='4','platform parsed');assertit($result['stops'][1]['arrival']==='2026-10-07T14:24:00+11:00','estimated intermediate arrival is preferred');assertit($result['stops'][1]['departure']==='2026-10-07T14:24:30+11:00','intermediate departure is retained');assertit($result['stops'][2]['arrival']==='2026-10-07T14:26:00+11:00','destination arrival is retained');}if($key==='transfer')assertit(count($result['transfers'])===1&&count($result['legs'])===2,'transfer legs separate');if($key==='missing-platform')assertit($result['legs'][0]['platform']===null,'missing platform fallback is possible');}
 assertit(mode(['product'=>['class'=>5],'name'=>'Bus'])===null,'bus is not a rail mode');
 
+// SSA-09: source records carry a platform-only disassembledName but the
+// authoritative station identity in parent.name. Keep each physical stop.
+$airportFixture=json_decode(file_get_contents(__DIR__.'/fixtures/airport-daytime.json'),true);
+$stationCQ=['id'=>'200020','name'=>'Circular Quay','mode'=>'train','lat'=>-33.9,'lon'=>151.1];
+$stationIA=['id'=>'202030','name'=>'International Airport','mode'=>'train','lat'=>-33.9,'lon'=>151.1];
+$stationPadstow=['id'=>'221110','name'=>'Padstow','mode'=>'train','lat'=>-33.9,'lon'=>151.1];
+$airportStopPoint=$airportFixture['circularQuayToPadstow']['journeys'][0]['legs'][0]['stopSequence'][7]['stopPoint'];
+$domesticStopPoint=$airportFixture['circularQuayToPadstow']['journeys'][0]['legs'][0]['stopSequence'][6]['stopPoint'];
+$airportNormalized=stop($airportStopPoint,'train');
+$domesticNormalized=stop($domesticStopPoint,'train');
+assertit($airportNormalized['name']==='International Airport'&&$airportNormalized['platform']==='2'&&$airportNormalized['id']==='2020102',
+ 'SSA-09 international airport resolves parent station name while retaining platform 2 and original stop ID');
+assertit($domesticNormalized['name']==='Domestic Airport'&&$domesticNormalized['platform']==='2'&&$domesticNormalized['id']==='202092',
+ 'SSA-09 domestic airport resolves parent station name without sharing international identity');
+assertit(!same_station($airportNormalized,$domesticNormalized),
+ 'SSA-09 different airport parent names and platform stop IDs never collapse');
+assertit(same_station(['id'=>'2212164','name'=>'Revesby'],['id'=>'2212162','name'=>'Revesby']),
+ 'SSA-09 same real interchange station with different platforms still deduplicates as before');
+$noParent=$airportStopPoint;unset($noParent['parent']);
+$unknownPlatform=station($noParent,'train');
+assertit($unknownPlatform!==null&&$unknownPlatform['name']==='Platform 2'&&
+ !same_station($unknownPlatform,$stationIA)&&
+ !same_station($unknownPlatform,['id'=>'202092','name'=>'Platform 2']),
+ 'SSA-09 missing parent stays visibly uncertain, not guessed or merged with another platform');
+$daytimeAirportCases=[
+ ['circularQuayToInternational',$stationCQ,$stationIA,8,'International Airport','2020102'],
+ ['internationalToPadstow',$stationIA,$stationPadstow,10,'International Airport','2020102'],
+ ['internationalToCircular',$stationIA,$stationCQ,3,'International Airport','2020101'],
+ ['circularQuayToPadstow',$stationCQ,$stationPadstow,17,'International Airport','2020102'],
+];
+foreach($daytimeAirportCases as [$key,$from,$to,$expectedStops,$airportName,$expectedId]){
+ $route=normalized_journey($airportFixture[$key],$from,$to);
+ assertit($route!==null,"SSA-09 scheduled daytime T8 $key normalizes as an actual rail journey");
+ assertit(count($route['stops'])===$expectedStops,"SSA-09 $key retains provider stop count ($expectedStops)");
+ $airportStops=array_values(array_filter($route['stops'],fn($stop)=>($stop['name']??'')===$airportName));
+ assertit(count($airportStops)===1&&$airportStops[0]['id']===$expectedId,
+  "SSA-09 $key identifies International Airport without platform-only names");
+ assertit(!in_array('Platform 1',array_column($route['stops'],'name'),true)&&
+   !in_array('Platform 2',array_column($route['stops'],'name'),true),
+  "SSA-09 $key never exposes platform as a standalone station name");
+}
+$fullAirport=normalized_journey($airportFixture['circularQuayToPadstow'],$stationCQ,$stationPadstow);
+$ids=array_column($fullAirport['stops'],'id');
+$names=array_column($fullAirport['stops'],'name');
+assertit(array_search('202092',$ids,true)===6&&array_search('2020102',$ids,true)===7&&
+ $names[6]==='Domestic Airport'&&$names[7]==='International Airport',
+ 'SSA-09 full T8 itinerary keeps domestic and international consecutively in original provider order');
+assertit($fullAirport['stops'][6]['arrival']==='2026-10-12T12:27:00+11:00'&&
+ $fullAirport['stops'][7]['arrival']==='2026-10-12T12:29:30+11:00'&&
+ $fullAirport['stops'][8]['arrival']==='2026-10-12T12:32:24+11:00',
+ 'SSA-09 airport and following Wolli Creek times stay exactly as reported by TfNSW fixture');
+$reverseAirport=normalized_journey($airportFixture['internationalToCircular'],$stationIA,$stationCQ);
+assertit($reverseAirport['stops'][0]['name']==='International Airport'&&
+ $reverseAirport['stops'][0]['platform']==='1'&&
+ $reverseAirport['stops'][1]['name']==='Domestic Airport'&&$reverseAirport['stops'][1]['platform']==='1',
+ 'SSA-09 reverse platform 1 train keeps International and Domestic airports distinct');
+// Unknown parent fallback cannot claim a verified Airport origin.
+$unknownOrigin=$airportFixture['internationalToPadstow'];
+unset($unknownOrigin['journeys'][0]['legs'][0]['origin']['parent']);
+assertit(normalized_journey($unknownOrigin,$stationIA,$stationPadstow)===null,
+ 'SSA-09 direct search never treats an unnamed platform as International Airport');
+
+
 $alertModule=realpath(__DIR__.'/../api/lib/service-alerts.php');
 assertit($alertModule!==false,'Extracted service-alert module exists');
 foreach(['alert_text_value','normalize_service_alert','journey_service_status','best_unaffected_route','fetch_current_service_alerts'] as $fn){

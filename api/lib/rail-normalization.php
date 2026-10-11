@@ -64,9 +64,31 @@ function clean_station_name(string $name):string{
  $name=preg_replace('/\s+(Station|Railway Station)\s*$/i','',$name) ?: $name;
  return trim($name," \t\n\r\0\x0B,");
 }
+/** TfNSW platform stopPoint names can contain ONLY ", Platform 2".
+ * Prefer the actual parent/standalone station name, never a guessed nearby stop.
+ */
+function platform_only_station_name(string $name):bool{
+ return preg_match('/^(?:platform|plat\\.?|pl\\.?)\\s*:?\\s*[0-9]+[a-z]?$/i',trim($name))===1;
+}
+function station_name_without_platform_location(string $name):string{
+ // e.g. "International Airport Station, Platform 2, Mascot" -> "International Airport".
+ $base=preg_replace('/,\\s*(?:platform|plat\\.?|pl\\.?)\\s*:?\\s*[0-9]+[a-z]?(?:\\s*,\\s*[^,]+)?\\s*$/i','',$name);
+ return clean_station_name($base??$name);
+}
 function station(mixed $raw,?string $forcedMode=null):?array{
  if(!is_array($raw))return null;
  $coords=point($raw);$name=clean_station_name((string)val($raw,'disassembledName',val($raw,'name','')));$id=(string)val($raw,'id',val($raw,'stateless',''));
+ if($name===''||platform_only_station_name($name)){
+  $parent=val($raw,'parent',[]);
+  $alternatives=[
+   is_array($parent)?(string)val($parent,'name',''):'',
+   (string)val($raw,'name','')
+  ];
+  foreach($alternatives as $source){
+   $candidate=station_name_without_platform_location($source);
+   if($candidate!==''&&!platform_only_station_name($candidate)){$name=$candidate;break;}
+  }
+ }
  if(!$coords||!$id||!$name)return null;
  $stationMode=$forcedMode??location_rail_mode($raw)??(str_contains(strtolower($name),'metro')?'metro':'train');
  return ['id'=>$id,'name'=>$name,'mode'=>$stationMode]+$coords;
@@ -106,7 +128,10 @@ function is_transfer_walk(mixed $transport):bool{
 function same_station(array $a,array $b):bool{
  if((string)val($a,'id','')!==''&&(string)val($a,'id','')===(string)val($b,'id',''))return true;
  $an=strtolower(clean_station_name((string)val($a,'name','')));$bn=strtolower(clean_station_name((string)val($b,'name','')));
- return $an!==''&&$an===$bn;
+ // "Platform 2" is not a station identity: never collapse unrelated stop IDs
+ // or treat a platform-only label as the requested origin/destination.
+ if($an===''||platform_only_station_name($an)||platform_only_station_name($bn))return false;
+ return $an===$bn;
 }
 function iso_ts(mixed $value):?int{
  if(!is_string($value)||trim($value)==='')return null;
