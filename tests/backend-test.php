@@ -117,12 +117,22 @@ $prioritized=prioritized_transfer_candidates($routeWithKnownTransfer,$transferBo
 assertit(count($prioritized)<=1,'transfer validation fanout is capped');
 assertit(($prioritized[0]['name']??'')==='Wolli Creek','selected route transfer is validated first');
 
+assertit(is_file(__DIR__.'/../api/lib/journey-performance.php'),'Performance diagnostics module is present');
+assertit(function_exists('journey_perf_track')&&function_exists('journey_perf_finish'),'Core loads extracted timing functions');
+assertit(journey_perf_track('disabled',fn()=>17)===17,'Timing wrapper preserves results without an active trace');
 $GLOBALS['journey_perf']=['start'=>microtime(true),'phase'=>'setup','phaseStart'=>microtime(true),'durations'=>[],'counts'=>[],'coreOnly'=>true,'route'=>'test'];
 $value=journey_perf_track('normalize',fn()=>42);
 journey_perf_phase('initial_parallel_search');
 assertit($value===42,'timed callback returns its original value');
 assertit(($GLOBALS['journey_perf']['counts']['normalize']??0)===1,'performance tracker records phase calls');
 assertit(isset($GLOBALS['journey_perf']['durations']['phase_setup']),'performance tracker measures stage durations');
+$thrown=false;
+try{journey_perf_track('expected_error',function(){throw new RuntimeException('expected');});}
+catch(RuntimeException $ex){$thrown=$ex->getMessage()==='expected';}
+assertit($thrown,'Timing wrapper propagates callback exceptions without changing them');
+assertit(($GLOBALS['journey_perf']['counts']['expected_error']??0)===1,'Timing wrapper records callback exceptions in finalizer');
+assertit(isset($GLOBALS['journey_perf']['durations']['expected_error']),'Timing wrapper records elapsed time for failed callbacks');
+
 unset($GLOBALS['journey_perf']);
 
 $transferPoint=['id'=>'220810','name'=>'Wolli Creek','lat'=>-33.928,'lon'=>151.154,'mode'=>'train','platform'=>'3','arrival'=>'2026-10-08T22:48:00+11:00'];
