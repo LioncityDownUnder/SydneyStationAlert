@@ -781,6 +781,17 @@ function journey_crowding_from_feeds(array $route,array $feeds):array{
 }
 // QA-only classification from already-fetched vehicle records. No trip identifiers,
  // vehicle identifiers, timestamps, or raw payloads are returned to the browser.
+// QA diagnostics report freshness buckets, never raw vehicle timestamps or identifiers.
+function crowding_feed_freshness(array $vehicles,int $now):string{
+ $latest=0;
+ foreach($vehicles as $vehicle){
+  $stamp=(int)($vehicle['timestamp']??0);
+  if($stamp>0&&$stamp<=$now+60)$latest=max($latest,$stamp);
+ }
+ if($latest===0)return 'unknown';
+ $age=max(0,$now-$latest);
+ return $age<=90?'fresh':($age<=300?'lagging':'stale');
+}
 function crowding_match_diagnostics(array $route,array $feeds):array{
  $rows=[];
  foreach(val($route,'legs',[]) as $index=>$leg){
@@ -798,7 +809,9 @@ function crowding_match_diagnostics(array $route,array $feeds):array{
   $reason=!array_key_exists($mode,$feeds)?'feed_unavailable':
     (!$ids?'trip_id_missing':(!$matched?'trip_not_matched':(!$occupancyKnown?'occupancy_missing':'available')));
   $rows[]=['legIndex'=>$index,'mode'=>$mode,'tripIdCount'=>count($ids),
-   'feedVehicleCount'=>count($feeds[$mode]??[]),'matched'=>$matched!==null,
+   'feedVehicleCount'=>count($feeds[$mode]??[]),
+   'feedFreshness'=>array_key_exists($mode,$feeds)?crowding_feed_freshness($feeds[$mode],time()):'unavailable',
+   'matched'=>$matched!==null,
    'carriageCount'=>$matched?count($matched['carriages']??[]):0,
    'knownCarriages'=>$knownCarriages,'reason'=>$reason];
  }
