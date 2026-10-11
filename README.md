@@ -55,7 +55,9 @@ The owner must complete provider setup in their own account before activation:
 2. **Ko-fi:** Create your own creator page, choose **AUD**, connect your own PayPal or Stripe account, and use **one-time voluntary tips**. Ko-fi's free mode can offer 0% Ko-fi fee on one-time tips when optional Standard/Contributor fee mode is disabled; payment processing fees still apply. Do not call tips tax-deductible charity gifts. Get your `https://ko-fi.com/yourhandle` URL.
 3. **Before enabling on QA:** Verify both actual public pages and their ownership, then replace empty `feedback` and `coffee` values in `src/community-footer.ts`. A strict HTTPS and host/path allowlist rejects other destinations. Commit via feature PR, run `npm run check`, merge to `develop` for QA verification, and request fresh production approval. Never commit payment keys, private form admin URLs, or personal messages.
 
-Until the actual page URLs are provided, no empty or fictitious link is shown. The train app continues to function as before. The footer is shared by initial station selection and active journey views.
+**QA activation (SSA-11):** The owner provided the published feedback URL `https://tally.so/r/9qLvLp`. It is configured as the sole visible footer community link on QA, pending successful QA checks and later explicit production approval. The app does **not** itself verify whether the form has reCAPTCHA enabled; the form owner should check that in Tally before production release. The Ko-fi URL is still empty, so the tip link remains hidden pending owner setup.
+
+The train app continues to function as before. The footer is shared by initial station selection and active journey views; unconfigured or invalid destinations never render.
 
 ## Current baseline
 
