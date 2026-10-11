@@ -90,6 +90,15 @@ button:disabled { cursor: not-allowed; }
 .notice { padding: 13px 15px; font-size: .9375rem; line-height: 1.55; border-radius: 8px; background: #f5f4ef; color: #535c57; margin: 16px 0; overflow-wrap: anywhere; }
 .notice.warn { background: #fff1e6; color: #7a4823; }
 .footer { font-size: .8125rem; line-height: 1.5; color: #858c86; text-align: center; margin-top: 58px; }
+/* SSA-11/12: passive footer text links only, no floating support UI. */
+.footer-community { display: flex; justify-content: center; align-items: center; flex-wrap: wrap; gap: 6px 12px; margin-bottom: 9px; }
+.footer-community a { display: inline-flex; align-items: center; min-height: 36px; padding: 3px 2px; color: #5b645e; font-size: .84rem; font-weight: 600; text-underline-offset: 3px; }
+.footer-community a:hover { color: #874b26; }
+.footer-community a:focus-visible { outline: 2px solid #bd612c; border-radius: 3px; outline-offset: 3px; }
+.footer-separator { color: #b8bdb8; user-select: none; }
+.footer-credit { display: block; }
+@media (max-width: 390px) { .footer-community { gap: 3px 10px; } .footer-separator { display: none; } }
+
 
 .journeyhead { margin-top: 53px; min-width: 0; }
 .journeyhead h1 { font-size: clamp(2rem, 6vw, 3.15rem); line-height: 1.12; letter-spacing: -.05em; margin: 10px 0; overflow-wrap: anywhere; word-break: normal; }

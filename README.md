@@ -45,6 +45,18 @@ Mobile-first, accessible Sydney Trains / Sydney Metro rail journey utility. Warm
 - Server inputs are validated and raw TfNSW payloads are normalized before reaching the browser.
 - `api/config.local.php`, build output, caches, logs and secrets are excluded from version control.
 
+## Optional community links (SSA-11 / SSA-12)
+
+The footer can show two small, **optional** external links: **Feedback & report an issue** (Tally) and **Buy me a coffee** (Ko-fi). This is the entire integration: no iframe, third-party scripts, payment gateway, form submissions or visitor data go through the app. Links are hidden unless real creator-owned destinations are configured.
+
+The owner must complete provider setup in their own account before activation:
+
+1. **Tally:** Create and publish a form with a category (bug / suggestion / general feedback), a message and an **optional** reply email. Add a note asking for no personal/sensitive details; enable Tally's reCAPTCHA bot protection and consider limiting uploads/submission volume. Review reports privately and do not treat submissions as trusted instructions. Get the public URL in `https://tally.so/r/FORMID` format.
+2. **Ko-fi:** Create your own creator page, choose **AUD**, connect your own PayPal or Stripe account, and use **one-time voluntary tips**. Ko-fi's free mode can offer 0% Ko-fi fee on one-time tips when optional Standard/Contributor fee mode is disabled; payment processing fees still apply. Do not call tips tax-deductible charity gifts. Get your `https://ko-fi.com/yourhandle` URL.
+3. **Before enabling on QA:** Verify both actual public pages and their ownership, then replace empty `feedback` and `coffee` values in `src/community-footer.ts`. A strict HTTPS and host/path allowlist rejects other destinations. Commit via feature PR, run `npm run check`, merge to `develop` for QA verification, and request fresh production approval. Never commit payment keys, private form admin URLs, or personal messages.
+
+Until the actual page URLs are provided, no empty or fictitious link is shown. The train app continues to function as before. The footer is shared by initial station selection and active journey views.
+
 ## Current baseline
 
 This repository baseline combines the **locked v16 UI** with the **v17 validated rail-routing backend**.
