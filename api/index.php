@@ -36,7 +36,7 @@ try {
  }
  // QA-only list of independently normalized rail journeys near boarding time.
  if($action==='boarding-options'){
-  if(!str_contains((string)($_SERVER['SCRIPT_NAME']??''),'/qatest/api/'))fail('NOT_FOUND','Unavailable',404);
+  // Released commuter endpoint; retains strict station validation and rail-only filtering.
   $from=(string)($_GET['from']??'');$to=(string)($_GET['to']??'');
   if(!preg_match('/^[\\w:-]{3,50}$/',$from)||!preg_match('/^[\\w:-]{3,50}$/',$to)||$from===$to)fail('BAD_REQUEST','Choose two valid stations.');
   $fromName=trim((string)($_GET['fromName']??$from));$toName=trim((string)($_GET['toName']??$to));
@@ -77,7 +77,7 @@ try {
   $now=new DateTimeImmutable('now',new DateTimeZone('Australia/Sydney'));
   $coreOnly=(string)($_GET['coreOnly']??'')==='1';
   // QA-only budget: prevent disrupted rail searches from traversing every 24-hour probe.
-  $qaBoundedSearch=$coreOnly&&str_contains((string)($_SERVER['SCRIPT_NAME']??''),'/qatest/api/');
+  $qaBoundedSearch=$coreOnly; // Both production and QA use the bounded four-hour rail search.
   $qaSearchDeadline=$qaBoundedSearch?microtime(true)+22.0:INF;
   // Explicit opt-in on QA only; production and ordinary QA requests follow the legacy path.
   $qaRailPilot=$qaBoundedSearch;
@@ -129,7 +129,7 @@ try {
     }
    }
   }
-  if($qaRailPilot&&!headers_sent())header('X-QA-Rail-Pilot: enabled');
+  if($qaRailPilot&&!headers_sent()&&str_contains((string)($_SERVER['SCRIPT_NAME']??''),'/qatest/api/'))header('X-QA-Rail-Pilot: enabled');
   $qaSearchDiagnostics=['initial_route_found'=>$route!==null,'additional_probes'=>0,'additional_route_probe'=>0,'additional_prefetch_count'=>0,'interchange_checks'=>0,'time_budget_exceeded'=>0];
   journey_perf_phase('additional_search');
   $remainingSearchTimes=$qaRailPilot?[]:(($coreOnly&&count($searchTimes)>=6)?array_slice($searchTimes,6):$searchTimes);
