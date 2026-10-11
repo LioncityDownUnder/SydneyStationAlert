@@ -12,6 +12,28 @@ try {
   $body=upstream('coord',['coord'=>(int)round($lon*1000000).':'.(int)round($lat*1000000).':EPSG:4326','type_1'=>'stop','radius_1'=>3000,'inclFilter'=>1],90);
   $found=[];foreach(val($body,'locations',[]) as $loc){$railMode=location_rail_mode($loc);if(!$railMode)continue;$s=station($loc,$railMode);if($s){$distance=2*6371000*asin(min(1,sqrt(sin(deg2rad(($s['lat']-$lat)/2))**2+cos(deg2rad($lat))*cos(deg2rad($s['lat']))*sin(deg2rad(($s['lon']-$lon)/2))**2)));if($distance<=3000)$found[]=$s;}}echo json_encode(['data'=>$found]);exit;
  }
+ // Production crowding lookup matches only identifiers from the selected service.
+ if($action==='crowding'){
+  $encoded=(string)($_GET['legs']??'');
+  if($encoded===''||strlen($encoded)>3000)fail('BAD_REQUEST','Invalid crowding request.');
+  $legs=json_decode($encoded,true);
+  if(!is_array($legs)||!array_is_list($legs)||count($legs)<1||count($legs)>6)fail('BAD_REQUEST','Invalid crowding legs.');
+  $normalized=[];
+  foreach($legs as $i=>$leg){
+   if(!is_array($leg)||!in_array($leg['mode']??null,['train','metro'],true))fail('BAD_REQUEST','Invalid rail mode.');
+   $ids=$leg['tripIds']??null;
+   if(!is_array($ids)||!array_is_list($ids)||count($ids)>8)fail('BAD_REQUEST','Invalid trip identifier list.');
+   $valid=[];
+   foreach($ids as $id){
+    if(!is_string($id)&&!is_int($id))fail('BAD_REQUEST','Invalid trip identifier.');
+    $text=(string)$id;
+    if(strlen($text)>150||trim($text)===''||preg_match('/[\\x00-\\x1F\\x7F]/',$text))fail('BAD_REQUEST','Invalid trip identifier.');
+    $valid[]=$text;
+   }
+   $normalized[]=['id'=>'leg-'.$i,'mode'=>$leg['mode'],'tripIds'=>$valid];
+  }
+  echo json_encode(['data'=>journey_crowding_status(['legs'=>$normalized])],JSON_INVALID_UTF8_SUBSTITUTE);exit;
+ }
  // QA-only list of independently normalized rail journeys near boarding time.
  if($action==='boarding-options'){
   // Released commuter endpoint; retains strict station validation and rail-only filtering.
