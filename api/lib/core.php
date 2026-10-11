@@ -367,10 +367,19 @@ function source_key():string{
  if(!$key){$config=__DIR__.'/../config.local.php';if(is_file($config)){$private=require $config;$key=is_array($private)?(string)($private['TFNSW_API_KEY']??''):'';}}
  return $key;
 }
+/**
+ * Shared ephemeral TfNSW response-cache directory.
+ * Retains the existing stable path and per-endpoint cache TTLs.
+ */
+function upstream_cache_directory():string{
+ $dir=sys_get_temp_dir().'/sydney_station_alert_'.substr(hash('sha256',__DIR__),0,8);
+ if(!is_dir($dir))@mkdir($dir,0700,true);
+ return $dir;
+}
 function upstream_parallel_trip(array $paramsList,int $ttl=25):array{
  $key=source_key();if(!$key)return array_fill(0,count($paramsList),null);
  $base=rtrim((string)(getenv('TFNSW_API_BASE')?:'https://api.transport.nsw.gov.au/v1/tp'),'/');if(!str_starts_with($base,'https://api.transport.nsw.gov.au/'))return array_fill(0,count($paramsList),null);
- $cacheDir=sys_get_temp_dir().'/sydney_station_alert_'.substr(hash('sha256',__DIR__),0,8);if(!is_dir($cacheDir))@mkdir($cacheDir,0700,true);
+ $cacheDir=upstream_cache_directory();
  $results=array_fill(0,count($paramsList),null);$mh=curl_multi_init();$pending=[];
  foreach($paramsList as $i=>$params){
   $params=['outputFormat'=>'rapidJSON','coordOutputFormat'=>'EPSG:4326']+$params;$url=$base.'/trip?'.http_build_query($params,'','&',PHP_QUERY_RFC3986);$cache=$cacheDir.'/'.hash('sha256',$url).'.json';
@@ -386,8 +395,8 @@ function upstream(string $endpoint,array $params,int $ttl=30):array{
  if(!str_starts_with($base,'https://api.transport.nsw.gov.au/'))fail('CONFIG_MISSING','Invalid configured API endpoint.',503);
  $params=['outputFormat'=>'rapidJSON','coordOutputFormat'=>'EPSG:4326']+$params;
  $url=$base.'/'.$endpoint.'?'.http_build_query($params,'','&',PHP_QUERY_RFC3986);
- $cacheDir=sys_get_temp_dir().'/sydney_station_alert_'.substr(hash('sha256',__DIR__),0,8);
- if(!is_dir($cacheDir))@mkdir($cacheDir,0700,true);
+ $cacheDir=upstream_cache_directory();
+
  $cache=$cacheDir.'/'.hash('sha256',$url).'.json';
  if(is_file($cache)&&filemtime($cache)>time()-$ttl){$data=json_decode((string)file_get_contents($cache),true);if(is_array($data))return $data;}
  $attempts=2;for($attempt=0;$attempt<$attempts;$attempt++){
@@ -749,8 +758,8 @@ function parse_vehicle_positions_feed(string $data):array{
 function upstream_binary_optional(string $url,int $ttl=15):?string{
  $key=source_key();if($key==='')return null;
  if(!preg_match('#^https://api\.transport\.nsw\.gov\.au/v2/gtfs/vehiclepos/(?:sydneytrains|metro)$#',$url))return null;
- $cacheDir=sys_get_temp_dir().'/sydney_station_alert_'.substr(hash('sha256',__DIR__),0,8);
- if(!is_dir($cacheDir))@mkdir($cacheDir,0700,true);
+ $cacheDir=upstream_cache_directory();
+
  $cache=$cacheDir.'/'.hash('sha256',$url).'.bin';
  if(is_file($cache)&&filemtime($cache)>time()-$ttl){$cached=file_get_contents($cache);if(is_string($cached)&&$cached!=='')return $cached;}
  $h=curl_init($url);curl_setopt_array($h,[CURLOPT_RETURNTRANSFER=>true,CURLOPT_TIMEOUT=>3,CURLOPT_CONNECTTIMEOUT=>1,CURLOPT_HTTPHEADER=>['Authorization: apikey '.$key,'Accept: application/x-protobuf'],CURLOPT_FOLLOWLOCATION=>false]);
@@ -792,8 +801,8 @@ function upstream_optional(string $endpoint,array $params,int $ttl=60):?array{
  if(!str_starts_with($base,'https://api.transport.nsw.gov.au/'))return null;
  $params=['outputFormat'=>'rapidJSON','coordOutputFormat'=>'EPSG:4326']+$params;
  $url=$base.'/'.$endpoint.'?'.http_build_query($params,'','&',PHP_QUERY_RFC3986);
- $cacheDir=sys_get_temp_dir().'/sydney_station_alert_'.substr(hash('sha256',__DIR__),0,8);
- if(!is_dir($cacheDir))@mkdir($cacheDir,0700,true);
+ $cacheDir=upstream_cache_directory();
+
  $cache=$cacheDir.'/'.hash('sha256',$url).'.json';
  if(is_file($cache)&&filemtime($cache)>time()-$ttl){
   $data=json_decode((string)file_get_contents($cache),true);if(is_array($data))return $data;
