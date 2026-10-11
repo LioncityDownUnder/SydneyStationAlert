@@ -244,11 +244,19 @@ assertit(!crowding_trip_id_valid('   '),'Crowding rejects blank trip ID');
 assertit(!crowding_trip_id_valid("abc\n123"),'Crowding rejects line breaks in trip IDs');
 assertit(!crowding_trip_id_valid("abc\x00def"),'Crowding rejects null bytes in trip IDs');
 assertit(!crowding_trip_id_valid(str_repeat('a',151)),'Crowding rejects oversized trip IDs');
-assertit(!crowding_trip_id_valid(123),'Crowding rejects non-string trip ID');
+assertit(crowding_trip_id_valid(123),'Crowding accepts integer TfNSW trip IDs');
 
 assertit(crowding_trip_id_invalid_reason('A valid | ID')===null,'Crowding accepts printable identifier');
 assertit(crowding_trip_id_invalid_reason(str_repeat('X',151))==='CROWDING_ID_TOO_LONG','Crowding classifies oversized identifiers');
 assertit(crowding_trip_id_invalid_reason("A\nB")==='CROWDING_ID_CONTROL','Crowding classifies newline in identifier');
 assertit(crowding_trip_id_invalid_reason("A\x00B")==='CROWDING_ID_CONTROL','Crowding classifies NUL in identifier');
 assertit(crowding_trip_id_invalid_reason('   ')==='CROWDING_ID_BLANK','Crowding classifies blank identifier');
-assertit(crowding_trip_id_invalid_reason(42)==='CROWDING_ID_NOT_STRING','Crowding classifies non-string identifier');
+assertit(crowding_trip_id_invalid_reason(42)===null,'Crowding accepts integer identifier');
+
+assertit(crowding_trip_id_normalize(12345)==='12345','Crowding normalizes integer trip ID to exact decimal text');
+assertit(crowding_trip_id_normalize(0)==='0','Crowding preserves zero numeric trip ID');
+assertit(crowding_trip_id_normalize('00123')==='00123','Crowding preserves leading zeros in string IDs');
+assertit(crowding_trip_id_invalid_reason(true)==='CROWDING_ID_NOT_STRING','Crowding rejects boolean trip IDs');
+assertit(crowding_trip_id_invalid_reason(12.5)==='CROWDING_ID_NOT_STRING','Crowding rejects fractional trip IDs');
+assertit(crowding_trip_id_invalid_reason(['id'=>123])==='CROWDING_ID_NOT_STRING','Crowding rejects structured trip IDs');
+assertit(crowding_trip_id_normalize(12.5)===null,'Crowding never silently rounds a fractional identifier');
