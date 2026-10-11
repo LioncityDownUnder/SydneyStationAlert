@@ -166,3 +166,56 @@ assertit($lateProbes[0]->format('Y-m-d H:i')==='2026-10-08 23:42','overnight sea
 assertit($lateProbes[1]->format('Y-m-d H:i')==='2026-10-09 00:12','overnight search probes the following date');
 assertit($lateProbes[4]->format('Y-m-d H:i')==='2026-10-09 01:42','overnight search retains five probes for the parallel fast path');
 assertit($lateProbes[count($lateProbes)-1]->format('Y-m-d H:i')==='2026-10-09 23:42','overnight search ends within a rolling 24-hour horizon');
+
+require_once __DIR__.'/../api/lib/qa_route_rejections.php';
+$qaOrigin=['id'=>'101','name'=>'Central','lat'=>-33.883,'lon'=>151.206,'mode'=>'train'];
+$qaDest=['id'=>'103','name'=>'Town Hall','lat'=>-33.873,'lon'=>151.207,'mode'=>'train'];
+$qaMixed=json_decode(file_get_contents(__DIR__.'/fixtures/mixed.json'),true);
+$qaReject=qa_route_rejection_summary($qaMixed,$qaOrigin,$qaDest);
+assertit(($qaReject['rawJourneys']??0)>0,'Step 5AD rejection probe counts raw journeys');
+assertit(($qaReject['railOnlyNormalized']??-1)===0,'Step 5AD rejection probe does not accept mixed-mode journeys');
+assertit(array_sum($qaReject['reasons'])===$qaReject['sampledJourneys'],'Step 5AD counts each sampled journey once');
+
+$qaDetails=$qaReject['journeyLegDetails']??[];
+assertit(count($qaDetails)===1,'Step 5AE includes one bounded fixture journey classification');
+assertit(($qaDetails[0]['reason']??'')==='NON_RAIL_LEG','Step 5AE preserves strict rail-only rejection');
+assertit(($qaDetails[0]['legs'][0]['kind']??'')==='non_rail'&&($qaDetails[0]['legs'][0]['transportClass']??'')==='5','Step 5AE identifies bus leg without exposing journey payload');
+assertit(($qaDetails[0]['legs'][1]['kind']??'')==='train','Step 5AE distinguishes following rail leg');
+$qaWalk=['journeys'=>[['legs'=>[['transportation'=>['product'=>['class'=>100],'name'=>'Walk']]]]]];
+$qaWalkDetails=qa_route_rejection_summary($qaWalk,$qaOrigin,$qaDest)['journeyLegDetails'][0]['legs']??[];
+assertit(($qaWalkDetails[0]['kind']??'')==='walk','Step 5AE does not classify walking interchange as non-rail transport');
+
+$baseFilter=['name_origin'=>'222010','name_destination'=>'221110','calcNumberOfTrips'=>22];
+$qaFiltered=qa_rail_filter_params($baseFilter);
+assertit(($qaFiltered['name_origin']??'')==='222010'&&($qaFiltered['name_destination']??'')==='221110','Step 5AF filter preserves station pair');
+assertit(($qaFiltered['excludedMeans']??'')==='checkbox'&&($qaFiltered['exclMOT_5']??0)===1,'Step 5AF filter requests exclusion of bus class');
+assertit(!isset($qaFiltered['exclMOT_1'])&&!isset($qaFiltered['exclMOT_2']),'Step 5AF does not exclude train or metro');
+$comparison=qa_rail_filter_comparison($qaMixed,$qaMixed,$qaOrigin,$qaDest);
+assertit(($comparison['baseline']['summary']['rawJourneys']??0)===1&&($comparison['railFiltered']['summary']['railOnlyNormalized']??-1)===0,'Step 5AF reports counts without falsely accepting mixed fixture');
+assertit(($comparison['railFilterConfirmed']??null)===false,'Step 5AF does not claim that TfNSW applied the filter');
+assertit(!isset($comparison['baseline']['summary']['journeyLegDetails']),'Step 5AF comparison excludes raw per-leg journey evidence');
+
+$qaRailResult=qa_rail_search_result($qaMixed,$qaOrigin,$qaDest);
+assertit(($qaRailResult['status']??'')==='NO_RAIL_CANDIDATE_IN_RESPONSE','Step 5AG refuses mixed-mode route even with filter request');
+assertit(($qaRailResult['railOnlyNormalized']??-1)===0,'Step 5AG strictly normalizes candidates');
+assertit(!isset($qaRailResult['journeyLegDetails'])&&!isset($qaRailResult['journeys']),'Step 5AG response does not expose raw journeys');
+$qaMissingResult=qa_rail_search_result(null,$qaOrigin,$qaDest);
+assertit(($qaMissingResult['status']??'')==='UPSTREAM_UNAVAILABLE','Step 5AG distinguishes upstream failure from unavailable trains');
+$qaRailFixture=json_decode(file_get_contents(__DIR__.'/fixtures/success.json'),true);
+$qaGoodResult=qa_rail_search_result($qaRailFixture,$qaOrigin,$qaDest);
+assertit(($qaGoodResult['status']??'')==='RAIL_CANDIDATE_UNVERIFIED'&&$qaGoodResult['railOnlyNormalized']>0,'Step 5AG keeps valid train-only candidate explicitly unverified');
+
+$windowOrigin=['id'=>'101','name'=>'Central','lat'=>-33.883,'lon'=>151.206,'mode'=>'train'];
+$windowDest=['id'=>'103','name'=>'Town Hall','lat'=>-33.873,'lon'=>151.207,'mode'=>'train'];
+$windowRaw=json_decode(file_get_contents(__DIR__.'/fixtures/success.json'),true);
+$baseTime=strtotime('2026-10-07T14:00:00+11:00');
+$windowRoute=qa_rail_route_in_window($windowRaw,$windowOrigin,$windowDest,$baseTime,$baseTime+14400);
+assertit($windowRoute!==null,'Step 5AJ accepts chronological train journey within four hours');
+assertit(qa_rail_route_in_window($windowRaw,$windowOrigin,$windowDest,$baseTime-18000,$baseTime-3600)===null,'Step 5AJ rejects departures more than four hours ahead');
+$invalidTimeline=['legs'=>[['mode'=>'train','departure'=>'2026-10-07T14:00:00+11:00','arrival'=>'2026-10-07T14:10:00+11:00'],['mode'=>'train','departure'=>'2026-10-07T14:09:00+11:00','arrival'=>'2026-10-07T14:20:00+11:00']]];
+assertit(!qa_rail_chronology_valid($invalidTimeline),'Step 5AJ rejects impossible one-minute interchange');
+
+$counts=qa_window_rejection_counts($windowRaw,$windowOrigin,$windowDest,$baseTime);
+assertit(($counts['eligible']??0)===1,'Step 5AK categorizes eligible four-hour candidate');
+$lateCounts=qa_window_rejection_counts($windowRaw,$windowOrigin,$windowDest,$baseTime-18000);
+assertit(($lateCounts['beyond_four_hours']??0)===1,'Step 5AK categorizes departure beyond four hours');

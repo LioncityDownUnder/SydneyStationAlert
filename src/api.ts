@@ -32,4 +32,7 @@ finally {
 export const searchStations = (q, signal) => get('stations', { q }, signal);
 export const preloadStations = (signal) => get('station-index', {}, signal);
 export const nearbyStations = (point) => get('nearby', { lat: String(point.lat), lon: String(point.lon) });
-export const getJourney = (from, to, coreOnly = false) => get('journey', { from: from.id, to: to.id, fromName: from.name, toName: to.name, ...(coreOnly?{coreOnly:'1'}:{}) }, undefined, coreOnly ? 20000 : 30000);
+export const getJourney = (from, to, coreOnly = false) => get('journey', { from: from.id, to: to.id, fromName: from.name, toName: to.name, ...(coreOnly?{coreOnly:'1'}:{}) }, undefined, coreOnly ? 32000 : 30000);
+
+// QA-only: full normalized journeys that the commuter may explicitly confirm.
+export const getBoardingOptions = (from,to) => get('boarding-options',{from:from.id,to:to.id,fromName:from.name,toName:to.name},undefined,32000);

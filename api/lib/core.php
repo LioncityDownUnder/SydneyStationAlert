@@ -31,6 +31,29 @@ function journey_perf_phase(string $phase):void{
  $p['durations']['phase_'.$prev]=($p['durations']['phase_'.$prev]??0)+($now-$p['phaseStart']);
  $p['phase']=$phase;$p['phaseStart']=$now;
 }
+function journey_search_qa_diagnostics_header(array $diagnostics):void{
+ if(headers_sent()||!str_contains((string)($_SERVER['SCRIPT_NAME']??''),'/qatest/api/'))return;
+ $fields=['initial_route_found','additional_probes','additional_route_probe','additional_prefetch_count','interchange_checks','time_budget_exceeded'];
+ $parts=[];
+ foreach($fields as $field){
+  $value=$diagnostics[$field]??0;
+  $parts[]=$field.'='.($value===true?'1':($value===false?'0':(int)$value));
+ }
+ header('X-QA-Journey-Search: '.implode('; ',$parts));
+}
+function journey_perf_qa_header():void{
+ if(!isset($GLOBALS['journey_perf'])||headers_sent())return;
+ if(!str_contains((string)($_SERVER['SCRIPT_NAME']??''),'/qatest/api/'))return;
+ journey_perf_phase('response');
+ $p=$GLOBALS['journey_perf'];
+ $durations=$p['durations'];
+ $durations['total']=microtime(true)-$p['start'];
+ $parts=[];
+ foreach(['total','phase_initial_parallel_search','phase_parallel_fallback','phase_additional_search','phase_enrichment','parallel_trip','upstream_trip','normalize','transfer_candidates'] as $name){
+  if(isset($durations[$name]))$parts[]=$name.';dur='.round($durations[$name]*1000);
+ }
+ header('Server-Timing: '.implode(', ',$parts));
+}
 function journey_perf_finish():void{
  if(!isset($GLOBALS['journey_perf']))return;
  journey_perf_phase('complete');
@@ -80,10 +103,16 @@ function point(mixed $node):?array{
 }
 function mode(mixed $transport):?string{
  if(!is_array($transport))return null;
- $product=val($transport,'product',[]);$class=(int)val($product,'class',-1);
- $name=strtolower((string)(val($product,'name','').' '.val($transport,'name','').' '.val($transport,'disassembledName','')));
- if(str_contains($name,'metro')||str_contains($name,'subway')||$class===2)return 'metro';
- if($class===1||str_contains($name,'train')||str_contains($name,'rail'))return 'train';
+ $product=val($transport,'product',[]);
+ if(!is_array($product))return null;
+ $class=val($product,'class',null);
+ if($class!==null&&is_numeric($class)){
+  return match((int)$class){1=>'train',2=>'metro',default=>null};
+ }
+ // Only use explicit rail labels when TfNSW omits the product class.
+ $name=strtolower(trim((string)val($product,'name','')));
+ if(str_contains($name,'metro'))return 'metro';
+ if(str_contains($name,'sydney trains')||$name==='train')return 'train';
  return null;
 }
 function location_rail_mode(mixed $raw):?string{

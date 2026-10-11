@@ -1,0 +1,360 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import {progress, alertKeys, fmtTime} from '../dist/assets/logic.js';
+
+const stop=(id,name,lat,lon,arrival=null,departure=null)=>({id,name,lat,lon,mode:'train',arrival,departure});
+const a=stop('a','Origin',-33.9,151.1,null,'2026-10-09T23:45:00+11:00');
+const b=stop('b','Interchange',-33.91,151.12,'2026-10-09T23:55:00+11:00','2026-10-10T00:05:00+11:00');
+const c=stop('c','Destination',-33.92,151.14,'2026-10-10T00:20:00+11:00');
+const route=(stops,transfers=[])=>({origin:stops[0],destination:stops.at(-1),stops,transfers});
+
+test('direct journey counts only actual stopping stations',()=>{
+ const bypass=stop('x','Express bypass',-33.905,151.11);
+ const j=route([a,bypass,c]);
+ assert.equal(progress(j,a).remaining,1);
+ assert.equal(progress(j,bypass).remaining,1);
+ assert.equal(progress(j,c).remaining,0);
+ assert.deepEqual(alertKeys(j,0),['destination-one']);
+});
+
+test('interchange journey shows stops to change and destination',()=>{
+ const j=route([a,b,c],[b]);
+ assert.deepEqual({remaining:progress(j,a).remaining,toChange:progress(j,a).toChange},{remaining:2,toChange:1});
+ assert.equal(progress(j,b).toChange,null);
+ assert.ok(alertKeys(j,0).includes('transfer-b'));
+});
+
+test('overnight journey preserves calendar transition in time calculations',()=>{
+ assert.ok(Date.parse(b.departure)>Date.parse(a.departure));
+ assert.ok(Date.parse(c.arrival)>Date.parse(b.departure));
+ assert.match(fmtTime(b.departure),/12:05/);
+});
+
+test('confirmed boarding only adopts updates for the same service',()=>{
+ const main=fs.readFileSync('src/main.ts','utf8');
+ assert.match(main,/function adoptJourneyUpdate\(updated\)/);
+ assert.match(main,/if\(!qaSameSelectedTrain\(state\.journey,updated\)\)return false/);
+ assert.match(main,/state\.onboard=true;saveActiveTrip\(\)/);
+ assert.match(main,/const restoredTrip=loadActiveTrip\(\)/);
+ assert.match(main,/clearActiveTrip\(\);stopTracking\(\)/);
+});
+
+test('missed connection recovery remains explicit and guarded',()=>{
+ const main=fs.readFileSync('src/main.ts','utf8');
+ assert.match(main,/async function recoverMissedConnection\(legIndex\)/);
+ assert.match(main,/state\.recoveringConnection=true/);
+ assert.match(main,/state\.recoveringConnection=false/);
+ assert.match(main,/I missed my connection/);
+ assert.match(main,/if\(generation!==journeyGeneration\|\|state\.journey!==original\)return/);
+});
+
+test('core journey fast path includes sixth probe without repeating it serially',()=>{
+ const api=fs.readFileSync('api/index.php','utf8');
+ assert.match(api,/if\(\$coreOnly&&count\(\$searchTimes\)>=6\)/);
+ assert.match(api,/array_slice\(\$searchTimes,0,\$qaRailPilot\?7:6\)/);
+ assert.match(api,/array_slice\(\$searchTimes,6\)/);
+});
+
+test('additional journey prefetch is bounded and preserves sequential fallback',()=>{
+ const api=fs.readFileSync('api/index.php','utf8');
+ assert.match(api,/if\(\$coreOnly&&!\$route&&count\(\$remainingSearchTimes\)>=2\)/);
+ assert.match(api,/array_slice\(\$remainingSearchTimes,0,2\)/);
+ assert.match(api,/\$prefetchedBodies=timed_parallel_trip\(\$prefetchParams,25\)/);
+ assert.match(api,/array_key_exists\(\$probeIndex,\$prefetchedBodies\)/);
+ assert.match(api,/:timed_upstream\('trip',/);
+});
+
+test('verified core-only route skips redundant additional timetable probes',()=>{
+ const api=fs.readFileSync('api/index.php','utf8');
+ assert.match(api,/if\(\$coreOnly&&\$route\)\$remainingSearchTimes=\[\];/);
+ assert.match(api,/foreach\(\$remainingSearchTimes as \$probeIndex=>\$probe\)/);
+ assert.match(api,/if\(\$coreOnly&&!\$route&&count\(\$remainingSearchTimes\)>=2\)/);
+});
+
+test('unboarded departed service advances only to an upcoming journey',()=>{
+ const main=fs.readFileSync('src/main.ts','utf8');
+ assert.match(main,/if\(!state\.onboard\)\{/);
+ assert.match(main,/oldDeparted&&!replacementIsUpcoming\)return false/);
+ assert.match(main,/oldDeparted&&replacementIsUpcoming&&!sameService\(previous,updated\)/);
+ assert.match(main,/if\(!qaSameSelectedTrain\(state\.journey,updated\)\)return false/);
+ assert.match(main,/state\.alert='Your previous train has departed/);
+});
+
+test('GPS missed-connection inference is removed without removing manual recovery',()=>{
+ const main=fs.readFileSync('src/main.ts','utf8');
+ assert.doesNotMatch(main,/suspectedMissedConnection|updateConnectionWarning|locationCheckedAt/);
+ assert.match(main,/async function recoverMissedConnection\(legIndex\)/);
+ assert.match(main,/function connectionAtRisk\(j\)/);
+ assert.match(main,/function checkAlerts\(\)\{updateDelayConnectionWarning\(\);/);
+});
+
+test('onboard delay-aware connection warning uses arrival and departure with interchange buffer',()=>{
+ const main=fs.readFileSync('src/main.ts','utf8');
+ assert.match(main,/function connectionAtRisk\(j\)/);
+ assert.match(main,/if\(!state\.onboard\|\|state\.paused/);
+ assert.match(main,/arrival\+3\*60000>departure/);
+ assert.match(main,/updateDelayConnectionWarning\(\);void suggestOnwardConnection\(\);return true/);
+ assert.match(main,/Connection at risk at /);
+});
+
+test('proactive onward lookup is bounded and preserves confirmed journey',()=>{
+ const main=fs.readFileSync('src/main.ts','utf8');
+ assert.match(main,/async function suggestOnwardConnection\(\)/);
+ assert.match(main,/Date\.now\(\)-state\.lastSuggestionCheck<120000/);
+ assert.match(main,/departure<risk\.arrival\+3\*60000/);
+ assert.match(main,/state\.journey!==original\|\|!state\.onboard/);
+ assert.match(main,/void suggestOnwardConnection\(\)/);
+ assert.match(main,/Use “I missed my connection” to update your route/);
+});
+
+test('background alert limitations are disclosed and foreground checks resume',()=>{
+ const main=fs.readFileSync('src/main.ts','utf8');
+ assert.match(main,/function notificationReliabilityNotice\(\)/);
+ assert.match(main,/Location and timetable checks may stop when your phone is locked/);
+ assert.match(main,/\$\{notificationReliabilityNotice\(\)\}/);
+ assert.match(main,/visibilitychange.*startTracking\(\);checkAlerts\(\);renderJourneyStable\(\);void refresh\(\)/);
+ assert.match(main,/addEventListener\('pageshow'/);
+});
+
+test('missed connection recovery stays on interchange stops without duplicate top panel',()=>{
+ const main=fs.readFileSync('src/main.ts','utf8');
+ assert.doesNotMatch(main,/missedConnectionActions|connection-recovery/);
+ assert.match(main,/transfer&&state.onboard/);
+ assert.match(main,/data-recover-leg/);
+ assert.match(main,/window\.confirm\('Confirm missed connection at '/);
+});
+
+test('late missed connection recovery requires departure after request',()=>{
+ const main=fs.readFileSync('src/main.ts','utf8');
+ assert.match(main,/const recoveryRequestedAt=Date\.now\(\)/);
+ assert.match(main,/departure<recoveryRequestedAt/);
+ assert.match(main,/window\.confirm\('Confirm missed connection at '/);
+ assert.match(main,/transfer&&state\.onboard/);
+});
+
+test('core routing compares all initial probe candidates',()=>{
+ const api=fs.readFileSync('api/index.php','utf8');
+ assert.match(api,/\$route=better_route\(\$route,\$candidate\)/);
+ assert.doesNotMatch(api,/if\(\$candidate\)\{\$route=\$candidate;break;\}/);
+});
+
+test('Step 5X no-route notices are QA-only and retry is actionable',()=>{
+ const main=fs.readFileSync('src/main.ts','utf8');
+ assert.match(main,/function qaNoRouteAlertDetails\(\)/);
+ assert.match(main,/if\(!isQaEnvironment\|\|state\.origin\?\.id!=='222010'\)return ''/);
+ assert.match(main,/periodStatus==='WITHIN_ACTIVE_PERIOD'/);
+ assert.match(main,/esc\(a\.title\|\|'TfNSW service notice'\)/);
+ assert.match(main,/Contextual notice; impact on your selected journey is unverified/);
+ assert.match(main,/state\.noRoute=e instanceof ApiRequestError&&\(e\.code==='NO_ROUTE'\|\|e\.code==='SEARCH_TIME_LIMIT'\)/);
+ assert.match(main,/if\(state\.noRoute\)\{void loadQaNoRouteAlerts\(generation\);startQaRecoveryWatch\(\);\}/);
+ assert.match(main,/id="retry-no-route"/);
+ assert.match(main,/getElementById\('retry-no-route'\)\?\.addEventListener\('click',\(\)=>void setJourney\(\)\)/);
+ assert.match(main,/if\(generation===journeyGeneration&&state\.noRoute\)/);
+ assert.match(main,/Disruption information is unavailable/);
+});
+test('Step 5X refuses to construct replacement-bus journeys from advisory text',()=>{
+ const main=fs.readFileSync('src/main.ts','utf8');
+ assert.match(main,/Replacement buses are informational only/);
+ assert.match(main,/state\.noRouteAlertsLoading=true;setup\(\)/);
+ assert.match(main,/state\.noRouteAlertsLoading=false;setup\(\)/);
+});
+
+test('Step 5AB QA-only search budget is explicit and does not affect production journey search',()=>{
+ const api=fs.readFileSync('api/index.php','utf8');
+ const core=fs.readFileSync('api/lib/core.php','utf8');
+ assert.match(api,/\$qaBoundedSearch=\$coreOnly;/);
+ assert.match(api,/\$qaSearchDeadline=\$qaBoundedSearch\?microtime\(true\)\+22\.0:INF/);
+ assert.match(api,/if\(\$qaBoundedSearch&&microtime\(true\)>=\$qaSearchDeadline\)/);
+ assert.match(api,/No train-only journey was verified within the QA search time limit/);
+ assert.match(api,/journey_search_qa_diagnostics_header\(\$qaSearchDiagnostics\)/);
+ assert.match(core,/time_budget_exceeded/);
+});
+
+test('Step 5AC makes incomplete QA searches distinct from confirmed no-route responses',()=>{
+ const main=fs.readFileSync('src/main.ts','utf8');
+ const api=fs.readFileSync('src/api.ts','utf8');
+ const backend=fs.readFileSync('api/index.php','utf8');
+ assert.match(backend,/fail\(\$qaSearchBudgetExceeded\?'SEARCH_TIME_LIMIT':'NO_ROUTE'/);
+ assert.match(main,/SEARCH TIME LIMIT REACHED/);
+ assert.match(main,/We could not finish checking all possible trains/);
+ assert.match(main,/state\.noRouteLimited=e instanceof ApiRequestError&&e\.code==='SEARCH_TIME_LIMIT'/);
+ assert.match(api,/coreOnly \? 32000 : 30000/);
+});
+
+test('Step 5AX filtered initial journey search is standard QA-only',()=>{
+ const backend=fs.readFileSync('api/index.php','utf8');
+ const api=fs.readFileSync('src/api.ts','utf8');
+ assert.match(backend,/\$qaRailPilot=\$qaBoundedSearch;/);
+ assert.match(backend,/if\(\$qaRailPilot\)\$fastParams=array_map\('qa_rail_filter_params',\$fastParams\)/);
+ assert.match(backend,/timed_normalized_journey\(\$body,\$originSeed,\$destinationSeed\)/);
+ assert.doesNotMatch(api,/new URLSearchParams\(window\.location\.search\)\.get\('qaRailPilot'\)/);
+ assert.match(api,/coreOnly \? 32000 : 30000/);
+});
+
+test('Step 5AI QA pilot rejects departed first-leg services and labels overnight departures',()=>{
+ const backend=fs.readFileSync('api/index.php','utf8');
+ const main=fs.readFileSync('src/main.ts','utf8');
+ assert.match(backend,/\$qaRailPilot\?qa_rail_route_in_window\(\$body,\$originSeed,\$destinationSeed,\$now->getTimestamp\(\),\$qaRailLatestDeparture\)/);
+ assert.match(backend,/if\(\$qaRailPilot\)\$route=\$qaRouteWithinWindow\(\$route\)/);
+ assert.match(main,/function sydneyDayLabel\(value,now=new Date\(\)\)/);
+ assert.match(main,/timeZone:'Australia\/Sydney'/);
+ assert.match(main,/return 'Tomorrow, '/);
+ assert.match(main,/I boarded the \$\{esc\(datedTrainTime\(/);
+});
+
+test('Step 5AJ QA pilot applies four-hour window, strict leg times and official travel links',()=>{
+ const api=fs.readFileSync('api/index.php','utf8');
+ const qa=fs.readFileSync('api/lib/qa_route_rejections.php','utf8');
+ const ui=fs.readFileSync('src/main.ts','utf8');
+ assert.match(api,/\$qaRailLatestDeparture=\$qaRailPilot\?\$now->getTimestamp\(\)\+4\*3600/);
+ assert.match(api,/\$fastProbes=array_slice\(\$searchTimes,0,\$qaRailPilot\?7:6\)/);
+ assert.match(api,/if\(!\$route&&!\$qaRailPilot\)/);
+ assert.match(api,/No train-only journey departing .*in the next 4 hours/);
+ assert.match(qa,/function qa_rail_chronology_valid\(array \$route\):bool/);
+ assert.match(qa,/\$previousArrival\+120/);
+ assert.match(ui,/function qaRailPilotTravelLinks\(\)/);
+ assert.match(ui,/transportnsw\.info\/alerts/);
+ assert.match(ui,/transportnsw\.info\/trip/);
+});
+
+test('Step 5AS QA rail pilot highlights only confirmed active contextual alerts on no-route',()=>{
+ const ui=fs.readFileSync('src/main.ts','utf8');
+ assert.match(ui,/periodStatus==='WITHIN_ACTIVE_PERIOD'/);
+ assert.match(ui,/qaRailPilot&&state\.noRoute&&!state\.noRouteLimited&&active\.length/);
+ assert.match(ui,/trackwork may affect your journey\. Train availability is unconfirmed/);
+ assert.match(ui,/Contextual notice; impact on your selected journey is unverified/);
+ assert.match(ui,/https:\/\/transportnsw\.info\/alerts/);
+ assert.match(ui,/https:\/\/transportnsw\.info\/trip/);
+});
+
+test('Step 5AT mobile pilot message is concise and places TfNSW links before alert details',()=>{
+ const ui=fs.readFileSync('src/main.ts','utf8');
+ assert.match(ui,/const compact=qaRailPilot&&state\.noRoute&&!limited/);
+ assert.match(ui,/No train-only journey verified within the next 4 hours/);
+ assert.doesNotMatch(ui,/cancellation of your selected train/);
+ const message=ui.slice(ui.indexOf('function routeUnavailableMessage'),ui.indexOf('function highlightName'));
+ assert.ok(message.indexOf('qaRailPilotTravelLinks()')<message.indexOf('qaNoRouteAlertDetails()'));
+});
+
+test('Step 5AU QA pilot validates missed-connection service before replacing an onboard route',()=>{
+ const main=fs.readFileSync('src/main.ts','utf8');
+ assert.match(main,/function qaOnwardConnectionIsValid\(onward,transfer,prior,recoveryRequestedAt\)/);
+ assert.match(main,/if\(!qaRailPilot\)return true/);
+ assert.match(main,/String\(first\.origin\?\.id\|\|''\)!==String\(transfer\?\.id\|\|''\)/);
+ assert.match(main,/departure<previousArrival\+2\*60000/);
+ assert.match(main,/firstDeparture>=recoveryRequestedAt/);
+ assert.match(main,/if\(!qaOnwardConnectionIsValid\(onward,transfer,prior,recoveryRequestedAt\)\)throw new Error/);
+});
+
+test('Step 5AV QA-only rediscovery never auto-boards or silently adopts journey',()=>{
+ const main=fs.readFileSync('src/main.ts','utf8');
+ assert.match(main,/if\(!qaRailPilot\|\|!state\.noRoute\|\|state\.noRouteLimited\)return/);
+ assert.match(main,/document\.hidden\|\|!navigator\.onLine/);
+ assert.match(main,/window\.setInterval\(async\(\)=>\{/);
+ assert.match(main,/\},180000\)/);
+ assert.match(main,/qaRecoveredJourneyAvailable=true;\s*setup\(\)/);
+ assert.match(main,/qa-recheck-available/);
+ assert.match(main,/Search again to confirm/);
+ assert.match(main,/async function setJourney\(\)\{stopQaRecoveryWatch\(\)/);
+});
+
+test('Step 5AW QA refresh keeps boarded service and unboarded selected departure stable',()=>{
+ const src=fs.readFileSync('src/main.ts','utf8');
+ assert.match(src,/function qaSameSelectedTrain\(a,b\)/);
+ assert.match(src,/if\(!qaRailPilot\)return sameService\(a,b\)/);
+ assert.match(src,/Math\.abs\(aTime-bTime\)<=3\*60000/);
+ assert.match(src,/if\(ids\.length\|\|otherIds\.length\)return ids\.length>0/);
+ assert.match(src,/!state\.onboard&&leg\.line===other\.line/);
+ assert.match(src,/Live train details could not be verified/);
+ assert.match(src,/if\(qaRailPilot&&state\.journey&&!qaSameSelectedTrain\(state\.journey,updated\)\)/);
+ assert.match(src,/Your confirmed boarded service is retained/);
+ assert.match(src,/Your selected departure is retained until it has departed/);
+ assert.match(src,/if\(adopted\)\{state\.lastChecked=new Date\(\);state\.message='';\}/);
+});
+
+test('Step 5AX standard QA enables rail safeguards without query flag and preserves refresh warning',()=>{
+ const main=fs.readFileSync('src/main.ts','utf8');
+ const backend=fs.readFileSync('api/index.php','utf8');
+ assert.match(main,/const qaRailPilot = true;/);
+ assert.match(backend,/\$qaRailPilot=\$qaBoundedSearch;/);
+ assert.match(main,/const adopted=adoptJourneyUpdate\(updated\);if\(adopted\)\{state\.lastChecked=new Date\(\);state\.message='';\}checkAlerts\(\);/);
+});
+
+test('Step 5AW service matching rejects ambiguous boarded refreshes',async()=>{
+ const vm=await import('node:vm');
+ const main=fs.readFileSync('src/main.ts','utf8');
+ const begin=main.indexOf('function qaSameSelectedTrain(a,b){');
+ const end=main.indexOf('function adoptJourneyUpdate(updated){',begin);
+ assert.ok(begin>=0&&end>begin);
+ const match=vm.runInNewContext(main.slice(begin,end)+';qaSameSelectedTrain',
+  {qaRailPilot:true,state:{onboard:true},sameService:()=>false});
+ const station=id=>({id});
+ const leg=(ids,time='2026-10-11T10:00:00+11:00')=>({
+  origin:station('A'),destination:station('B'),line:'T4',
+  tripIds:ids,departure:time
+ });
+ const journey=(ids,time)=>({legs:[leg(ids,time)]});
+ assert.equal(match(journey(['trip-1']),journey(['trip-1'])),true);
+ assert.equal(match(journey(['trip-1']),journey(['trip-2'])),false);
+ assert.equal(match(journey(['trip-1']),journey([])),false);
+ assert.equal(match(journey([]),journey([])),false);
+});
+
+test('Step 5AX selection lists verified QA rail options and retains explicit boarding consent',()=>{
+ const main=fs.readFileSync('src/main.ts','utf8');
+ const api=fs.readFileSync('api/index.php','utf8');
+ const client=fs.readFileSync('src/api.ts','utf8');
+ assert.match(api,/if\(\$action==='boarding-options'\)/);
+ assert.doesNotMatch(api,/if\(!str_contains\(\(string\)\(\$_SERVER\['SCRIPT_NAME'\]/);
+ assert.match(api,/qa_rail_chronology_valid\(\$candidate\)/);
+ assert.match(api,/array_slice\(\$options,0,8\)/);
+ assert.match(client,/getBoardingOptions = \(from,to\)/);
+ assert.match(main,/async function confirmDifferentTrain\(\)/);
+ assert.match(main,/candidates=await getBoardingOptions\(selected.origin,selected.destination\)/);
+ assert.match(main,/state.boardingOptions=others.slice\(0,8\)/);
+ assert.match(main,/function confirmBoardingOption\(index\)/);
+ assert.match(main,/window.confirm\('Did you board this exact train/);
+ assert.match(main,/journeyGeneration\+\+;state.journey=candidate;state.onboard=true/);
+ assert.match(main,/saveActiveTrip\(\);checkAlerts\(\);renderJourneyStable\(\)/);
+ assert.match(main,/data-board-option/);
+ assert.match(main,/cancel-boarding-choices/);
+});
+
+test('QA alert reliability notice stays collapsible above journey footer',()=>{
+ const main=fs.readFileSync('src/main.ts','utf8');
+ assert.match(main,/noticeExpanded: false/);
+ assert.match(main,/id="alert-reliability-notice"/);
+ assert.match(main,/<summary>Alert Reliability Notice<\/summary>/);
+ assert.match(main,/state\.noticeExpanded\?' open':''/);
+ assert.match(main,/addEventListener\('toggle',e=>\{state\.noticeExpanded=e\.currentTarget\.open;\}\)/);
+ const render=main.slice(main.indexOf('function renderJourney(){'));
+ assert.ok(render.indexOf('${notificationReliabilityNotice()}')>render.indexOf('<section class="panel">'));
+ assert.ok(render.indexOf('${notificationReliabilityNotice()}')<render.indexOf('${footer}</main>'));
+ assert.ok(!render.includes('${notificationReliabilityNotice()}${serviceUpdate(j)}'));
+});
+
+test('Production release enables 4-hour rail-only routing and Step 5AX while separating storage',()=>{
+ const main=fs.readFileSync('src/main.ts','utf8');
+ const client=fs.readFileSync('src/api.ts','utf8');
+ const backend=fs.readFileSync('api/index.php','utf8');
+ const workflow=fs.readFileSync('.github/workflows/deploy-production.yml','utf8');
+ assert.match(main,/const qaRailPilot = true;/);
+ assert.match(main,/isQaEnvironment \? 'sydstnalert:qa:active-trip:v1'/);
+ assert.match(backend,/\$qaBoundedSearch=\$coreOnly;/);
+ assert.match(backend,/\$qaRailPilot=\$qaBoundedSearch;/);
+ assert.match(backend,/if\(\$action==='boarding-options'\)/);
+ assert.match(backend,/qa_rail_filter_params/);
+ assert.match(client,/coreOnly \? 32000 : 30000/);
+ assert.match(workflow,/test -f dist\/api\/lib\/qa_route_rejections\.php/);
+ assert.match(workflow,/--exclude='\/qatest\/'/);
+});
+
+test('Production release Step 5AX dialog uses real line breaks',()=>{
+ const main=fs.readFileSync('src/main.ts','utf8');
+ const start=main.indexOf("if(!window.confirm('Did you board this exact train?");
+ assert.ok(start>=0);
+ const fragment=main.slice(start,start+235);
+ assert.ok(fragment.includes("'Did you board this exact train?\\n'+detail+'\\n\\nConfirm only"));
+ assert.ok(!fragment.includes("'Did you board this exact train?\\\\n'"));
+});
