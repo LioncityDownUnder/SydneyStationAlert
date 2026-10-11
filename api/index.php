@@ -26,7 +26,8 @@ try {
    if(!is_array($ids)||!array_is_list($ids)||count($ids)>8)fail('CROWDING_ID_COUNT','Crowding trip ID count or format invalid.');
    $valid=[];
    foreach($ids as $id){
-    if(!crowding_trip_id_valid($id))fail('CROWDING_ID_FORMAT','Crowding trip identifier rejected.');
+    $idProblem=crowding_trip_id_invalid_reason($id);
+    if($idProblem!==null)fail($idProblem,'Crowding trip identifier rejected.');
     $valid[]=$id;
    }
    $normalized[]=['id'=>'leg-'.$i,'mode'=>$leg['mode'],'tripIds'=>$valid];
