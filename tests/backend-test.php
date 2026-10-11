@@ -5,6 +5,14 @@ $origin=['id'=>'101','name'=>'Central','lat'=>-33.883,'lon'=>151.206,'mode'=>'tr
 $fixtures=['success','transfer','mixed','no-route','partial','missing-platform'];foreach($fixtures as $key){$body=json_decode(file_get_contents(__DIR__.'/fixtures/'.$key.'.json'),true);$fixtureDest=$key==='transfer'?['id'=>'105','name'=>'Barangaroo','lat'=>-33.862,'lon'=>151.202,'mode'=>'metro']:$dest;$result=normalized_journey($body,$origin,$fixtureDest);if(in_array($key,['no-route','partial','mixed'])){assertit($result===null,"$key is rejected safely");continue;}assertit($result!==null,"$key normalized");if($key==='success'){assertit(count($result['stops'])===3,'intermediate stops retained');assertit(count($result['legs'][0]['path'])===3,'rail geometry retained');assertit($result['legs'][0]['platform']==='4','platform parsed');assertit($result['stops'][1]['arrival']==='2026-10-07T14:24:00+11:00','estimated intermediate arrival is preferred');assertit($result['stops'][1]['departure']==='2026-10-07T14:24:30+11:00','intermediate departure is retained');assertit($result['stops'][2]['arrival']==='2026-10-07T14:26:00+11:00','destination arrival is retained');}if($key==='transfer')assertit(count($result['transfers'])===1&&count($result['legs'])===2,'transfer legs separate');if($key==='missing-platform')assertit($result['legs'][0]['platform']===null,'missing platform fallback is possible');}
 assertit(mode(['product'=>['class'=>5],'name'=>'Bus'])===null,'bus is not a rail mode');
 
+$alertModule=realpath(__DIR__.'/../api/lib/service-alerts.php');
+assertit($alertModule!==false,'Extracted service-alert module exists');
+foreach(['alert_text_value','normalize_service_alert','journey_service_status','best_unaffected_route','fetch_current_service_alerts'] as $fn){
+ $where=(new ReflectionFunction($fn))->getFileName();
+ assertit(realpath((string)$where)===$alertModule,"$fn resolves from extracted service-alert module");
+}
+assertit(alert_text_value(['description'=>'<b>Safe & visible</b>'])==='Safe & visible','Alert text normalization strips HTML markup');
+assertit(normalized_service_alerts(['infos'=>['current'=>[]]])===[],'Empty TfNSW alerts stay empty');
 $alertBody=json_decode(file_get_contents(__DIR__.'/fixtures/service-alerts.json'),true);
 $alertRoute=[
  'stops'=>[
