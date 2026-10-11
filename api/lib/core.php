@@ -779,71 +779,12 @@ function journey_crowding_from_feeds(array $route,array $feeds):array{
  }
  return ['available'=>$available,'level'=>$overall,'updatedAt'=>$latest>0?gmdate('c',$latest):gmdate('c'),'legs'=>$legs];
 }
-// QA-only classification from already-fetched vehicle records. No trip identifiers,
- // vehicle identifiers, timestamps, or raw payloads are returned to the browser.
-// QA diagnostics report freshness buckets, never raw vehicle timestamps or identifiers.
-function crowding_feed_freshness(array $vehicles,int $now):string{
- $latest=0;
- foreach($vehicles as $vehicle){
-  $stamp=(int)($vehicle['timestamp']??0);
-  if($stamp>0&&$stamp<=$now+60)$latest=max($latest,$stamp);
- }
- if($latest===0)return 'unknown';
- $age=max(0,$now-$latest);
- return $age<=90?'fresh':($age<=300?'lagging':'stale');
-}
-function crowding_match_diagnostics(array $route,array $feeds):array{
- $rows=[];
- foreach(val($route,'legs',[]) as $index=>$leg){
-  if(!is_array($leg))continue;
-  $mode=(string)val($leg,'mode','');
-  $ids=val($leg,'tripIds',[]);
-  if(!is_array($ids))$ids=[];
-  $matched=null;
-  foreach($ids as $id){
-   $key=strtolower(trim((string)$id));
-   if($key!==''&&isset($feeds[$mode][$key])){$matched=$feeds[$mode][$key];break;}
-  }
-  $knownCarriages=$matched?count(array_filter($matched['carriages']??[],fn($car)=>($car['level']??'unknown')!=='unknown')):0;
-  $occupancyKnown=$matched&&(($matched['level']??'unknown')!=='unknown'||$knownCarriages>0);
-  $reason=!array_key_exists($mode,$feeds)?'feed_unavailable':
-    (!$ids?'trip_id_missing':(!$matched?'trip_not_matched':(!$occupancyKnown?'occupancy_missing':'available')));
-  $rows[]=['legIndex'=>$index,'mode'=>$mode,'tripIdCount'=>count($ids),
-   'feedVehicleCount'=>count($feeds[$mode]??[]),
-   'feedFreshness'=>array_key_exists($mode,$feeds)?crowding_feed_freshness($feeds[$mode],time()):'unavailable',
-   'matched'=>$matched!==null,
-   'carriageCount'=>$matched?count($matched['carriages']??[]):0,
-   'knownCarriages'=>$knownCarriages,'reason'=>$reason];
- }
- return $rows;
-}
-// Transport's opaque identifiers can contain spaces, pipes or other printable
-// separators; validate size and control bytes, not an invented ID alphabet.
-function crowding_trip_id_invalid_reason(mixed $id):?string{
- // JSON may encode TfNSW numeric service IDs as integers. Normalize these
- // losslessly; reject floats, booleans and structured values.
- if(is_int($id))$id=(string)$id;
- if(!is_string($id))return 'CROWDING_ID_NOT_STRING';
- if(strlen($id)>150)return 'CROWDING_ID_TOO_LONG';
- if(trim($id)==='')return 'CROWDING_ID_BLANK';
- if(preg_match('/[\\x00-\\x1F\\x7F]/',$id))return 'CROWDING_ID_CONTROL';
- return null;
-}
-function crowding_trip_id_normalize(mixed $id):?string{
- if(crowding_trip_id_invalid_reason($id)!==null)return null;
- return is_int($id)?(string)$id:$id;
-}
-function crowding_trip_id_valid(mixed $id):bool{
- return crowding_trip_id_invalid_reason($id)===null;
-}
-function journey_crowding_status(array $route,bool $includeDiagnostics=false):array{
+function journey_crowding_status(array $route):array{
  $modes=[];foreach(val($route,'legs',[]) as $leg){if(is_array($leg))$modes[(string)val($leg,'mode','')]=true;}
  $feeds=[];
  if(isset($modes['train'])){$body=upstream_binary_optional('https://api.transport.nsw.gov.au/v2/gtfs/vehiclepos/sydneytrains',15);if(is_string($body))$feeds['train']=parse_vehicle_positions_feed($body);}
  if(isset($modes['metro'])){$body=upstream_binary_optional('https://api.transport.nsw.gov.au/v2/gtfs/vehiclepos/metro',15);if(is_string($body))$feeds['metro']=parse_vehicle_positions_feed($body);}
- $result=journey_crowding_from_feeds($route,$feeds);
- if($includeDiagnostics)$result['diagnostics']=crowding_match_diagnostics($route,$feeds);
- return $result;
+ return journey_crowding_from_feeds($route,$feeds);
 }
 function upstream_optional(string $endpoint,array $params,int $ttl=60):?array{
  $key=source_key();if($key==='')return null;
