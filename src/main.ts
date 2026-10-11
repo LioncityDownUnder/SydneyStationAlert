@@ -190,9 +190,13 @@ async function refreshCrowding(generation=journeyGeneration){
  }catch(e){
   if(generation!==journeyGeneration||serial!==crowdingRequestSerial||!state.journey||selectedCrowdingIdentity(state.journey)!==identity)return;
   // QA receives a category only, never raw trip IDs or upstream error details.
-  const reason=e instanceof ApiRequestError&&e.code==='BAD_REQUEST'?'request_rejected':
+  const reason=e instanceof ApiRequestError&&({
+    CROWDING_REQUEST_SIZE:'request_size',CROWDING_LEGS_INVALID:'legs_invalid',
+    CROWDING_MODE_INVALID:'mode_invalid',CROWDING_ID_COUNT:'id_count',
+    CROWDING_ID_FORMAT:'id_format'
+   }[e.code]||'') || (e instanceof ApiRequestError&&e.code==='BAD_REQUEST'?'request_rejected':
     e instanceof ApiRequestError&&e.code==='MALFORMED_RESPONSE'?'invalid_response':
-    e instanceof ApiRequestError&&e.code==='UPSTREAM_UNAVAILABLE'?'request_unavailable':'request_failed';
+    e instanceof ApiRequestError&&e.code==='UPSTREAM_UNAVAILABLE'?'request_unavailable':'request_failed');
   state.journey.crowding={available:false,level:'unknown',legs:[],
    diagnostics:isQaEnvironment?(selected.legs||[]).map((leg,i)=>({
     legIndex:i,mode:leg.mode,tripIdCount:(leg.tripIds||[]).length,
@@ -204,7 +208,7 @@ async function refreshCrowding(generation=journeyGeneration){
 }
 function qaCrowdingDiagnosticDetails(j){
  if(!isQaEnvironment||!Array.isArray(j?.crowding?.diagnostics))return '';
- const labels={feed_unavailable:'TfNSW vehicle feed could not be retrieved',trip_id_missing:'Selected service has no trip identifier',trip_not_matched:'Selected trip not found in vehicle feed',occupancy_missing:'Train found, but occupancy fields are missing',available:'Occupancy information available',request_rejected:'Crowding request rejected by API validation',invalid_response:'Crowding API returned an invalid response',request_unavailable:'Crowding lookup failed or timed out',request_failed:'Crowding lookup could not complete'};
+ const labels={feed_unavailable:'TfNSW vehicle feed could not be retrieved',trip_id_missing:'Selected service has no trip identifier',trip_not_matched:'Selected trip not found in vehicle feed',occupancy_missing:'Train found, but occupancy fields are missing',available:'Occupancy information available',request_rejected:'Crowding request rejected by API validation',invalid_response:'Crowding API returned an invalid response',request_unavailable:'Crowding lookup failed or timed out',request_failed:'Crowding lookup could not complete',request_size:'Crowding request exceeded the API size limit',legs_invalid:'Crowding leg count or format rejected',mode_invalid:'Crowding transport mode rejected',id_count:'Crowding trip-ID count or list format rejected',id_format:'Crowding trip-ID format or length rejected'};
  const rows=j.crowding.diagnostics.map(d=>{
   const description=labels[d.reason]||'Occupancy status unknown';
   return '<li>'+esc(d.mode==='metro'?'Metro':'Sydney Trains')+' leg '+esc(String(Number(d.legIndex)+1))+': '+esc(description)+
