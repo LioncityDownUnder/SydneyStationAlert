@@ -113,7 +113,8 @@ test('proactive onward lookup is bounded and preserves confirmed journey',()=>{
 test('background alert limitations are disclosed and foreground checks resume',()=>{
  const main=fs.readFileSync('src/main.ts','utf8');
  assert.match(main,/function notificationReliabilityNotice\(\)/);
- assert.match(main,/Location and timetable checks may stop when your phone is locked/);
+ const notices=fs.readFileSync('src/notice-markup.ts','utf8');
+ assert.match(notices,/Location and timetable checks may stop when your phone is locked/);
  assert.match(main,/\$\{notificationReliabilityNotice\(\)\}/);
  assert.match(main,/visibilitychange.*startTracking\(\);checkAlerts\(\);renderJourneyStable\(\);void refresh\(\)/);
  assert.match(main,/addEventListener\('pageshow'/);
@@ -232,8 +233,10 @@ test('Step 5AS QA rail pilot highlights only confirmed active contextual alerts 
  assert.match(ui,/qaRailPilot&&state\.noRoute&&!state\.noRouteLimited&&active\.length/);
  assert.match(ui,/trackwork may affect your journey\. Train availability is unconfirmed/);
  assert.match(ui,/Contextual notice; impact on your selected journey is unverified/);
- assert.match(ui,/https:\/\/transportnsw\.info\/alerts/);
- assert.match(ui,/https:\/\/transportnsw\.info\/trip/);
+ const notices=fs.readFileSync('src/notice-markup.ts','utf8');
+ assert.match(ui,/qaRailPilotTravelLinks\(\)/);
+ assert.match(notices,/https:\/\/transportnsw\.info\/alerts/);
+ assert.match(notices,/https:\/\/transportnsw\.info\/trip/);
 });
 
 test('Step 5AT mobile pilot message is concise and places TfNSW links before alert details',()=>{
