@@ -26,7 +26,7 @@ try {
    if(!is_array($ids)||!array_is_list($ids)||count($ids)>8)fail('BAD_REQUEST','Invalid trip identifiers.');
    $valid=[];
    foreach($ids as $id){
-    if(!is_string($id)||strlen($id)>150||trim($id)===''||preg_match('/[\\x00-\\x1F\\x7F]/',$id))fail('BAD_REQUEST','Invalid trip identifier.');
+    if(!crowding_trip_id_valid($id))fail('BAD_REQUEST','Invalid trip identifier.');
     $valid[]=$id;
    }
    $normalized[]=['id'=>'leg-'.$i,'mode'=>$leg['mode'],'tripIds'=>$valid];
