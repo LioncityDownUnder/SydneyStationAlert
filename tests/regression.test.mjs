@@ -406,3 +406,16 @@ test('QA crowding failures show precise safe validation categories',()=>{
  assert.match(ui,/id_format:'Crowding trip-ID format or length rejected'/);
  assert.match(ui,/diagnostics:isQaEnvironment\?/);
 });
+
+test('QA crowding identifies precise invalid ID category without revealing value',()=>{
+ const core=fs.readFileSync('api/lib/core.php','utf8');
+ const api=fs.readFileSync('api/index.php','utf8');
+ const ui=fs.readFileSync('src/main.ts','utf8');
+ for(const kind of ['CROWDING_ID_NOT_STRING','CROWDING_ID_TOO_LONG','CROWDING_ID_BLANK','CROWDING_ID_CONTROL']){
+  assert.ok(core.includes(kind),kind+' defined in validator');
+  assert.ok(ui.includes(kind),kind+' shown in QA diagnostics');
+ }
+ assert.match(api,/crowding_trip_id_invalid_reason\(\$id\)/);
+ assert.match(core,/function crowding_trip_id_valid\(mixed \$id\):bool/);
+ assert.match(ui,/id_control:'A selected trip identifier contains control characters'/);
+});
