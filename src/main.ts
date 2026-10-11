@@ -376,6 +376,7 @@ window.addEventListener('pageshow',()=>{if(state.journey&&!state.paused){startTr
 if('Notification' in window&&Notification.permission==='default'){document.addEventListener('click',e=>{if(e.target.id==='set')void Notification.requestPermission().catch(()=>{});},{capture:true});}
 const restoredTrip=loadActiveTrip();
 if(restoredTrip){
+  if(restoredTrip.crowding)restoredTrip.crowding=sanitizedSelectedCrowding(restoredTrip,restoredTrip.crowding);
   state.journey=restoredTrip;
   state.origin=restoredTrip.origin;
   state.destination=restoredTrip.destination;
