@@ -16,17 +16,17 @@ try {
  // It never selects or changes a journey; vehicle positions are matched by exact trip ID.
  if($action==='crowding'){
   $encoded=(string)($_GET['legs']??'');
-  if($encoded===''||strlen($encoded)>3000)fail('BAD_REQUEST','Invalid crowding request.');
+  if($encoded===''||strlen($encoded)>3000)fail('CROWDING_REQUEST_SIZE','Crowding request size exceeded.');
   $legs=json_decode($encoded,true);
-  if(!is_array($legs)||!array_is_list($legs)||count($legs)<1||count($legs)>6)fail('BAD_REQUEST','Invalid crowding legs.');
+  if(!is_array($legs)||!array_is_list($legs)||count($legs)<1||count($legs)>6)fail('CROWDING_LEGS_INVALID','Crowding leg count or format invalid.');
   $normalized=[];
   foreach($legs as $i=>$leg){
-   if(!is_array($leg)||!in_array($leg['mode']??null,['train','metro'],true))fail('BAD_REQUEST','Invalid rail mode.');
+   if(!is_array($leg)||!in_array($leg['mode']??null,['train','metro'],true))fail('CROWDING_MODE_INVALID','Invalid crowding transport mode.');
    $ids=$leg['tripIds']??null;
-   if(!is_array($ids)||!array_is_list($ids)||count($ids)>8)fail('BAD_REQUEST','Invalid trip identifiers.');
+   if(!is_array($ids)||!array_is_list($ids)||count($ids)>8)fail('CROWDING_ID_COUNT','Crowding trip ID count or format invalid.');
    $valid=[];
    foreach($ids as $id){
-    if(!crowding_trip_id_valid($id))fail('BAD_REQUEST','Invalid trip identifier.');
+    if(!crowding_trip_id_valid($id))fail('CROWDING_ID_FORMAT','Crowding trip identifier rejected.');
     $valid[]=$id;
    }
    $normalized[]=['id'=>'leg-'.$i,'mode'=>$leg['mode'],'tripIds'=>$valid];
