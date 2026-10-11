@@ -1,0 +1,845 @@
+{
+  "_description": "SSA-09 deterministic fixture recreated from verified Monday 12 Oct 2026 noon TfNSW T8 platform IDs and schedule; synthetic coordinates and abbreviated reverse stop list are test-only, not public trip forecasts.",
+  "circularQuayToPadstow": {
+    "journeys": [
+      {
+        "legs": [
+          {
+            "transportation": {
+              "product": {
+                "class": 1
+              },
+              "disassembledName": "T8",
+              "properties": {
+                "RealtimeTripId": "fixture-t8"
+              }
+            },
+            "origin": {
+              "id": "2000352",
+              "disassembledName": "Circular Quay Station, Platform 2",
+              "name": "Circular Quay Station, Platform 2",
+              "coord": [
+                151.1,
+                -33.9
+              ],
+              "parent": {
+                "id": "200020",
+                "name": "Circular Quay Station, Platform 2, Sydney"
+              },
+              "departureTimePlanned": "2026-10-12T12:08:30+11:00"
+            },
+            "destination": {
+              "id": "2211142",
+              "disassembledName": "Padstow Station, Platform 2",
+              "name": "Padstow Station, Platform 2",
+              "coord": [
+                151.1,
+                -33.9
+              ],
+              "parent": {
+                "id": "221110",
+                "name": "Padstow Station, Platform 2, Sydney"
+              },
+              "arrivalTimePlanned": "2026-10-12T12:52:00+11:00"
+            },
+            "stopSequence": [
+              {
+                "stopPoint": {
+                  "id": "2000352",
+                  "disassembledName": "Circular Quay Station, Platform 2",
+                  "name": "Circular Quay Station, Platform 2",
+                  "coord": [
+                    151.1,
+                    -33.9
+                  ],
+                  "parent": {
+                    "id": "200020",
+                    "name": "Circular Quay Station, Platform 2, Sydney"
+                  }
+                },
+                "arrivalTimePlanned": null,
+                "departureTimePlanned": "2026-10-12T12:08:30+11:00"
+              },
+              {
+                "stopPoint": {
+                  "id": "2000382",
+                  "disassembledName": "St James Station, Platform 2",
+                  "name": "St James Station, Platform 2",
+                  "coord": [
+                    151.1,
+                    -33.9
+                  ],
+                  "parent": {
+                    "id": "2000380",
+                    "name": "St James Station, Platform 2, Sydney"
+                  }
+                },
+                "arrivalTimePlanned": "2026-10-12T12:11:18+11:00",
+                "departureTimePlanned": "2026-10-12T12:11:48+11:00"
+              },
+              {
+                "stopPoint": {
+                  "id": "2000372",
+                  "disassembledName": "Museum Station, Platform 2",
+                  "name": "Museum Station, Platform 2",
+                  "coord": [
+                    151.1,
+                    -33.9
+                  ],
+                  "parent": {
+                    "id": "2000370",
+                    "name": "Museum Station, Platform 2, Sydney"
+                  }
+                },
+                "arrivalTimePlanned": "2026-10-12T12:13:12+11:00",
+                "departureTimePlanned": "2026-10-12T12:13:42+11:00"
+              },
+              {
+                "stopPoint": {
+                  "id": "2000343",
+                  "disassembledName": "Central Station, Platform 23",
+                  "name": "Central Station, Platform 23",
+                  "coord": [
+                    151.1,
+                    -33.9
+                  ],
+                  "parent": {
+                    "id": "2000340",
+                    "name": "Central Station, Platform 23, Sydney"
+                  }
+                },
+                "arrivalTimePlanned": "2026-10-12T12:16:00+11:00",
+                "departureTimePlanned": "2026-10-12T12:17:00+11:00"
+              },
+              {
+                "stopPoint": {
+                  "id": "2015112",
+                  "disassembledName": "Green Square Station, Platform 2",
+                  "name": "Green Square Station, Platform 2",
+                  "coord": [
+                    151.1,
+                    -33.9
+                  ],
+                  "parent": {
+                    "id": "2015110",
+                    "name": "Green Square Station, Platform 2, Sydney"
+                  }
+                },
+                "arrivalTimePlanned": "2026-10-12T12:20:18+11:00",
+                "departureTimePlanned": "2026-10-12T12:20:48+11:00"
+              },
+              {
+                "stopPoint": {
+                  "id": "2020112",
+                  "disassembledName": "Mascot Station, Platform 2",
+                  "name": "Mascot Station, Platform 2",
+                  "coord": [
+                    151.1,
+                    -33.9
+                  ],
+                  "parent": {
+                    "id": "2020110",
+                    "name": "Mascot Station, Platform 2, Sydney"
+                  }
+                },
+                "arrivalTimePlanned": "2026-10-12T12:24:00+11:00",
+                "departureTimePlanned": "2026-10-12T12:24:30+11:00"
+              },
+              {
+                "stopPoint": {
+                  "id": "202092",
+                  "disassembledName": ", Platform 2",
+                  "name": ", Platform 2",
+                  "coord": [
+                    151.1,
+                    -33.9
+                  ],
+                  "parent": {
+                    "id": "202020",
+                    "name": "Domestic Airport Station, Platform 2, Sydney"
+                  }
+                },
+                "arrivalTimePlanned": "2026-10-12T12:27:00+11:00",
+                "departureTimePlanned": "2026-10-12T12:27:30+11:00"
+              },
+              {
+                "stopPoint": {
+                  "id": "2020102",
+                  "disassembledName": ", Platform 2",
+                  "name": ", Platform 2",
+                  "coord": [
+                    151.1,
+                    -33.9
+                  ],
+                  "parent": {
+                    "id": "202030",
+                    "name": "International Airport Station, Platform 2, Sydney"
+                  }
+                },
+                "arrivalTimePlanned": "2026-10-12T12:29:30+11:00",
+                "departureTimePlanned": "2026-10-12T12:30:00+11:00"
+              },
+              {
+                "stopPoint": {
+                  "id": "2205112",
+                  "disassembledName": "Wolli Creek Station, Platform 2",
+                  "name": "Wolli Creek Station, Platform 2",
+                  "coord": [
+                    151.1,
+                    -33.9
+                  ],
+                  "parent": {
+                    "id": "2205110",
+                    "name": "Wolli Creek Station, Platform 2, Sydney"
+                  }
+                },
+                "arrivalTimePlanned": "2026-10-12T12:32:24+11:00",
+                "departureTimePlanned": "2026-10-12T12:32:54+11:00"
+              },
+              {
+                "stopPoint": {
+                  "id": "2205102",
+                  "disassembledName": "Turrella Station, Platform 2",
+                  "name": "Turrella Station, Platform 2",
+                  "coord": [
+                    151.1,
+                    -33.9
+                  ],
+                  "parent": {
+                    "id": "2205100",
+                    "name": "Turrella Station, Platform 2, Sydney"
+                  }
+                },
+                "arrivalTimePlanned": "2026-10-12T12:35:00+11:00",
+                "departureTimePlanned": "2026-10-12T12:35:30+11:00"
+              },
+              {
+                "stopPoint": {
+                  "id": "2207272",
+                  "disassembledName": "Bardwell Park Station, Platform 2",
+                  "name": "Bardwell Park Station, Platform 2",
+                  "coord": [
+                    151.1,
+                    -33.9
+                  ],
+                  "parent": {
+                    "id": "2207270",
+                    "name": "Bardwell Park Station, Platform 2, Sydney"
+                  }
+                },
+                "arrivalTimePlanned": "2026-10-12T12:37:18+11:00",
+                "departureTimePlanned": "2026-10-12T12:37:48+11:00"
+              },
+              {
+                "stopPoint": {
+                  "id": "2207282",
+                  "disassembledName": "Bexley North Station, Platform 2",
+                  "name": "Bexley North Station, Platform 2",
+                  "coord": [
+                    151.1,
+                    -33.9
+                  ],
+                  "parent": {
+                    "id": "2207280",
+                    "name": "Bexley North Station, Platform 2, Sydney"
+                  }
+                },
+                "arrivalTimePlanned": "2026-10-12T12:39:30+11:00",
+                "departureTimePlanned": "2026-10-12T12:40:00+11:00"
+              },
+              {
+                "stopPoint": {
+                  "id": "2208142",
+                  "disassembledName": "Kingsgrove Station, Platform 2",
+                  "name": "Kingsgrove Station, Platform 2",
+                  "coord": [
+                    151.1,
+                    -33.9
+                  ],
+                  "parent": {
+                    "id": "2208140",
+                    "name": "Kingsgrove Station, Platform 2, Sydney"
+                  }
+                },
+                "arrivalTimePlanned": "2026-10-12T12:41:36+11:00",
+                "departureTimePlanned": "2026-10-12T12:42:06+11:00"
+              },
+              {
+                "stopPoint": {
+                  "id": "2209142",
+                  "disassembledName": "Beverly Hills Station, Platform 2",
+                  "name": "Beverly Hills Station, Platform 2",
+                  "coord": [
+                    151.1,
+                    -33.9
+                  ],
+                  "parent": {
+                    "id": "2209140",
+                    "name": "Beverly Hills Station, Platform 2, Sydney"
+                  }
+                },
+                "arrivalTimePlanned": "2026-10-12T12:44:30+11:00",
+                "departureTimePlanned": "2026-10-12T12:45:00+11:00"
+              },
+              {
+                "stopPoint": {
+                  "id": "2209152",
+                  "disassembledName": "Narwee Station, Platform 2",
+                  "name": "Narwee Station, Platform 2",
+                  "coord": [
+                    151.1,
+                    -33.9
+                  ],
+                  "parent": {
+                    "id": "2209150",
+                    "name": "Narwee Station, Platform 2, Sydney"
+                  }
+                },
+                "arrivalTimePlanned": "2026-10-12T12:46:42+11:00",
+                "departureTimePlanned": "2026-10-12T12:47:12+11:00"
+              },
+              {
+                "stopPoint": {
+                  "id": "2210322",
+                  "disassembledName": "Riverwood Station, Platform 2",
+                  "name": "Riverwood Station, Platform 2",
+                  "coord": [
+                    151.1,
+                    -33.9
+                  ],
+                  "parent": {
+                    "id": "2210320",
+                    "name": "Riverwood Station, Platform 2, Sydney"
+                  }
+                },
+                "arrivalTimePlanned": "2026-10-12T12:49:18+11:00",
+                "departureTimePlanned": "2026-10-12T12:49:48+11:00"
+              },
+              {
+                "stopPoint": {
+                  "id": "2211142",
+                  "disassembledName": "Padstow Station, Platform 2",
+                  "name": "Padstow Station, Platform 2",
+                  "coord": [
+                    151.1,
+                    -33.9
+                  ],
+                  "parent": {
+                    "id": "221110",
+                    "name": "Padstow Station, Platform 2, Sydney"
+                  }
+                },
+                "arrivalTimePlanned": "2026-10-12T12:52:00+11:00",
+                "departureTimePlanned": null
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "circularQuayToInternational": {
+    "journeys": [
+      {
+        "legs": [
+          {
+            "transportation": {
+              "product": {
+                "class": 1
+              },
+              "disassembledName": "T8",
+              "properties": {
+                "RealtimeTripId": "fixture-t8"
+              }
+            },
+            "origin": {
+              "id": "2000352",
+              "disassembledName": "Circular Quay Station, Platform 2",
+              "name": "Circular Quay Station, Platform 2",
+              "coord": [
+                151.1,
+                -33.9
+              ],
+              "parent": {
+                "id": "200020",
+                "name": "Circular Quay Station, Platform 2, Sydney"
+              },
+              "departureTimePlanned": "2026-10-12T12:08:30+11:00"
+            },
+            "destination": {
+              "id": "2020102",
+              "disassembledName": ", Platform 2",
+              "name": ", Platform 2",
+              "coord": [
+                151.1,
+                -33.9
+              ],
+              "parent": {
+                "id": "202030",
+                "name": "International Airport Station, Platform 2, Sydney"
+              },
+              "arrivalTimePlanned": "2026-10-12T12:29:30+11:00"
+            },
+            "stopSequence": [
+              {
+                "stopPoint": {
+                  "id": "2000352",
+                  "disassembledName": "Circular Quay Station, Platform 2",
+                  "name": "Circular Quay Station, Platform 2",
+                  "coord": [
+                    151.1,
+                    -33.9
+                  ],
+                  "parent": {
+                    "id": "200020",
+                    "name": "Circular Quay Station, Platform 2, Sydney"
+                  }
+                },
+                "arrivalTimePlanned": null,
+                "departureTimePlanned": "2026-10-12T12:08:30+11:00"
+              },
+              {
+                "stopPoint": {
+                  "id": "2000382",
+                  "disassembledName": "St James Station, Platform 2",
+                  "name": "St James Station, Platform 2",
+                  "coord": [
+                    151.1,
+                    -33.9
+                  ],
+                  "parent": {
+                    "id": "2000380",
+                    "name": "St James Station, Platform 2, Sydney"
+                  }
+                },
+                "arrivalTimePlanned": "2026-10-12T12:11:18+11:00",
+                "departureTimePlanned": "2026-10-12T12:11:48+11:00"
+              },
+              {
+                "stopPoint": {
+                  "id": "2000372",
+                  "disassembledName": "Museum Station, Platform 2",
+                  "name": "Museum Station, Platform 2",
+                  "coord": [
+                    151.1,
+                    -33.9
+                  ],
+                  "parent": {
+                    "id": "2000370",
+                    "name": "Museum Station, Platform 2, Sydney"
+                  }
+                },
+                "arrivalTimePlanned": "2026-10-12T12:13:12+11:00",
+                "departureTimePlanned": "2026-10-12T12:13:42+11:00"
+              },
+              {
+                "stopPoint": {
+                  "id": "2000343",
+                  "disassembledName": "Central Station, Platform 23",
+                  "name": "Central Station, Platform 23",
+                  "coord": [
+                    151.1,
+                    -33.9
+                  ],
+                  "parent": {
+                    "id": "2000340",
+                    "name": "Central Station, Platform 23, Sydney"
+                  }
+                },
+                "arrivalTimePlanned": "2026-10-12T12:16:00+11:00",
+                "departureTimePlanned": "2026-10-12T12:17:00+11:00"
+              },
+              {
+                "stopPoint": {
+                  "id": "2015112",
+                  "disassembledName": "Green Square Station, Platform 2",
+                  "name": "Green Square Station, Platform 2",
+                  "coord": [
+                    151.1,
+                    -33.9
+                  ],
+                  "parent": {
+                    "id": "2015110",
+                    "name": "Green Square Station, Platform 2, Sydney"
+                  }
+                },
+                "arrivalTimePlanned": "2026-10-12T12:20:18+11:00",
+                "departureTimePlanned": "2026-10-12T12:20:48+11:00"
+              },
+              {
+                "stopPoint": {
+                  "id": "2020112",
+                  "disassembledName": "Mascot Station, Platform 2",
+                  "name": "Mascot Station, Platform 2",
+                  "coord": [
+                    151.1,
+                    -33.9
+                  ],
+                  "parent": {
+                    "id": "2020110",
+                    "name": "Mascot Station, Platform 2, Sydney"
+                  }
+                },
+                "arrivalTimePlanned": "2026-10-12T12:24:00+11:00",
+                "departureTimePlanned": "2026-10-12T12:24:30+11:00"
+              },
+              {
+                "stopPoint": {
+                  "id": "202092",
+                  "disassembledName": ", Platform 2",
+                  "name": ", Platform 2",
+                  "coord": [
+                    151.1,
+                    -33.9
+                  ],
+                  "parent": {
+                    "id": "202020",
+                    "name": "Domestic Airport Station, Platform 2, Sydney"
+                  }
+                },
+                "arrivalTimePlanned": "2026-10-12T12:27:00+11:00",
+                "departureTimePlanned": "2026-10-12T12:27:30+11:00"
+              },
+              {
+                "stopPoint": {
+                  "id": "2020102",
+                  "disassembledName": ", Platform 2",
+                  "name": ", Platform 2",
+                  "coord": [
+                    151.1,
+                    -33.9
+                  ],
+                  "parent": {
+                    "id": "202030",
+                    "name": "International Airport Station, Platform 2, Sydney"
+                  }
+                },
+                "arrivalTimePlanned": "2026-10-12T12:29:30+11:00",
+                "departureTimePlanned": null
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "internationalToPadstow": {
+    "journeys": [
+      {
+        "legs": [
+          {
+            "transportation": {
+              "product": {
+                "class": 1
+              },
+              "disassembledName": "T8",
+              "properties": {
+                "RealtimeTripId": "fixture-t8"
+              }
+            },
+            "origin": {
+              "id": "2020102",
+              "disassembledName": ", Platform 2",
+              "name": ", Platform 2",
+              "coord": [
+                151.1,
+                -33.9
+              ],
+              "parent": {
+                "id": "202030",
+                "name": "International Airport Station, Platform 2, Sydney"
+              },
+              "departureTimePlanned": "2026-10-12T12:30:00+11:00"
+            },
+            "destination": {
+              "id": "2211142",
+              "disassembledName": "Padstow Station, Platform 2",
+              "name": "Padstow Station, Platform 2",
+              "coord": [
+                151.1,
+                -33.9
+              ],
+              "parent": {
+                "id": "221110",
+                "name": "Padstow Station, Platform 2, Sydney"
+              },
+              "arrivalTimePlanned": "2026-10-12T12:52:00+11:00"
+            },
+            "stopSequence": [
+              {
+                "stopPoint": {
+                  "id": "2020102",
+                  "disassembledName": ", Platform 2",
+                  "name": ", Platform 2",
+                  "coord": [
+                    151.1,
+                    -33.9
+                  ],
+                  "parent": {
+                    "id": "202030",
+                    "name": "International Airport Station, Platform 2, Sydney"
+                  }
+                },
+                "arrivalTimePlanned": null,
+                "departureTimePlanned": "2026-10-12T12:30:00+11:00"
+              },
+              {
+                "stopPoint": {
+                  "id": "2205112",
+                  "disassembledName": "Wolli Creek Station, Platform 2",
+                  "name": "Wolli Creek Station, Platform 2",
+                  "coord": [
+                    151.1,
+                    -33.9
+                  ],
+                  "parent": {
+                    "id": "2205110",
+                    "name": "Wolli Creek Station, Platform 2, Sydney"
+                  }
+                },
+                "arrivalTimePlanned": "2026-10-12T12:32:24+11:00",
+                "departureTimePlanned": "2026-10-12T12:32:54+11:00"
+              },
+              {
+                "stopPoint": {
+                  "id": "2205102",
+                  "disassembledName": "Turrella Station, Platform 2",
+                  "name": "Turrella Station, Platform 2",
+                  "coord": [
+                    151.1,
+                    -33.9
+                  ],
+                  "parent": {
+                    "id": "2205100",
+                    "name": "Turrella Station, Platform 2, Sydney"
+                  }
+                },
+                "arrivalTimePlanned": "2026-10-12T12:35:00+11:00",
+                "departureTimePlanned": "2026-10-12T12:35:30+11:00"
+              },
+              {
+                "stopPoint": {
+                  "id": "2207272",
+                  "disassembledName": "Bardwell Park Station, Platform 2",
+                  "name": "Bardwell Park Station, Platform 2",
+                  "coord": [
+                    151.1,
+                    -33.9
+                  ],
+                  "parent": {
+                    "id": "2207270",
+                    "name": "Bardwell Park Station, Platform 2, Sydney"
+                  }
+                },
+                "arrivalTimePlanned": "2026-10-12T12:37:18+11:00",
+                "departureTimePlanned": "2026-10-12T12:37:48+11:00"
+              },
+              {
+                "stopPoint": {
+                  "id": "2207282",
+                  "disassembledName": "Bexley North Station, Platform 2",
+                  "name": "Bexley North Station, Platform 2",
+                  "coord": [
+                    151.1,
+                    -33.9
+                  ],
+                  "parent": {
+                    "id": "2207280",
+                    "name": "Bexley North Station, Platform 2, Sydney"
+                  }
+                },
+                "arrivalTimePlanned": "2026-10-12T12:39:30+11:00",
+                "departureTimePlanned": "2026-10-12T12:40:00+11:00"
+              },
+              {
+                "stopPoint": {
+                  "id": "2208142",
+                  "disassembledName": "Kingsgrove Station, Platform 2",
+                  "name": "Kingsgrove Station, Platform 2",
+                  "coord": [
+                    151.1,
+                    -33.9
+                  ],
+                  "parent": {
+                    "id": "2208140",
+                    "name": "Kingsgrove Station, Platform 2, Sydney"
+                  }
+                },
+                "arrivalTimePlanned": "2026-10-12T12:41:36+11:00",
+                "departureTimePlanned": "2026-10-12T12:42:06+11:00"
+              },
+              {
+                "stopPoint": {
+                  "id": "2209142",
+                  "disassembledName": "Beverly Hills Station, Platform 2",
+                  "name": "Beverly Hills Station, Platform 2",
+                  "coord": [
+                    151.1,
+                    -33.9
+                  ],
+                  "parent": {
+                    "id": "2209140",
+                    "name": "Beverly Hills Station, Platform 2, Sydney"
+                  }
+                },
+                "arrivalTimePlanned": "2026-10-12T12:44:30+11:00",
+                "departureTimePlanned": "2026-10-12T12:45:00+11:00"
+              },
+              {
+                "stopPoint": {
+                  "id": "2209152",
+                  "disassembledName": "Narwee Station, Platform 2",
+                  "name": "Narwee Station, Platform 2",
+                  "coord": [
+                    151.1,
+                    -33.9
+                  ],
+                  "parent": {
+                    "id": "2209150",
+                    "name": "Narwee Station, Platform 2, Sydney"
+                  }
+                },
+                "arrivalTimePlanned": "2026-10-12T12:46:42+11:00",
+                "departureTimePlanned": "2026-10-12T12:47:12+11:00"
+              },
+              {
+                "stopPoint": {
+                  "id": "2210322",
+                  "disassembledName": "Riverwood Station, Platform 2",
+                  "name": "Riverwood Station, Platform 2",
+                  "coord": [
+                    151.1,
+                    -33.9
+                  ],
+                  "parent": {
+                    "id": "2210320",
+                    "name": "Riverwood Station, Platform 2, Sydney"
+                  }
+                },
+                "arrivalTimePlanned": "2026-10-12T12:49:18+11:00",
+                "departureTimePlanned": "2026-10-12T12:49:48+11:00"
+              },
+              {
+                "stopPoint": {
+                  "id": "2211142",
+                  "disassembledName": "Padstow Station, Platform 2",
+                  "name": "Padstow Station, Platform 2",
+                  "coord": [
+                    151.1,
+                    -33.9
+                  ],
+                  "parent": {
+                    "id": "221110",
+                    "name": "Padstow Station, Platform 2, Sydney"
+                  }
+                },
+                "arrivalTimePlanned": "2026-10-12T12:52:00+11:00",
+                "departureTimePlanned": null
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "internationalToCircular": {
+    "journeys": [
+      {
+        "legs": [
+          {
+            "transportation": {
+              "product": {
+                "class": 1
+              },
+              "disassembledName": "T8",
+              "properties": {
+                "RealtimeTripId": "fixture-t8"
+              }
+            },
+            "origin": {
+              "id": "2020101",
+              "disassembledName": ", Platform 1",
+              "name": ", Platform 1",
+              "coord": [
+                151.1,
+                -33.9
+              ],
+              "parent": {
+                "id": "202030",
+                "name": "International Airport Station, Platform 1, Sydney"
+              },
+              "departureTimePlanned": "2026-10-12T13:03:00+11:00"
+            },
+            "destination": {
+              "id": "2000351",
+              "disassembledName": "Circular Quay Station, Platform 1",
+              "name": "Circular Quay Station, Platform 1",
+              "coord": [
+                151.1,
+                -33.9
+              ],
+              "parent": {
+                "id": "200020",
+                "name": "Circular Quay Station, Platform 1, Sydney"
+              },
+              "arrivalTimePlanned": "2026-10-12T13:25:00+11:00"
+            },
+            "stopSequence": [
+              {
+                "stopPoint": {
+                  "id": "2020101",
+                  "disassembledName": ", Platform 1",
+                  "name": ", Platform 1",
+                  "coord": [
+                    151.1,
+                    -33.9
+                  ],
+                  "parent": {
+                    "id": "202030",
+                    "name": "International Airport Station, Platform 1, Sydney"
+                  }
+                },
+                "arrivalTimePlanned": null,
+                "departureTimePlanned": "2026-10-12T13:03:00+11:00"
+              },
+              {
+                "stopPoint": {
+                  "id": "202091",
+                  "disassembledName": ", Platform 1",
+                  "name": ", Platform 1",
+                  "coord": [
+                    151.1,
+                    -33.9
+                  ],
+                  "parent": {
+                    "id": "202020",
+                    "name": "Domestic Airport Station, Platform 1, Sydney"
+                  }
+                },
+                "arrivalTimePlanned": "2026-10-12T13:06:00+11:00",
+                "departureTimePlanned": "2026-10-12T13:06:30+11:00"
+              },
+              {
+                "stopPoint": {
+                  "id": "2000351",
+                  "disassembledName": "Circular Quay Station, Platform 1",
+                  "name": "Circular Quay Station, Platform 1",
+                  "coord": [
+                    151.1,
+                    -33.9
+                  ],
+                  "parent": {
+                    "id": "200020",
+                    "name": "Circular Quay Station, Platform 1, Sydney"
+                  }
+                },
+                "arrivalTimePlanned": "2026-10-12T13:25:00+11:00",
+                "departureTimePlanned": null
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

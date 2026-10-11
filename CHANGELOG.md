@@ -1,5 +1,14 @@
 # Changelog
 
+## 17.1.1 — Airport station identity correction (11 October 2026)
+
+- **SSA-09:** Correct TfNSW platform-only labels: prefer the actual parent station name when a stop's `disassembledName` is only `Platform 1/2`. Domestic Airport and International Airport are shown separately with correct station IDs and platform numbers.
+- Do not combine two different airport stops because both originally say `Platform 2`. Retain stop order, original departure/arrival times, stop count, and verified selected-service identity.
+- Add deterministic regression fixtures for daytime T8 Circular Quay → International Airport, International Airport → Padstow, reverse International Airport → Circular Quay and Circular Quay → Padstow (both airport stations), including safe fallback when the parent name is missing.
+- **Explicitly out of scope:** Revesby two-minute platform interchange, connection thresholds, route selection changes and missed-connection recovery. No frontend or deployment-workflow changes.
+- Selectively promote only the exact QA-tested `api/lib/rail-normalization.php`, `tests/backend-test.php`, and `tests/fixtures/airport-daytime.json` from `develop@a09a947` atop production v17.1.0, preserving QA/production isolation and secrets/cache protection. QA CI/deploy/browser/API checks passed. In a separate QA parser check, real TfNSW Monday-noon Circular Quay → International Airport returned four usable journeys with both airport stops; the other three authenticated read-only requests returned HTTP 401, so complete live-feed validation was not claimed.
+
+
 ## 17.1.0 — Selected-train reliability and connection recovery (11 October 2026)
 
 - **SSA-01:** Refresh only an explicitly confirmed train's timetable by strict TfNSW per-leg trip ID, station sequence and saved departure anchor. Show source planned-versus-estimated delay information where verifiable, and retain original times/train instead of silently switching services.
