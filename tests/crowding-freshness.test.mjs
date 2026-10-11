@@ -30,7 +30,7 @@ test('SSA-07 source age is minute-accurate, not a page fetch time',()=>{
 
 test('SSA-07 hides freshness label for missing, older, invalid, future timestamps',()=>{
   for(const value of [null,undefined,'', '2025-10-01', 'invalid',observed(301),observed(-1)]) {
-    assert.equal(crowdingObservationAgeLabel(value,now),'No freshness label for '+String(value));
+    assert.equal(crowdingObservationAgeLabel(value,now),'','No freshness label for '+String(value));
   }
 });
 
