@@ -235,3 +235,13 @@ assertit(($hasOccupancy[0]['reason']??'')==='available'&&$hasOccupancy[0]['known
 $missingTrip=crowding_match_diagnostics(['legs'=>[['mode'=>'train','tripIds'=>[]]]],['train'=>[]]);
 assertit(($missingTrip[0]['reason']??'')==='trip_id_missing','Crowding diagnostic detects absent selected trip ID');
 assertit(!isset($hasOccupancy[0]['tripId'])&&!isset($hasOccupancy[0]['vehicleId']),'Crowding diagnostic never exposes identifying values');
+
+// TfNSW trip IDs are opaque: permit printable separators but not control bytes.
+assertit(crowding_trip_id_valid('metro | 123 / 456'),'Crowding accepts printable TfNSW trip IDs with spaces and separators');
+assertit(crowding_trip_id_valid('M1:123#ABC@2030'),'Crowding accepts opaque punctuation in trip IDs');
+assertit(!crowding_trip_id_valid(''),'Crowding rejects empty trip ID');
+assertit(!crowding_trip_id_valid('   '),'Crowding rejects blank trip ID');
+assertit(!crowding_trip_id_valid("abc\\n123"),'Crowding rejects line breaks in trip IDs');
+assertit(!crowding_trip_id_valid("abc\\x00def"),'Crowding rejects null bytes in trip IDs');
+assertit(!crowding_trip_id_valid(str_repeat('a',151)),'Crowding rejects oversized trip IDs');
+assertit(!crowding_trip_id_valid(123),'Crowding rejects non-string trip ID');
