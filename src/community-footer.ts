@@ -8,7 +8,7 @@
  * journey data or user identifiers in these URLs.
  */
 export const communityDestinations={
-  feedback: '',
+  feedback: 'https://tally.so/r/9qLvLp',
   coffee: '',
 };
 
