@@ -628,18 +628,6 @@ function parse_vehicle_positions_feed(string $data):array{
  }
  return $vehicles;
 }
-function upstream_binary_optional(string $url,int $ttl=15):?string{
- $key=source_key();if($key==='')return null;
- if(!preg_match('#^https://api\.transport\.nsw\.gov\.au/v2/gtfs/vehiclepos/(?:sydneytrains|metro)$#',$url))return null;
- $cacheDir=upstream_cache_directory();
-
- $cache=$cacheDir.'/'.hash('sha256',$url).'.bin';
- if(is_file($cache)&&filemtime($cache)>time()-$ttl){$cached=file_get_contents($cache);if(is_string($cached)&&$cached!=='')return $cached;}
- $h=curl_init($url);curl_setopt_array($h,[CURLOPT_RETURNTRANSFER=>true,CURLOPT_TIMEOUT=>3,CURLOPT_CONNECTTIMEOUT=>1,CURLOPT_HTTPHEADER=>['Authorization: apikey '.$key,'Accept: application/x-protobuf'],CURLOPT_FOLLOWLOCATION=>false]);
- $body=curl_exec($h);$status=(int)curl_getinfo($h,CURLINFO_RESPONSE_CODE);curl_close($h);
- if($status>=200&&$status<300&&is_string($body)&&$body!==''){@file_put_contents($cache,$body,LOCK_EX);return $body;}
- error_log('Sydney Station Alert optional vehicle feed failed: '.$status);return null;
-}
 function journey_crowding_from_feeds(array $route,array $feeds):array{
  $legs=[];$available=false;$overall='unknown';$overallRank=-1;$latest=0;
  foreach(val($route,'legs',[]) as $leg){
@@ -667,25 +655,6 @@ function journey_crowding_status(array $route):array{
  if(isset($modes['train'])){$body=upstream_binary_optional('https://api.transport.nsw.gov.au/v2/gtfs/vehiclepos/sydneytrains',15);if(is_string($body))$feeds['train']=parse_vehicle_positions_feed($body);}
  if(isset($modes['metro'])){$body=upstream_binary_optional('https://api.transport.nsw.gov.au/v2/gtfs/vehiclepos/metro',15);if(is_string($body))$feeds['metro']=parse_vehicle_positions_feed($body);}
  return journey_crowding_from_feeds($route,$feeds);
-}
-function upstream_optional(string $endpoint,array $params,int $ttl=60):?array{
- $key=source_key();if($key==='')return null;
- $base=rtrim((string)(getenv('TFNSW_API_BASE')?:'https://api.transport.nsw.gov.au/v1/tp'),'/');
- if(!str_starts_with($base,'https://api.transport.nsw.gov.au/'))return null;
- $params=['outputFormat'=>'rapidJSON','coordOutputFormat'=>'EPSG:4326']+$params;
- $url=$base.'/'.$endpoint.'?'.http_build_query($params,'','&',PHP_QUERY_RFC3986);
- $cacheDir=upstream_cache_directory();
-
- $cache=$cacheDir.'/'.hash('sha256',$url).'.json';
- if(is_file($cache)&&filemtime($cache)>time()-$ttl){
-  $data=json_decode((string)file_get_contents($cache),true);if(is_array($data))return $data;
- }
- $h=curl_init($url);curl_setopt_array($h,[CURLOPT_RETURNTRANSFER=>true,CURLOPT_TIMEOUT=>3,CURLOPT_CONNECTTIMEOUT=>1,CURLOPT_HTTPHEADER=>['Authorization: apikey '.$key,'Accept: application/json'],CURLOPT_FOLLOWLOCATION=>false]);
- $body=curl_exec($h);$status=(int)curl_getinfo($h,CURLINFO_RESPONSE_CODE);curl_close($h);
- $json=is_string($body)?json_decode($body,true):null;
- if($status>=200&&$status<300&&is_array($json)){@file_put_contents($cache,json_encode($json),LOCK_EX);return $json;}
- error_log('Sydney Station Alert optional TfNSW endpoint failed: '.$endpoint.' status '.$status);
- return null;
 }
 function fetch_current_service_alerts(DateTimeImmutable $when):?array{
  return upstream_optional('add_info',['filterDateValid'=>$when->format('d-m-Y'),'filterPublicationStatus'=>'current'],60);
