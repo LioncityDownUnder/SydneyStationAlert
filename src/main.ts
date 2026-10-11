@@ -182,6 +182,18 @@ async function refreshCrowding(generation=journeyGeneration){
  try{
   const result=await getCrowding(selected);
   if(generation!==journeyGeneration||serial!==crowdingRequestSerial||!state.journey||selectedCrowdingIdentity(state.journey)!==identity)return;
+  // Match history belongs to this exact selected service, not the next departure.
+  // Retain only a boolean per leg, including across confirmed-trip reloads.
+  const previous=state.journey.crowding;
+  if(isQaEnvironment){
+   result.matchHistory=(result.legs||[]).map((leg,i)=>Boolean(
+    leg.vehicleMatched||previous?.matchHistory?.[i]||
+    previous?.legs?.[i]?.vehicleMatched||
+    previous?.diagnostics?.[i]?.matched));
+   if(Array.isArray(result.diagnostics))result.diagnostics=result.diagnostics.map((d,i)=>({
+    ...d,previouslyMatched:!d.matched&&Boolean(result.matchHistory[i])
+   }));
+  }
   // Only update optional metadata; never replace the selected trip or boarding state.
   state.journey.crowding=result;
   state.crowdingChecked=true;
@@ -209,10 +221,13 @@ async function refreshCrowding(generation=journeyGeneration){
 function qaCrowdingDiagnosticDetails(j){
  if(!isQaEnvironment||!Array.isArray(j?.crowding?.diagnostics))return '';
  const labels={feed_unavailable:'TfNSW vehicle feed could not be retrieved',trip_id_missing:'Selected service has no trip identifier',trip_not_matched:'Selected trip not found in vehicle feed',occupancy_missing:'Train found, but occupancy fields are missing',available:'Occupancy information available',request_rejected:'Crowding request rejected by API validation',invalid_response:'Crowding API returned an invalid response',request_unavailable:'Crowding lookup failed or timed out',request_failed:'Crowding lookup could not complete',request_size:'Crowding request exceeded the API size limit',legs_invalid:'Crowding leg count or format rejected',mode_invalid:'Crowding transport mode rejected',id_count:'Crowding trip-ID count or list format rejected',id_format:'Crowding trip-ID format or length rejected',id_not_string:'A selected trip identifier was not text',id_too_long:'A selected trip identifier exceeds 150 bytes',id_blank:'A selected trip identifier is blank',id_control:'A selected trip identifier contains control characters'};
+ const freshnessLabels={fresh:'recent vehicle update (within 90 seconds)',lagging:'vehicle update 1.5–5 minutes old',stale:'vehicle update over 5 minutes old',unknown:'vehicle update time unavailable',unavailable:'feed unavailable'};
  const rows=j.crowding.diagnostics.map(d=>{
   const description=labels[d.reason]||'Occupancy status unknown';
   return '<li>'+esc(d.mode==='metro'?'Metro':'Sydney Trains')+' leg '+esc(String(Number(d.legIndex)+1))+': '+esc(description)+
-   ' (selected IDs: '+esc(String(d.tripIdCount))+', feed vehicles: '+esc(String(d.feedVehicleCount))+', carriages with occupancy: '+esc(String(d.knownCarriages))+')</li>';
+   ' (selected IDs: '+esc(String(d.tripIdCount))+', feed vehicles: '+esc(String(d.feedVehicleCount))+', carriages with occupancy: '+esc(String(d.knownCarriages))+')'+
+   '; Feed freshness: '+esc(freshnessLabels[d.feedFreshness]||'not checked')+
+   '; Previously matched selected service: '+esc(d.previouslyMatched?'yes — now missing':'no recorded match')+'</li>';
  }).join('');
  return '<details class="notice"><summary>QA crowding diagnostics</summary><p>Counts only; no train identifiers or API credentials are shown.</p><ul>'+rows+'</ul></details>';
 }

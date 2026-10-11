@@ -447,3 +447,16 @@ test('Refresh button displays busy spinner and live status',()=>{
  assert.match(src,/state\.checking\?'Refreshing selected service…'/);
  assert.match(src,/Monitoring is paused\. Tap Resume before refreshing\./);
 });
+
+test('QA crowding freshness and previous match indicators are privacy-safe',()=>{
+ const core=fs.readFileSync('api/lib/core.php','utf8');
+ const ui=fs.readFileSync('src/main.ts','utf8');
+ assert.match(core,/function crowding_feed_freshness\(array \$vehicles,int \$now\):string/);
+ assert.match(core,/'feedFreshness'=>array_key_exists\(\$mode,\$feeds\)/);
+ assert.match(ui,/result\.matchHistory=\(result\.legs\|\|\[\]\)\.map/);
+ assert.match(ui,/previous\?\.matchHistory\?\.\[i\]/);
+ assert.match(ui,/previouslyMatched:!d\.matched&&Boolean\(result\.matchHistory\[i\]\)/);
+ assert.match(ui,/Feed freshness:/);
+ assert.match(ui,/Previously matched selected service:/);
+ assert.match(ui,/if\(isQaEnvironment\)\{/);
+});

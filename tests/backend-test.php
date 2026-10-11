@@ -260,3 +260,14 @@ assertit(crowding_trip_id_invalid_reason(true)==='CROWDING_ID_NOT_STRING','Crowd
 assertit(crowding_trip_id_invalid_reason(12.5)==='CROWDING_ID_NOT_STRING','Crowding rejects fractional trip IDs');
 assertit(crowding_trip_id_invalid_reason(['id'=>123])==='CROWDING_ID_NOT_STRING','Crowding rejects structured trip IDs');
 assertit(crowding_trip_id_normalize(12.5)===null,'Crowding never silently rounds a fractional identifier');
+
+$now=time();
+assertit(crowding_feed_freshness(['one'=>['timestamp'=>$now-20]],$now)==='fresh','Recent vehicle feed is classified fresh');
+assertit(crowding_feed_freshness(['one'=>['timestamp'=>$now-160]],$now)==='lagging','Delayed vehicle timestamp is classified lagging');
+assertit(crowding_feed_freshness(['one'=>['timestamp'=>$now-450]],$now)==='stale','Old vehicle timestamp is classified stale');
+assertit(crowding_feed_freshness(['one'=>['timestamp'=>0]],$now)==='unknown','Missing vehicle timestamp is unknown');
+assertit(crowding_feed_freshness([],$now)==='unknown','Empty vehicle feed has unknown timestamp');
+assertit(crowding_feed_freshness(['one'=>['timestamp'=>$now+120]],$now)==='unknown','Future vehicle timestamps are not treated as fresh');
+$freshDiagnostic=crowding_match_diagnostics($diagnosticRoute,['train'=>['other-trip'=>['timestamp'=>$now-15,'level'=>'unknown','carriages'=>[]]]]);
+assertit(($freshDiagnostic[0]['feedFreshness']??'')==='fresh','Crowding mismatch reports recent feed freshness without identifying vehicles');
+assertit(!isset($freshDiagnostic[0]['timestamp'])&&!isset($freshDiagnostic[0]['tripId']),'Freshness diagnostics do not expose raw timestamps or IDs');
