@@ -3,6 +3,8 @@ name: Verify QA Selected Train Crowding
 on:
   push:
     branches: [fix/qa-selected-train-crowding]
+  pull_request:
+    branches: [develop]
   workflow_dispatch:
 
 permissions:
