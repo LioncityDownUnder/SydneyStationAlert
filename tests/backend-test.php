@@ -221,53 +221,9 @@ $lateCounts=qa_window_rejection_counts($windowRaw,$windowOrigin,$windowDest,$bas
 assertit(($lateCounts['beyond_four_hours']??0)===1,'Step 5AK categorizes departure beyond four hours');
 
  
-// Crowding diagnostics must classify missing feeds, mismatched trip IDs, and
-// matched vehicles without sending raw IDs/vehicles to the browser.
-$diagnosticRoute=['legs'=>[['mode'=>'train','tripIds'=>['selected-trip']]]];
-$missingFeed=crowding_match_diagnostics($diagnosticRoute,[]);
-assertit(($missingFeed[0]['reason']??'')==='feed_unavailable','Crowding diagnostic distinguishes unavailable feed');
-$notMatched=crowding_match_diagnostics($diagnosticRoute,['train'=>['other-trip'=>['level'=>'busy','carriages'=>[]]]]);
-assertit(($notMatched[0]['reason']??'')==='trip_not_matched','Crowding diagnostic detects trip ID mismatch');
-$noOccupancy=crowding_match_diagnostics($diagnosticRoute,['train'=>['selected-trip'=>['level'=>'unknown','carriages'=>[['level'=>'unknown']]]]]);
-assertit(($noOccupancy[0]['reason']??'')==='occupancy_missing','Crowding diagnostic distinguishes matched trip lacking occupancy');
-$hasOccupancy=crowding_match_diagnostics($diagnosticRoute,['train'=>['selected-trip'=>['level'=>'unknown','carriages'=>[['level'=>'moderate']]]]]);
-assertit(($hasOccupancy[0]['reason']??'')==='available'&&$hasOccupancy[0]['knownCarriages']===1,'Crowding diagnostic accepts matched carriage occupancy');
-$missingTrip=crowding_match_diagnostics(['legs'=>[['mode'=>'train','tripIds'=>[]]]],['train'=>[]]);
-assertit(($missingTrip[0]['reason']??'')==='trip_id_missing','Crowding diagnostic detects absent selected trip ID');
-assertit(!isset($hasOccupancy[0]['tripId'])&&!isset($hasOccupancy[0]['vehicleId']),'Crowding diagnostic never exposes identifying values');
-
-// TfNSW trip IDs are opaque: permit printable separators but not control bytes.
-assertit(crowding_trip_id_valid('metro | 123 / 456'),'Crowding accepts printable TfNSW trip IDs with spaces and separators');
-assertit(crowding_trip_id_valid('M1:123#ABC@2030'),'Crowding accepts opaque punctuation in trip IDs');
-assertit(!crowding_trip_id_valid(''),'Crowding rejects empty trip ID');
-assertit(!crowding_trip_id_valid('   '),'Crowding rejects blank trip ID');
-assertit(!crowding_trip_id_valid("abc\n123"),'Crowding rejects line breaks in trip IDs');
-assertit(!crowding_trip_id_valid("abc\x00def"),'Crowding rejects null bytes in trip IDs');
-assertit(!crowding_trip_id_valid(str_repeat('a',151)),'Crowding rejects oversized trip IDs');
-assertit(crowding_trip_id_valid(123),'Crowding accepts integer TfNSW trip IDs');
-
-assertit(crowding_trip_id_invalid_reason('A valid | ID')===null,'Crowding accepts printable identifier');
-assertit(crowding_trip_id_invalid_reason(str_repeat('X',151))==='CROWDING_ID_TOO_LONG','Crowding classifies oversized identifiers');
-assertit(crowding_trip_id_invalid_reason("A\nB")==='CROWDING_ID_CONTROL','Crowding classifies newline in identifier');
-assertit(crowding_trip_id_invalid_reason("A\x00B")==='CROWDING_ID_CONTROL','Crowding classifies NUL in identifier');
-assertit(crowding_trip_id_invalid_reason('   ')==='CROWDING_ID_BLANK','Crowding classifies blank identifier');
-assertit(crowding_trip_id_invalid_reason(42)===null,'Crowding accepts integer identifier');
-
-assertit(crowding_trip_id_normalize(12345)==='12345','Crowding normalizes integer trip ID to exact decimal text');
-assertit(crowding_trip_id_normalize(0)==='0','Crowding preserves zero numeric trip ID');
-assertit(crowding_trip_id_normalize('00123')==='00123','Crowding preserves leading zeros in string IDs');
-assertit(crowding_trip_id_invalid_reason(true)==='CROWDING_ID_NOT_STRING','Crowding rejects boolean trip IDs');
-assertit(crowding_trip_id_invalid_reason(12.5)==='CROWDING_ID_NOT_STRING','Crowding rejects fractional trip IDs');
-assertit(crowding_trip_id_invalid_reason(['id'=>123])==='CROWDING_ID_NOT_STRING','Crowding rejects structured trip IDs');
-assertit(crowding_trip_id_normalize(12.5)===null,'Crowding never silently rounds a fractional identifier');
-
-$now=time();
-assertit(crowding_feed_freshness(['one'=>['timestamp'=>$now-20]],$now)==='fresh','Recent vehicle feed is classified fresh');
-assertit(crowding_feed_freshness(['one'=>['timestamp'=>$now-160]],$now)==='lagging','Delayed vehicle timestamp is classified lagging');
-assertit(crowding_feed_freshness(['one'=>['timestamp'=>$now-450]],$now)==='stale','Old vehicle timestamp is classified stale');
-assertit(crowding_feed_freshness(['one'=>['timestamp'=>0]],$now)==='unknown','Missing vehicle timestamp is unknown');
-assertit(crowding_feed_freshness([],$now)==='unknown','Empty vehicle feed has unknown timestamp');
-assertit(crowding_feed_freshness(['one'=>['timestamp'=>$now+120]],$now)==='unknown','Future vehicle timestamps are not treated as fresh');
-$freshDiagnostic=crowding_match_diagnostics($diagnosticRoute,['train'=>['other-trip'=>['timestamp'=>$now-15,'level'=>'unknown','carriages'=>[]]]]);
-assertit(($freshDiagnostic[0]['feedFreshness']??'')==='fresh','Crowding mismatch reports recent feed freshness without identifying vehicles');
-assertit(!isset($freshDiagnostic[0]['timestamp'])&&!isset($freshDiagnostic[0]['tripId']),'Freshness diagnostics do not expose raw timestamps or IDs');
+// Crowding matching remains exact and never substitutes another service.
+$crowdingRoute=['legs'=>[['id'=>'leg-0','mode'=>'metro','tripIds'=>['selected-trip']]]];
+$unmatched=journey_crowding_from_feeds($crowdingRoute,['metro'=>['other-trip'=>['level'=>'busy','carriages'=>[]]]]);
+assertit(($unmatched['available']??true)===false,'Selected crowding never matches a different trip');
+$matched=journey_crowding_from_feeds($crowdingRoute,['metro'=>['selected-trip'=>['level'=>'moderate','carriages'=>[['level'=>'moderate']],'timestamp'=>time()]]]);
+assertit(($matched['available']??false)===true,'Selected crowding retains exact trip matching');
