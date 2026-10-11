@@ -779,12 +779,39 @@ function journey_crowding_from_feeds(array $route,array $feeds):array{
  }
  return ['available'=>$available,'level'=>$overall,'updatedAt'=>$latest>0?gmdate('c',$latest):gmdate('c'),'legs'=>$legs];
 }
-function journey_crowding_status(array $route):array{
+// QA-only classification from already-fetched vehicle records. No trip identifiers,
+ // vehicle identifiers, timestamps, or raw payloads are returned to the browser.
+function crowding_match_diagnostics(array $route,array $feeds):array{
+ $rows=[];
+ foreach(val($route,'legs',[]) as $index=>$leg){
+  if(!is_array($leg))continue;
+  $mode=(string)val($leg,'mode','');
+  $ids=val($leg,'tripIds',[]);
+  if(!is_array($ids))$ids=[];
+  $matched=null;
+  foreach($ids as $id){
+   $key=strtolower(trim((string)$id));
+   if($key!==''&&isset($feeds[$mode][$key])){$matched=$feeds[$mode][$key];break;}
+  }
+  $knownCarriages=$matched?count(array_filter($matched['carriages']??[],fn($car)=>($car['level']??'unknown')!=='unknown')):0;
+  $occupancyKnown=$matched&&(($matched['level']??'unknown')!=='unknown'||$knownCarriages>0);
+  $reason=!array_key_exists($mode,$feeds)?'feed_unavailable':
+    (!$ids?'trip_id_missing':(!$matched?'trip_not_matched':(!$occupancyKnown?'occupancy_missing':'available')));
+  $rows[]=['legIndex'=>$index,'mode'=>$mode,'tripIdCount'=>count($ids),
+   'feedVehicleCount'=>count($feeds[$mode]??[]),'matched'=>$matched!==null,
+   'carriageCount'=>$matched?count($matched['carriages']??[]):0,
+   'knownCarriages'=>$knownCarriages,'reason'=>$reason];
+ }
+ return $rows;
+}
+function journey_crowding_status(array $route,bool $includeDiagnostics=false):array{
  $modes=[];foreach(val($route,'legs',[]) as $leg){if(is_array($leg))$modes[(string)val($leg,'mode','')]=true;}
  $feeds=[];
  if(isset($modes['train'])){$body=upstream_binary_optional('https://api.transport.nsw.gov.au/v2/gtfs/vehiclepos/sydneytrains',15);if(is_string($body))$feeds['train']=parse_vehicle_positions_feed($body);}
  if(isset($modes['metro'])){$body=upstream_binary_optional('https://api.transport.nsw.gov.au/v2/gtfs/vehiclepos/metro',15);if(is_string($body))$feeds['metro']=parse_vehicle_positions_feed($body);}
- return journey_crowding_from_feeds($route,$feeds);
+ $result=journey_crowding_from_feeds($route,$feeds);
+ if($includeDiagnostics)$result['diagnostics']=crowding_match_diagnostics($route,$feeds);
+ return $result;
 }
 function upstream_optional(string $endpoint,array $params,int $ttl=60):?array{
  $key=source_key();if($key==='')return null;
