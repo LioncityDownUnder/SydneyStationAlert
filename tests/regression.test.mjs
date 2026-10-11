@@ -315,7 +315,7 @@ test('Step 5AX selection lists verified QA rail options and retains explicit boa
  assert.match(main,/state.boardingOptions=others.slice\(0,8\)/);
  assert.match(main,/function confirmBoardingOption\(index\)/);
  assert.match(main,/window.confirm\('Did you board this exact train/);
- assert.match(main,/journeyGeneration\+\+;state.journey=candidate;state.onboard=true/);
+ assert.match(main,/journeyGeneration\+\+;state.journey=candidate;state.crowdingChecked=false;state.onboard=true/);
  assert.match(main,/saveActiveTrip\(\);checkAlerts\(\);renderJourneyStable\(\)/);
  assert.match(main,/data-board-option/);
  assert.match(main,/cancel-boarding-choices/);
