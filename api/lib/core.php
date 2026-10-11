@@ -806,8 +806,15 @@ function crowding_match_diagnostics(array $route,array $feeds):array{
 }
 // Transport's opaque identifiers can contain spaces, pipes or other printable
 // separators; validate size and control bytes, not an invented ID alphabet.
+function crowding_trip_id_invalid_reason(mixed $id):?string{
+ if(!is_string($id))return 'CROWDING_ID_NOT_STRING';
+ if(strlen($id)>150)return 'CROWDING_ID_TOO_LONG';
+ if(trim($id)==='')return 'CROWDING_ID_BLANK';
+ if(preg_match('/[\\x00-\\x1F\\x7F]/',$id))return 'CROWDING_ID_CONTROL';
+ return null;
+}
 function crowding_trip_id_valid(mixed $id):bool{
- return is_string($id)&&strlen($id)<=150&&trim($id)!==''&&!preg_match('/[\\x00-\\x1F\\x7F]/',$id);
+ return crowding_trip_id_invalid_reason($id)===null;
 }
 function journey_crowding_status(array $route,bool $includeDiagnostics=false):array{
  $modes=[];foreach(val($route,'legs',[]) as $leg){if(is_array($leg))$modes[(string)val($leg,'mode','')]=true;}
