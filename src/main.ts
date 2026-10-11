@@ -58,6 +58,10 @@ function adoptJourneyUpdate(updated){
   const replacementIsUpcoming=Number.isFinite(newDeparture)&&newDeparture>=Date.now()-60000;
   // Never replace a displayed service with another service that has already left.
   if(oldDeparted&&!replacementIsUpcoming)return false;
+  // A same-service route refresh must not discard separately fetched crowding.
+  const sameSelected=previous&&selectedCrowdingIdentity(previous)===selectedCrowdingIdentity(updated);
+  if(sameSelected&&previous.crowding)updated.crowding=previous.crowding;
+  else state.crowdingChecked=false;
   state.journey=updated;
   if(oldDeparted&&replacementIsUpcoming&&!sameService(previous,updated)){
    state.alert='Your previous train has departed. Showing the next available journey; confirm boarding only when on the displayed train.';
@@ -66,6 +70,7 @@ function adoptJourneyUpdate(updated){
   return true;
  }
  if(!qaSameSelectedTrain(state.journey,updated))return false;
+ if(state.journey?.crowding)updated.crowding=state.journey.crowding;
  state.journey=updated;saveActiveTrip();updateDelayConnectionWarning();void suggestOnwardConnection();return true;
 }
 
@@ -182,16 +187,24 @@ async function refreshCrowding(generation=journeyGeneration){
   state.crowdingChecked=true;
   if(state.onboard)saveActiveTrip();
   renderJourneyStable();
- }catch{
+ }catch(e){
   if(generation!==journeyGeneration||serial!==crowdingRequestSerial||!state.journey||selectedCrowdingIdentity(state.journey)!==identity)return;
-  state.journey.crowding={available:false,level:'unknown',legs:[]};
+  // QA receives a category only, never raw trip IDs or upstream error details.
+  const reason=e instanceof ApiRequestError&&e.code==='BAD_REQUEST'?'request_rejected':
+    e instanceof ApiRequestError&&e.code==='MALFORMED_RESPONSE'?'invalid_response':
+    e instanceof ApiRequestError&&e.code==='UPSTREAM_UNAVAILABLE'?'request_unavailable':'request_failed';
+  state.journey.crowding={available:false,level:'unknown',legs:[],
+   diagnostics:isQaEnvironment?(selected.legs||[]).map((leg,i)=>({
+    legIndex:i,mode:leg.mode,tripIdCount:(leg.tripIds||[]).length,
+    feedVehicleCount:0,knownCarriages:0,reason
+   })):undefined};
   state.crowdingChecked=true;
   renderJourneyStable();
  }
 }
 function qaCrowdingDiagnosticDetails(j){
  if(!isQaEnvironment||!Array.isArray(j?.crowding?.diagnostics))return '';
- const labels={feed_unavailable:'TfNSW vehicle feed could not be retrieved',trip_id_missing:'Selected service has no trip identifier',trip_not_matched:'Selected trip not found in vehicle feed',occupancy_missing:'Train found, but occupancy fields are missing',available:'Occupancy information available'};
+ const labels={feed_unavailable:'TfNSW vehicle feed could not be retrieved',trip_id_missing:'Selected service has no trip identifier',trip_not_matched:'Selected trip not found in vehicle feed',occupancy_missing:'Train found, but occupancy fields are missing',available:'Occupancy information available',request_rejected:'Crowding request rejected by API validation',invalid_response:'Crowding API returned an invalid response',request_unavailable:'Crowding lookup failed or timed out',request_failed:'Crowding lookup could not complete'};
  const rows=j.crowding.diagnostics.map(d=>{
   const description=labels[d.reason]||'Occupancy status unknown';
   return '<li>'+esc(d.mode==='metro'?'Metro':'Sydney Trains')+' leg '+esc(String(Number(d.legIndex)+1))+': '+esc(description)+
