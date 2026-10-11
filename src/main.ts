@@ -2,6 +2,7 @@
 import { searchStations, preloadStations, nearbyStations, getJourney, getBoardingOptions, getCrowding, ApiRequestError } from './api.js';
 import { GEO, REFRESH_MS, SEARCH_DEBOUNCE_MS, STATION_CACHE_MS } from './constants.js';
 import { nearestStation, progress, alertKeys, fmtTime, escapeHTML as esc } from './logic.js';
+import { loadStationIndex, saveStationIndex, findStationMatches, mergeStationEntries } from './station-index.js';
 const root = document.getElementById('app');
 const state = { origin: null, destination: null, detected: false, manual: false, locating: false, location: null, journey: null, onboard: false, paused: false, busy: false, checking: false, recoveringConnection: false, noticeExpanded: false, suggestedConnection: null, suggestingConnection: false, boardingOptions: null, lastSuggestionCheck: 0, enriching: false, crowdingChecked: false, message: '', alert: '', searchResults: [], activeField: null, searchLoading: false, searchQuery: '', searchError: '', highlightedIndex: -1, lastChecked: null, offline: !navigator.onLine, noRoute: false, noRouteAlerts: null, noRouteAlertsLoading: false };
 let queryController = null;
@@ -74,20 +75,21 @@ function adoptJourneyUpdate(updated){
  state.journey=updated;saveActiveTrip();updateDelayConnectionWarning();void suggestOnwardConnection();return true;
 }
 
-function loadStationCache() { try {
-    const raw = localStorage.getItem(STATION_CACHE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    if (!parsed || !Array.isArray(parsed.stations) || Date.now() - Number(parsed.savedAt) > STATION_CACHE_MS) {
-        localStorage.removeItem(STATION_CACHE_KEY); return [];
-    }
-    return parsed.stations;
-} catch { return []; } }
-function saveStationCache(stations) { try { localStorage.setItem(STATION_CACHE_KEY, JSON.stringify({ savedAt: Date.now(), stations })); } catch {} }
-let stationIndex = loadStationCache();
-function localStationMatches(q) { const n = q.trim().toLocaleLowerCase(); if (n.length < 2) return []; return stationIndex.filter(s => s.name.toLocaleLowerCase().includes(n)).sort((a,b)=>{ const an=a.name.toLocaleLowerCase(),bn=b.name.toLocaleLowerCase(); const ap=an.startsWith(n)?0:1,bp=bn.startsWith(n)?0:1; return ap-bp||a.name.localeCompare(b.name); }).slice(0,12); }
-async function warmStationIndex() { if (stationIndex.length) return; try { const stations=await preloadStations(); if(stations.length){stationIndex=stations;saveStationCache(stations);} } catch {} }
-function mergeStationIndex(stations){ if(!stations.length)return; const map=new Map(stationIndex.map(s=>[s.id,s])); for(const s of stations)map.set(s.id,s); stationIndex=[...map.values()];saveStationCache(stationIndex); }
+let stationIndex=loadStationIndex(localStorage,STATION_CACHE_KEY,STATION_CACHE_MS);
+function saveStationCache(stations){saveStationIndex(localStorage,STATION_CACHE_KEY,stations);}
+function localStationMatches(query){return findStationMatches(stationIndex,query);}
+async function warmStationIndex(){
+ if(stationIndex.length)return;
+ try{
+  const stations=await preloadStations();
+  if(stations.length){stationIndex=stations;saveStationCache(stations);}
+ }catch{}
+}
+function mergeStationIndex(stations){
+ if(!stations.length)return;
+ stationIndex=mergeStationEntries(stationIndex,stations);
+ saveStationCache(stationIndex);
+}
 const brand=`<header class="top"><div class="brand"><div class="mark" aria-hidden="true">↗</div>Sydney Station Alert</div><div class="topmeta">SYDNEY TRAINS <span style="color:#d46d2c">/</span> METRO</div></header>`;
 const footer=`<footer class="footer">Designed for Sydney commuters by Y.T. Ng</footer>`;
 function message(text,warn=false){return text?`<p class="notice${warn?' warn':''}" role="status">${esc(text)}</p>`:'';}
