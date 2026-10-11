@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { searchStations, preloadStations, nearbyStations, getJourney, getBoardingOptions, getCrowding, getBoardedTimetable, ApiRequestError } from './api.js';
+import { searchStations, preloadStations, nearbyStations, getJourney, getBoardingOptions, getCrowding, getBoardedTimetable, getOnwardOptions, ApiRequestError } from './api.js';
 import { GEO, REFRESH_MS, SEARCH_DEBOUNCE_MS, STATION_CACHE_MS } from './constants.js';
 import { nearestStation, progress, alertKeys, fmtTime, escapeHTML as esc } from './logic.js';
 import { loadStationIndex, saveStationIndex, findStationMatches, mergeStationEntries } from './station-index.js';
@@ -12,6 +12,7 @@ import { findConnectionAtRisk, calculateDisplayedProgress } from './journey-moni
 import { datedTrainTime, stopDisplayTime, displayLineName, transferDisplay } from './timetable-display.js';
 import { renderNotificationReliabilityNotice, renderRailTravelLinks } from './notice-markup.js';
 import { renderRouteMap } from './route-map.js';
+import { earliestCatchableDeparture, validOnwardConnection, verifiedLateConnectionRisk, buildRecoveredJourney } from './connection-recovery.js';
 import { canCheckBoardedTimetable, mergeVerifiedBoardedTimetable, estimatedStopDelayMinutes } from './boarded-timetable.js';
 const root = document.getElementById('app');
 const state = { origin: null, destination: null, detected: false, manual: false, locating: false, location: null, journey: null, onboard: false, paused: false, busy: false, checking: false, recoveringConnection: false, noticeExpanded: false, suggestedConnection: null, suggestingConnection: false, boardingOptions: null, lastSuggestionCheck: 0, enriching: false, crowdingChecked: false, timetableStatus: 'not_checked', message: '', alert: '', searchResults: [], activeField: null, searchLoading: false, searchQuery: '', searchError: '', highlightedIndex: -1, lastChecked: null, offline: !navigator.onLine, noRoute: false, noRouteAlerts: null, noRouteAlertsLoading: false };
@@ -253,7 +254,7 @@ async function refresh(){
   if(generation===journeyGeneration){
    state.checking=false;
    renderJourneyStable();
-   if(!state.onboard)void suggestOnwardConnection();
+   if(state.onboard)void suggestOnwardConnection();
   }
  }
 }
@@ -261,24 +262,32 @@ async function refresh(){
 function connectionAtRisk(j){return findConnectionAtRisk(j,state.onboard,state.paused);}
 async function suggestOnwardConnection(){
  const risk=connectionAtRisk(state.journey);
- if(!risk||state.suggestingConnection||state.checking||!navigator.onLine||Date.now()-state.lastSuggestionCheck<120000)return;
- state.lastSuggestionCheck=Date.now();
- const original=state.journey,generation=journeyGeneration;
+ if(!risk||!verifiedLateConnectionRisk(state.journey,risk)||state.suggestingConnection||state.checking||!navigator.onLine||Date.now()-state.lastSuggestionCheck<120000)return;
+ const original=state.journey,generation=journeyGeneration,prior=original.legs.slice(0,risk.index);
+ if(state.suggestedConnection?.journeyId===original.id&&state.suggestedConnection.index===risk.index)return;
  const transfer=original.legs[risk.index]?.origin;
- if(!transfer)return;
- state.suggestingConnection=true;
+ const notBefore=earliestCatchableDeparture(prior,Date.now());
+ if(!transfer||notBefore===null||notBefore>Date.now()+4*3600000)return;
+ state.lastSuggestionCheck=Date.now();state.suggestingConnection=true;
  try{
-  const onward=await getJourney(transfer,original.destination,true);
-  if(generation!==journeyGeneration||state.journey!==original||!state.onboard)return;
-  const departure=Date.parse(onward.legs?.[0]?.departure||onward.legs?.[0]?.origin?.departure||'');
-  if(!Number.isFinite(departure)||departure<risk.arrival+3*60000)return;
-  state.suggestedConnection={index:risk.index,departure,transfer:transfer.name,journeyId:original.id};
-  state.alert='Connection at risk at '+transfer.name+'. A later onward service departing at '+fmtTime(new Date(departure).toISOString())+' is available. Use “I missed my connection” to update your route.';
+  const result=await getOnwardOptions(transfer,original.destination,notBefore);
+  if(generation!==journeyGeneration||state.journey!==original||!state.onboard||state.paused)return;
+  const onward=(result?.options||[]).find(candidate=>validOnwardConnection(candidate,transfer,original.destination,prior,notBefore));
+  if(!onward)return;
+  const departure=Date.parse(onward.legs[0]?.departure||onward.legs[0]?.origin?.departure||'');
+  state.suggestedConnection={index:risk.index,departure,transfer:transfer.name,journeyId:original.id,onward,notBefore};
+  updateDelayConnectionWarning();
  }catch{}finally{state.suggestingConnection=false;if(generation===journeyGeneration)renderJourneyStable();}
 }
 function updateDelayConnectionWarning(){
  const risk=connectionAtRisk(state.journey);
- if(!risk)return;
+ if(!risk){state.suggestedConnection=null;return;}
+ const suggested=state.suggestedConnection;
+ if(suggested&&suggested.journeyId===state.journey.id&&suggested.index===risk.index
+   &&suggested.departure>Date.now()&&verifiedLateConnectionRisk(state.journey,risk)){
+  state.alert='Connection at risk at '+risk.name+'. A later rail service departing '+fmtTime(new Date(suggested.departure).toISOString())+' has been verified as a possible replacement. Review before changing your onward train.';
+  return;
+ }
  state.alert='Connection at risk at '+risk.name+': the first train arrival leaves less than 3 minutes to change. Check the next onward service using “I missed my connection”.';
 }
 function checkAlerts(){updateDelayConnectionWarning();if(!state.journey||state.paused||!state.location)return;const p=progress(state.journey,state.location);if(!p.nearest)return;for(const key of alertKeys(state.journey,p.index)){if(fired.has(key))continue;fired.add(key);const text=key==='destination-two'?`2 stops to ${state.journey.destination.name}`:key==='destination-one'?`1 stop to ${state.journey.destination.name}`:`Change trains at ${state.journey.transfers.find(t=>'transfer-'+t.id===key)?.name??'the next interchange'}`;state.alert=text;if(Notification.permission==='granted')try{new Notification('Sydney Station Alert',{body:text,tag:state.journey.id+'-'+key});}catch{}}}
@@ -286,40 +295,50 @@ function displayedProgress(j){return calculateDisplayedProgress(j,state.location
 function mapMarkup(j,p){return renderRouteMap(j,p,state.location);}
 function qaOnwardConnectionIsValid(onward,transfer,prior,recoveryRequestedAt){
  if(!qaRailPilot)return true;
- const first=onward?.legs?.[0];
- if(!first||!Array.isArray(onward.legs)||!onward.legs.length)return false;
- if(String(first.origin?.id||'')!==String(transfer?.id||''))return false;
- const priorArrival=Date.parse(prior[prior.length-1]?.arrival||prior[prior.length-1]?.destination?.arrival||'');
- if(!Number.isFinite(priorArrival))return false;
- let previousArrival=priorArrival;
- for(const leg of onward.legs){
-  if(leg.mode!=='train'&&leg.mode!=='metro')return false;
-  const departure=Date.parse(leg.departure||leg.origin?.departure||'');
-  const arrival=Date.parse(leg.arrival||leg.destination?.arrival||'');
-  if(!Number.isFinite(departure)||!Number.isFinite(arrival)||arrival<=departure||departure<previousArrival+2*60000)return false;
-  previousArrival=arrival;
- }
- const firstDeparture=Date.parse(first.departure||first.origin?.departure||'');
- return firstDeparture>=recoveryRequestedAt;
+ return validOnwardConnection(onward,transfer,state.journey?.destination,prior,recoveryRequestedAt);
+}
+function applyRecoveredConnection(original,legIndex,onward,requestedAt,transferName){
+ const updated=buildRecoveredJourney(original,legIndex,onward,requestedAt);
+ if(!updated)return false;
+ journeyGeneration++;state.suggestedConnection=null;state.journey=updated;state.crowdingChecked=false;
+ state.timetableStatus='not_checked';
+ state.lastChecked=new Date();state.alert='Onward journey updated from '+transferName+'. Check the new boarding time and platform; your already-boarded train has been retained.';
+ state.message='';fired.clear();saveActiveTrip();
+ void refreshCrowding(journeyGeneration);
+ return true;
 }
 async function recoverMissedConnection(legIndex){
  if(!state.onboard||state.checking||!state.journey||legIndex<1)return;
  const original=state.journey,prior=original.legs.slice(0,legIndex),transfer=original.legs[legIndex]?.origin;
  if(!transfer||!prior.length)return;
- const recoveryRequestedAt=Date.now();const generation=journeyGeneration;state.checking=true;state.recoveringConnection=true;state.message='Finding another train from '+transfer.name+'…';renderJourneyStable();
+ const recoveryRequestedAt=Date.now(),notBefore=earliestCatchableDeparture(prior,recoveryRequestedAt);
+ if(notBefore===null||notBefore>recoveryRequestedAt+4*3600000){
+  state.message='The expected interchange arrival is unavailable or outside the next four hours. Your existing trip is unchanged.';
+  renderJourneyStable();return;
+ }
+ const generation=journeyGeneration;state.checking=true;state.recoveringConnection=true;state.message='Finding a catchable train from '+transfer.name+'…';renderJourneyStable();
  try{
-  const onward=await getJourney(transfer,original.destination,true);
+  const result=await getOnwardOptions(transfer,original.destination,notBefore);
   if(generation!==journeyGeneration||state.journey!==original)return;
-  const departure=Date.parse(onward.legs?.[0]?.departure||onward.legs?.[0]?.origin?.departure||'');
-  if(!Number.isFinite(departure)||departure<recoveryRequestedAt)throw new Error('No connection departing after your recovery request was verified. Please retry shortly.');
-  if(!qaOnwardConnectionIsValid(onward,transfer,prior,recoveryRequestedAt))throw new Error('The proposed interchange connection could not be verified. Keep your existing journey and check TfNSW Trip Planner.');
-  const legs=[...prior,...onward.legs];
-  const stops=[];for(const leg of legs)for(const station of leg.stops||[leg.origin,leg.destination]){if(!station)continue;const last=stops[stops.length-1];if(last&&(last.id===station.id||last.name===station.name)){stops[stops.length-1]={...last,...station,arrival:last.arrival||station.arrival,departure:station.departure||last.departure};}else stops.push(station);}
-  const transfers=[];for(let i=1;i<legs.length;i++){const previous=legs[i-1].destination,current=legs[i].origin;transfers.push({id:current.id,name:current.name,mode:current.mode,lat:current.lat,lon:current.lon,arrivalPlatform:previous.platform,departurePlatform:current.platform});}
-  state.suggestedConnection=null;state.journey={...original,legs,stops,transfers,id:original.id+'-recovered-'+Date.now(),fetchedAt:new Date().toISOString()};
-  state.lastChecked=new Date();state.alert='New connection found from '+transfer.name+'. Check the updated boarding time and platform.';state.message='';fired.clear();saveActiveTrip();
+  const onward=(result?.options||[]).find(candidate=>qaOnwardConnectionIsValid(candidate,transfer,prior,notBefore));
+  if(!onward||!applyRecoveredConnection(original,legIndex,onward,recoveryRequestedAt,transfer.name))
+   throw new Error('No verified rail connection departing after your expected arrival and changeover buffer was found. Your journey is unchanged.');
  }catch(e){if(generation===journeyGeneration)state.message='Unable to find a replacement connection: '+(e?.message||'Please try again.');}
- finally{if(generation===journeyGeneration){state.checking=false;state.recoveringConnection=false;renderJourneyStable();}}
+ finally{state.checking=false;state.recoveringConnection=false;renderJourneyStable();}
+}
+function acceptSuggestedConnection(legIndex){
+ const original=state.journey,suggestion=state.suggestedConnection;
+ if(!state.onboard||state.checking||!original||!suggestion||suggestion.journeyId!==original.id||suggestion.index!==legIndex)return;
+ const prior=original.legs.slice(0,legIndex),transfer=original.legs[legIndex]?.origin;
+ if(!transfer)return;
+ const now=Date.now(),notBefore=earliestCatchableDeparture(prior,now);
+ if(notBefore===null||!qaOnwardConnectionIsValid(suggestion.onward,transfer,prior,notBefore)){
+  state.suggestedConnection=null;state.message='That suggested train is no longer verified as catchable. Use “I missed my connection” to search again.';renderJourneyStable();return;
+ }
+ const departure=Date.parse(suggestion.onward.legs[0]?.departure||'');
+ const detail=transfer.name+' · '+(suggestion.onward.legs[0]?.line||'Rail')+' · '+fmtTime(new Date(departure).toISOString());
+ if(!window.confirm('Use this onward train?\\n'+detail+'\\n\\nOnly the unboarded connection changes. Your earlier boarded train is kept.'))return;
+ if(applyRecoveredConnection(original,legIndex,suggestion.onward,now,transfer.name))renderJourneyStable();
 }
 async function confirmDifferentTrain(){
  if(!qaRailPilot||state.onboard||state.checking||!state.journey||!navigator.onLine)return;
