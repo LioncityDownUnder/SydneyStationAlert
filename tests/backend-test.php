@@ -238,6 +238,30 @@ assertit(($unmatched['available']??true)===false,'Selected crowding never matche
 $matched=journey_crowding_from_feeds($crowdingRoute,['metro'=>['selected-trip'=>['level'=>'moderate','carriages'=>[['level'=>'moderate']],'timestamp'=>time()]]]);
 assertit(($matched['available']??false)===true,'Selected crowding retains exact trip matching');
 
+// Backend Batch 3B: extracted transport helpers retain their signatures,
+// safe credential precedence and endpoint restrictions without network calls.
+$upstreamModule=realpath(__DIR__.'/../api/lib/upstream-transport.php');
+assertit($upstreamModule!==false,'TfNSW upstream transport module exists');
+foreach(['source_key','upstream_cache_directory','upstream_parallel_trip','upstream'] as $fn){
+ $definition=new ReflectionFunction($fn);
+ assertit(realpath((string)$definition->getFileName())===$upstreamModule,"$fn is loaded from the extracted transport module");
+}
+$previousKey=getenv('TFNSW_API_KEY');
+$previousBase=getenv('TFNSW_API_BASE');
+try{
+ putenv('TFNSW_API_KEY=qa-upstream-transport-fixture');
+ assertit(source_key()==='qa-upstream-transport-fixture','Transport credential uses an explicitly configured API key');
+ putenv('TFNSW_API_BASE=http://example.invalid/v1/tp');
+ assertit(upstream_parallel_trip([['from'=>'A'],['from'=>'B']])===[null,null],'Parallel trip lookup rejects non-HTTPS/non-whitelisted transport base without network access');
+ putenv('TFNSW_API_BASE=https://example.invalid/v1/tp');
+ assertit(upstream_parallel_trip([['from'=>'A']])===[null],'Parallel trip lookup rejects an unapproved HTTPS transport host');
+}finally{
+ if($previousKey===false)putenv('TFNSW_API_KEY');
+ else putenv('TFNSW_API_KEY='.$previousKey);
+ if($previousBase===false)putenv('TFNSW_API_BASE');
+ else putenv('TFNSW_API_BASE='.$previousBase);
+}
+
 $cacheDir=upstream_cache_directory();
 assertit($cacheDir===sys_get_temp_dir().'/sydney_station_alert_'.substr(hash('sha256',dirname(__DIR__).'/api/lib'),0,8),'Shared cache directory retains original path');
 assertit(is_dir($cacheDir),'Shared cache directory exists');
