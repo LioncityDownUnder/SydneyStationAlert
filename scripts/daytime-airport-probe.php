@@ -65,11 +65,16 @@ foreach($checks as [$from,$to,$date,$clock]){
      $stopId=(string)($stopNode['id']??'');
      $stopName=(string)($stopNode['disassembledName']??$stopNode['name']??'');
      if(in_array($stopId,['202091','202092','2020101','2020102'],true)||preg_match('/airport|^platform\s*\d+/i',$stopName))
-       $stopHints[]=['id'=>$stopId,'name'=>$stopName,'parentName'=>$stopNode['parent']['name']??null,
-       'parentId'=>$stopNode['parent']['id']??null,'outerName'=>$item['name']??null];
+       $stopHints[]=['id'=>$stopId,'name'=>$stopName,'normalizedName'=>station($stopNode,'train')['name']??null,
+       'parentName'=>$stopNode['parent']['name']??null,'parentId'=>$stopNode['parent']['id']??null,
+       'outerName'=>$item['name']??null];
     }
     $summ[]=['class'=>$class,'line'=>$transport['disassembledName']??null,
      'from'=>$leg['origin']['name']??null,'to'=>$leg['destination']['name']??null,
+     'rawDepart'=>local_time($leg['origin']['departureTimePlanned']??null,$tz),
+     'rawArrive'=>local_time($leg['destination']['arrivalTimePlanned']??null,$tz),
+     'normalizedFrom'=>stop($leg['origin'],'train')['name']??null,
+     'normalizedTo'=>stop($leg['destination'],'train')['name']??null,
      'stopSequenceSize'=>is_array($leg['stopSequence']??null)?count($leg['stopSequence']):null,
      'airportStopHints'=>$stopHints];
    }
