@@ -1,0 +1,36 @@
+name: One-off future daytime International Airport route probe
+on:
+  push:
+    branches: [diagnostic/daytime-international-airport-20261012]
+permissions:
+  contents: read
+jobs:
+  daytime-airport:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate read-only diagnostic source
+        run: |
+          php -l scripts/daytime-airport-probe.php
+          grep -F '20261012' scripts/daytime-airport-probe.php
+          test ! -e api/config.local.php
+      - name: Query tomorrow's midday timetables using existing server-side TfNSW configuration
+        env:
+          SSHPASS: ${{ secrets.NAMECHEAP_PASSWORD }}
+          NAMECHEAP_HOST: ${{ secrets.NAMECHEAP_HOST }}
+          NAMECHEAP_USERNAME: ${{ secrets.NAMECHEAP_USERNAME }}
+          NAMECHEAP_PORT: ${{ secrets.NAMECHEAP_PORT }}
+          NAMECHEAP_DEPLOY_PATH: ${{ secrets.NAMECHEAP_DEPLOY_PATH }}
+        run: |
+          set -euo pipefail
+          test -n "$SSHPASS" && test -n "$NAMECHEAP_HOST" && test -n "$NAMECHEAP_DEPLOY_PATH"
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq sshpass
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          ssh-keyscan -p "$NAMECHEAP_PORT" "$NAMECHEAP_HOST" >> ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+          sshpass -e ssh -p "$NAMECHEAP_PORT" -o StrictHostKeyChecking=yes \
+            "$NAMECHEAP_USERNAME@$NAMECHEAP_HOST" \
+            "cd '$NAMECHEAP_DEPLOY_PATH' && php" < scripts/daytime-airport-probe.php
