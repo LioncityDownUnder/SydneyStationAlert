@@ -338,3 +338,44 @@ $cacheDir=upstream_cache_directory();
 assertit($cacheDir===sys_get_temp_dir().'/sydney_station_alert_'.substr(hash('sha256',dirname(__DIR__).'/api/lib'),0,8),'Shared cache directory retains original path');
 assertit(is_dir($cacheDir),'Shared cache directory exists');
 assertit($cacheDir===upstream_cache_directory(),'Shared cache directory is stable across calls');
+
+// SSA-01: a commuter's saved trip IDs and station sequence are mandatory for
+// matching a timetable. Never substitute services by line or departure time.
+$boardedCandidate=[
+ 'legs'=>[[
+  'mode'=>'train','tripIds'=>['realtime-trip-77','train-77'],
+  'origin'=>['id'=>'100'],'destination'=>['id'=>'200'],
+  'stops'=>[['id'=>'100'],['id'=>'150'],['id'=>'200']],
+  'departure'=>'2026-10-11T10:06:00+11:00'
+ ]]
+];
+$boardedSelected=[
+ 'anchor'=>'2026-10-11T10:00:00+11:00',
+ 'legs'=>[[
+  'mode'=>'train','tripIds'=>['REALTIME-TRIP-77'],
+  'originId'=>'100','destinationId'=>'200','stopIds'=>['100','150','200']
+ ]]
+];
+assertit(boarded_timetable_matches($boardedSelected,$boardedCandidate),'SSA-01 accepts exact ID-matched selected train and same stopping sequence');
+$otherTrain=$boardedCandidate;$otherTrain['legs'][0]['tripIds']=['different-train'];
+assertit(!boarded_timetable_matches($boardedSelected,$otherTrain),'SSA-01 rejects next departure with different train IDs');
+$missingId=$boardedSelected;$missingId['legs'][0]['tripIds']=[];
+assertit(!boarded_timetable_matches($missingId,$boardedCandidate),'SSA-01 rejects time-only matching');
+$changedStops=$boardedCandidate;$changedStops['legs'][0]['stops'][1]['id']='151';
+assertit(!boarded_timetable_matches($boardedSelected,$changedStops),'SSA-01 rejects changed stop sequence');
+$changedOrigin=$boardedCandidate;$changedOrigin['legs'][0]['origin']['id']='999';
+assertit(!boarded_timetable_matches($boardedSelected,$changedOrigin),'SSA-01 rejects unrelated boarding station');
+$lateTrain=$boardedCandidate;$lateTrain['legs'][0]['departure']='2026-10-11T13:00:00+11:00';
+assertit(!boarded_timetable_matches($boardedSelected,$lateTrain),'SSA-01 rejects implausible same-trip delayed departure');
+$extraLeg=$boardedCandidate;$extraLeg['legs'][]=$boardedCandidate['legs'][0];
+assertit(!boarded_timetable_matches($boardedSelected,$extraLeg),'SSA-01 does not silently alter interchange legs');
+assertit(boarded_timetable_find($boardedSelected,[],['id'=>'100'],['id'=>'200'])===null,'SSA-01 no provider data yields unavailable, not a guessed replacement');
+
+$estimatedRaw=['id'=>'100','name'=>'Origin','coord'=>[151.1,-33.9],
+ 'departureTimePlanned'=>'2026-10-11T10:00:00+11:00',
+ 'departureTimeEstimated'=>'2026-10-11T10:06:00+11:00'];
+$estimatedStop=stop($estimatedRaw,'train');
+assertit(($estimatedStop['plannedDeparture']??null)==='2026-10-11T10:00:00+11:00',
+ 'SSA-01 preserves provider planned timestamp for estimated-delay calculation');
+assertit(($estimatedStop['departure']??null)==='2026-10-11T10:06:00+11:00',
+ 'SSA-01 uses provider estimated timetable timestamp when available');
