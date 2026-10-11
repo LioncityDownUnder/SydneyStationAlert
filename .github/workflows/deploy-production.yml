@@ -28,8 +28,7 @@ jobs:
 
       - name: PHP syntax
         run: |
-          php -l api/index.php
-          php -l api/lib/core.php
+          find api -name '*.php' -print0 | xargs -0 -n1 php -l
 
       - name: PHP fixture tests
         run: php tests/backend-test.php
@@ -40,6 +39,9 @@ jobs:
           test ! -e dist/api/gtfs-update.php
           test ! -e dist/api/gtfs-index.php
           test -f dist/api/lib/qa_route_rejections.php
+          for module in journey-performance upstream-transport service-alerts gtfs-crowding journey-routing rail-normalization station-discovery; do
+            test -f "dist/api/lib/${module}.php"
+          done
           test ! -e dist/api/diagnostics.php
           test ! -e dist/diagnostics.html
 
