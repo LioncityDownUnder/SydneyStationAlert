@@ -1,10 +1,43 @@
 <?php
 require __DIR__.'/../api/lib/core.php';
 function assertit($ok,$message){if(!$ok)throw new RuntimeException($message);echo "PASS $message\n";}
+$routingModule=realpath(__DIR__.'/../api/lib/journey-routing.php');
+assertit($routingModule!==false,'Routing module exists');
+foreach(['better_route','stitch_routes','prioritized_transfer_candidates','journey_search_probes'] as $fn){
+ assertit(realpath((string)(new ReflectionFunction($fn))->getFileName())===$routingModule,"$fn comes from journey routing module");
+}
+assertit(better_route(null,null)===null,'Route ranking keeps empty alternatives unavailable');
+assertit(route_departure_ts([])===PHP_INT_MAX,'Unknown departure does not become a valid future service');
+assertit(stitch_routes([],[],[],[])===null,'Incomplete connections are never stitched');
+$normalizationModule=realpath(__DIR__.'/../api/lib/rail-normalization.php');
+assertit($normalizationModule!==false,'Rail normalization module exists');
+foreach(['point','mode','station','stop','normalized_journey','normalized_journeys'] as $fn){
+ assertit(realpath((string)(new ReflectionFunction($fn))->getFileName())===$normalizationModule,"$fn comes from rail normalization module");
+}
+$coord=point(['coord'=>[151.206,-33.883]]);
+assertit($coord!==null&&abs($coord['lat']+33.883)<0.00001&&abs($coord['lon']-151.206)<0.00001,'Longitude-first TfNSW coordinates preserve Sydney latitude/longitude');
+assertit(normalize_platform('Platform 4A')==='4A','Platform normalization preserves a valid alphanumeric platform');
+assertit(clean_station_name('Central Station')==='Central','Station display name removes redundant station suffix');
+$stationModule=realpath(__DIR__.'/../api/lib/station-discovery.php');
+assertit($stationModule!==false,'Station-discovery module exists');
+foreach(['normalize_station_locations','station_index','station_search','lookup_station'] as $fn){
+ assertit(realpath((string)(new ReflectionFunction($fn))->getFileName())===$stationModule,"$fn resolves from the station-discovery module");
+}
+$stationSample=['type'=>'stop','id'=>'101','name'=>'Central Station','coord'=>[151.206,-33.883],'productClasses'=>[1]];
+$stations=normalize_station_locations([$stationSample,$stationSample,['type'=>'address','id'=>'NO','name'=>'Non-station']]);
+assertit(count($stations)===1&&$stations[0]['id']==='101'&&$stations[0]['mode']==='train','Station discovery deduplicates real rail stops and ignores non-stop locations');
 $origin=['id'=>'101','name'=>'Central','lat'=>-33.883,'lon'=>151.206,'mode'=>'train'];$dest=['id'=>'103','name'=>'Town Hall','lat'=>-33.873,'lon'=>151.207,'mode'=>'train'];
 $fixtures=['success','transfer','mixed','no-route','partial','missing-platform'];foreach($fixtures as $key){$body=json_decode(file_get_contents(__DIR__.'/fixtures/'.$key.'.json'),true);$fixtureDest=$key==='transfer'?['id'=>'105','name'=>'Barangaroo','lat'=>-33.862,'lon'=>151.202,'mode'=>'metro']:$dest;$result=normalized_journey($body,$origin,$fixtureDest);if(in_array($key,['no-route','partial','mixed'])){assertit($result===null,"$key is rejected safely");continue;}assertit($result!==null,"$key normalized");if($key==='success'){assertit(count($result['stops'])===3,'intermediate stops retained');assertit(count($result['legs'][0]['path'])===3,'rail geometry retained');assertit($result['legs'][0]['platform']==='4','platform parsed');assertit($result['stops'][1]['arrival']==='2026-10-07T14:24:00+11:00','estimated intermediate arrival is preferred');assertit($result['stops'][1]['departure']==='2026-10-07T14:24:30+11:00','intermediate departure is retained');assertit($result['stops'][2]['arrival']==='2026-10-07T14:26:00+11:00','destination arrival is retained');}if($key==='transfer')assertit(count($result['transfers'])===1&&count($result['legs'])===2,'transfer legs separate');if($key==='missing-platform')assertit($result['legs'][0]['platform']===null,'missing platform fallback is possible');}
 assertit(mode(['product'=>['class'=>5],'name'=>'Bus'])===null,'bus is not a rail mode');
 
+$alertModule=realpath(__DIR__.'/../api/lib/service-alerts.php');
+assertit($alertModule!==false,'Extracted service-alert module exists');
+foreach(['alert_text_value','normalize_service_alert','journey_service_status','best_unaffected_route','fetch_current_service_alerts'] as $fn){
+ $where=(new ReflectionFunction($fn))->getFileName();
+ assertit(realpath((string)$where)===$alertModule,"$fn resolves from extracted service-alert module");
+}
+assertit(alert_text_value(['description'=>'<b>Safe & visible</b>'])==='Safe & visible','Alert text normalization strips HTML markup');
+assertit(normalized_service_alerts(['infos'=>['current'=>[]]])===[],'Empty TfNSW alerts stay empty');
 $alertBody=json_decode(file_get_contents(__DIR__.'/fixtures/service-alerts.json'),true);
 $alertRoute=[
  'stops'=>[
@@ -51,6 +84,12 @@ function test_pb_int(int $field,int $value):string{return test_pb_varint(($field
 function test_pb_msg(int $field,string $value):string{return test_pb_varint(($field<<3)|2).test_pb_varint(strlen($value)).$value;}
 function test_pb_string(int $field,string $value):string{return test_pb_msg($field,$value);}
 
+$crowdingModule=realpath(__DIR__.'/../api/lib/gtfs-crowding.php');
+assertit($crowdingModule!==false,'GTFS vehicle parser module exists');
+foreach(['pb_fields','parse_vehicle_positions_feed','journey_crowding_from_feeds','journey_crowding_status'] as $fn){
+ assertit(realpath((string)(new ReflectionFunction($fn))->getFileName())===$crowdingModule,"$fn loads from GTFS crowding module");
+}
+assertit(parse_vehicle_positions_feed('')===[],'Empty binary vehicle feed has no inferred train locations');
 $tripMsg=test_pb_string(1,'3001.nsw-2-T4.1.TA.1432.sj2');
 $vehicleDescriptor=test_pb_string(1,'train-123');
 $carriage1=test_pb_string(1,'D1234').test_pb_int(2,1).test_pb_int(3,1).test_pb_int(4,1).test_pb_int(5,2).test_pb_int(6,1);
@@ -117,12 +156,22 @@ $prioritized=prioritized_transfer_candidates($routeWithKnownTransfer,$transferBo
 assertit(count($prioritized)<=1,'transfer validation fanout is capped');
 assertit(($prioritized[0]['name']??'')==='Wolli Creek','selected route transfer is validated first');
 
+assertit(is_file(__DIR__.'/../api/lib/journey-performance.php'),'Performance diagnostics module is present');
+assertit(function_exists('journey_perf_track')&&function_exists('journey_perf_finish'),'Core loads extracted timing functions');
+assertit(journey_perf_track('disabled',fn()=>17)===17,'Timing wrapper preserves results without an active trace');
 $GLOBALS['journey_perf']=['start'=>microtime(true),'phase'=>'setup','phaseStart'=>microtime(true),'durations'=>[],'counts'=>[],'coreOnly'=>true,'route'=>'test'];
 $value=journey_perf_track('normalize',fn()=>42);
 journey_perf_phase('initial_parallel_search');
 assertit($value===42,'timed callback returns its original value');
 assertit(($GLOBALS['journey_perf']['counts']['normalize']??0)===1,'performance tracker records phase calls');
 assertit(isset($GLOBALS['journey_perf']['durations']['phase_setup']),'performance tracker measures stage durations');
+$thrown=false;
+try{journey_perf_track('expected_error',function(){throw new RuntimeException('expected');});}
+catch(RuntimeException $ex){$thrown=$ex->getMessage()==='expected';}
+assertit($thrown,'Timing wrapper propagates callback exceptions without changing them');
+assertit(($GLOBALS['journey_perf']['counts']['expected_error']??0)===1,'Timing wrapper records callback exceptions in finalizer');
+assertit(isset($GLOBALS['journey_perf']['durations']['expected_error']),'Timing wrapper records elapsed time for failed callbacks');
+
 unset($GLOBALS['journey_perf']);
 
 $transferPoint=['id'=>'220810','name'=>'Wolli Creek','lat'=>-33.928,'lon'=>151.154,'mode'=>'train','platform'=>'3','arrival'=>'2026-10-08T22:48:00+11:00'];
@@ -219,3 +268,73 @@ $counts=qa_window_rejection_counts($windowRaw,$windowOrigin,$windowDest,$baseTim
 assertit(($counts['eligible']??0)===1,'Step 5AK categorizes eligible four-hour candidate');
 $lateCounts=qa_window_rejection_counts($windowRaw,$windowOrigin,$windowDest,$baseTime-18000);
 assertit(($lateCounts['beyond_four_hours']??0)===1,'Step 5AK categorizes departure beyond four hours');
+
+ 
+// Crowding matching remains exact and never substitutes another service.
+$crowdingRoute=['legs'=>[['id'=>'leg-0','mode'=>'metro','tripIds'=>['selected-trip']]]];
+$unmatched=journey_crowding_from_feeds($crowdingRoute,['metro'=>['other-trip'=>['level'=>'busy','carriages'=>[]]]]);
+assertit(($unmatched['available']??true)===false,'Selected crowding never matches a different trip');
+$matched=journey_crowding_from_feeds($crowdingRoute,['metro'=>['selected-trip'=>['level'=>'moderate','carriages'=>[['level'=>'moderate']],'timestamp'=>time()]]]);
+assertit(($matched['available']??false)===true,'Selected crowding retains exact trip matching');
+
+// Backend Batch 3B: extracted transport helpers retain their signatures,
+// safe credential precedence and endpoint restrictions without network calls.
+$upstreamModule=realpath(__DIR__.'/../api/lib/upstream-transport.php');
+assertit($upstreamModule!==false,'TfNSW upstream transport module exists');
+foreach(['source_key','upstream_cache_directory','upstream_parallel_trip','upstream'] as $fn){
+ $definition=new ReflectionFunction($fn);
+ assertit(realpath((string)$definition->getFileName())===$upstreamModule,"$fn is loaded from the extracted transport module");
+}
+$previousKey=getenv('TFNSW_API_KEY');
+$previousBase=getenv('TFNSW_API_BASE');
+try{
+ putenv('TFNSW_API_KEY=qa-upstream-transport-fixture');
+ assertit(source_key()==='qa-upstream-transport-fixture','Transport credential uses an explicitly configured API key');
+ putenv('TFNSW_API_BASE=http://example.invalid/v1/tp');
+ assertit(upstream_parallel_trip([['from'=>'A'],['from'=>'B']])===[null,null],'Parallel trip lookup rejects non-HTTPS/non-whitelisted transport base without network access');
+ putenv('TFNSW_API_BASE=https://example.invalid/v1/tp');
+ assertit(upstream_parallel_trip([['from'=>'A']])===[null],'Parallel trip lookup rejects an unapproved HTTPS transport host');
+}finally{
+ if($previousKey===false)putenv('TFNSW_API_KEY');
+ else putenv('TFNSW_API_KEY='.$previousKey);
+ if($previousBase===false)putenv('TFNSW_API_BASE');
+ else putenv('TFNSW_API_BASE='.$previousBase);
+}
+
+// Backend Batch 3C: optional requests still fail safely without contacting
+// external hosts, and continue sharing the same transport/cache module.
+foreach(['upstream_optional','upstream_binary_optional'] as $fn){
+ $definition=new ReflectionFunction($fn);
+ assertit(realpath((string)$definition->getFileName())===$upstreamModule,"$fn is loaded from the shared upstream transport module");
+}
+$jsonOptional=new ReflectionFunction('upstream_optional');
+$binaryOptional=new ReflectionFunction('upstream_binary_optional');
+assertit($jsonOptional->getParameters()[2]->getDefaultValue()===60,'Optional JSON response cache keeps 60-second default TTL');
+assertit($binaryOptional->getParameters()[1]->getDefaultValue()===15,'Optional vehicle feed keeps 15-second default TTL');
+$previousKey=getenv('TFNSW_API_KEY');
+$previousBase=getenv('TFNSW_API_BASE');
+try{
+ putenv('TFNSW_API_KEY=qa-optional-upstream-fixture');
+ foreach([
+  'http://api.transport.nsw.gov.au/v2/gtfs/vehiclepos/metro',
+  'https://api.transport.nsw.gov.au.evil.test/v2/gtfs/vehiclepos/metro',
+  'https://api.transport.nsw.gov.au/v2/gtfs/vehiclepos/unknown',
+  'https://api.transport.nsw.gov.au/v2/gtfs/vehiclepos/metro?test=1'
+ ] as $invalidUrl){
+  assertit(upstream_binary_optional($invalidUrl)===null,'Optional GTFS vehicle request rejects unapproved URL');
+ }
+ putenv('TFNSW_API_BASE=http://api.transport.nsw.gov.au/v1/tp');
+ assertit(upstream_optional('add_info',[])===null,'Optional JSON request rejects HTTP transport');
+ putenv('TFNSW_API_BASE=https://api.transport.nsw.gov.au.evil.test/v1/tp');
+ assertit(upstream_optional('add_info',[])===null,'Optional JSON request rejects lookalike TfNSW host');
+}finally{
+ if($previousKey===false)putenv('TFNSW_API_KEY');
+ else putenv('TFNSW_API_KEY='.$previousKey);
+ if($previousBase===false)putenv('TFNSW_API_BASE');
+ else putenv('TFNSW_API_BASE='.$previousBase);
+}
+
+$cacheDir=upstream_cache_directory();
+assertit($cacheDir===sys_get_temp_dir().'/sydney_station_alert_'.substr(hash('sha256',dirname(__DIR__).'/api/lib'),0,8),'Shared cache directory retains original path');
+assertit(is_dir($cacheDir),'Shared cache directory exists');
+assertit($cacheDir===upstream_cache_directory(),'Shared cache directory is stable across calls');

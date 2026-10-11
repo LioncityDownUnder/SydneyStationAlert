@@ -1,5 +1,13 @@
 # Changelog
 
+## 17.0.1 — Maintenance baseline (11 October 2026)
+
+- Promote the QA-verified modularisation of backend TfNSW transport, cache, journey routing, rail and station normalization, station discovery, service-alert matching, GTFS-Realtime crowding and performance instrumentation.
+- Promote the QA-verified pure frontend modules for local confirmed journeys, selected service identity, station index/markup, crowding, notices, timetable/transfer display, journey monitoring and SVG route-map rendering.
+- Retain the existing production rail-only routing, verified boarded-train identity, crowding fallbacks, manual missed-connection flow, UI styling and browser storage semantics. No SSA-01 live selected-train timetable enhancement is included.
+- Add comprehensive PHP-module syntax checks and release artifact checks, preserving production/QA directory isolation and protected server configuration.
+- Source snapshot: QA `develop` at `99bd681`; production release is from a selective, main-based release branch, not a wholesale develop merge. Automated smoke tests cannot prove arbitrary live TfNSW service data.
+
 ## Unreleased
 
 ### Performance hardening

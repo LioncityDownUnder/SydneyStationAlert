@@ -92,8 +92,10 @@ test('GPS missed-connection inference is removed without removing manual recover
 test('onboard delay-aware connection warning uses arrival and departure with interchange buffer',()=>{
  const main=fs.readFileSync('src/main.ts','utf8');
  assert.match(main,/function connectionAtRisk\(j\)/);
- assert.match(main,/if\(!state\.onboard\|\|state\.paused/);
- assert.match(main,/arrival\+3\*60000>departure/);
+ // The risk calculation is now tested behaviourally in journey-monitoring.test.mjs.
+ // Keep this regression focused on main.ts passing live onboarding/pause state.
+ assert.match(main,/import \{ findConnectionAtRisk, calculateDisplayedProgress \} from '\.\/journey-monitoring\.js'/);
+ assert.match(main,/function connectionAtRisk\(j\)\{return findConnectionAtRisk\(j,state\.onboard,state\.paused\);\}/);
  assert.match(main,/updateDelayConnectionWarning\(\);void suggestOnwardConnection\(\);return true/);
  assert.match(main,/Connection at risk at /);
 });
@@ -111,7 +113,8 @@ test('proactive onward lookup is bounded and preserves confirmed journey',()=>{
 test('background alert limitations are disclosed and foreground checks resume',()=>{
  const main=fs.readFileSync('src/main.ts','utf8');
  assert.match(main,/function notificationReliabilityNotice\(\)/);
- assert.match(main,/Location and timetable checks may stop when your phone is locked/);
+ const notices=fs.readFileSync('src/notice-markup.ts','utf8');
+ assert.match(notices,/Location and timetable checks may stop when your phone is locked/);
  assert.match(main,/\$\{notificationReliabilityNotice\(\)\}/);
  assert.match(main,/visibilitychange.*startTracking\(\);checkAlerts\(\);renderJourneyStable\(\);void refresh\(\)/);
  assert.match(main,/addEventListener\('pageshow'/);
@@ -168,7 +171,9 @@ test('Step 5AB QA-only search budget is explicit and does not affect production 
  assert.match(api,/if\(\$qaBoundedSearch&&microtime\(true\)>=\$qaSearchDeadline\)/);
  assert.match(api,/No train-only journey was verified within the QA search time limit/);
  assert.match(api,/journey_search_qa_diagnostics_header\(\$qaSearchDiagnostics\)/);
- assert.match(core,/time_budget_exceeded/);
+ const performance=fs.readFileSync('api/lib/journey-performance.php','utf8');
+ assert.match(core,/journey-performance\.php/);
+ assert.match(performance,/time_budget_exceeded/);
 });
 
 test('Step 5AC makes incomplete QA searches distinct from confirmed no-route responses',()=>{
@@ -197,9 +202,13 @@ test('Step 5AI QA pilot rejects departed first-leg services and labels overnight
  const main=fs.readFileSync('src/main.ts','utf8');
  assert.match(backend,/\$qaRailPilot\?qa_rail_route_in_window\(\$body,\$originSeed,\$destinationSeed,\$now->getTimestamp\(\),\$qaRailLatestDeparture\)/);
  assert.match(backend,/if\(\$qaRailPilot\)\$route=\$qaRouteWithinWindow\(\$route\)/);
- assert.match(main,/function sydneyDayLabel\(value,now=new Date\(\)\)/);
- assert.match(main,/timeZone:'Australia\/Sydney'/);
- assert.match(main,/return 'Tomorrow, '/);
+ const timetable=fs.readFileSync('src/timetable-display.ts','utf8');
+ // The date and transfer formatting is now tested with observable output in
+ // timetable-display.test.mjs; retain a guard that main uses that module.
+ assert.match(main,/from '\.\/timetable-display\.js'/);
+ assert.match(timetable,/export function sydneyDayLabel\(/);
+ assert.match(timetable,/timeZone: 'Australia\/Sydney'/);
+ assert.match(timetable,/return 'Tomorrow, '/);
  assert.match(main,/I boarded the \$\{esc\(datedTrainTime\(/);
 });
 
@@ -214,8 +223,10 @@ test('Step 5AJ QA pilot applies four-hour window, strict leg times and official 
  assert.match(qa,/function qa_rail_chronology_valid\(array \$route\):bool/);
  assert.match(qa,/\$previousArrival\+120/);
  assert.match(ui,/function qaRailPilotTravelLinks\(\)/);
- assert.match(ui,/transportnsw\.info\/alerts/);
- assert.match(ui,/transportnsw\.info\/trip/);
+ const notices=fs.readFileSync('src/notice-markup.ts','utf8');
+ assert.match(ui,/return renderRailTravelLinks\(qaRailPilot\)/);
+ assert.match(notices,/transportnsw\.info\/alerts/);
+ assert.match(notices,/transportnsw\.info\/trip/);
 });
 
 test('Step 5AS QA rail pilot highlights only confirmed active contextual alerts on no-route',()=>{
@@ -224,8 +235,10 @@ test('Step 5AS QA rail pilot highlights only confirmed active contextual alerts 
  assert.match(ui,/qaRailPilot&&state\.noRoute&&!state\.noRouteLimited&&active\.length/);
  assert.match(ui,/trackwork may affect your journey\. Train availability is unconfirmed/);
  assert.match(ui,/Contextual notice; impact on your selected journey is unverified/);
- assert.match(ui,/https:\/\/transportnsw\.info\/alerts/);
- assert.match(ui,/https:\/\/transportnsw\.info\/trip/);
+ const notices=fs.readFileSync('src/notice-markup.ts','utf8');
+ assert.match(ui,/qaRailPilotTravelLinks\(\)/);
+ assert.match(notices,/https:\/\/transportnsw\.info\/alerts/);
+ assert.match(notices,/https:\/\/transportnsw\.info\/trip/);
 });
 
 test('Step 5AT mobile pilot message is concise and places TfNSW links before alert details',()=>{
@@ -324,9 +337,11 @@ test('Step 5AX selection lists verified QA rail options and retains explicit boa
 test('QA alert reliability notice stays collapsible above journey footer',()=>{
  const main=fs.readFileSync('src/main.ts','utf8');
  assert.match(main,/noticeExpanded: false/);
- assert.match(main,/id="alert-reliability-notice"/);
- assert.match(main,/<summary>Alert Reliability Notice<\/summary>/);
- assert.match(main,/state\.noticeExpanded\?' open':''/);
+ const notices=fs.readFileSync('src/notice-markup.ts','utf8');
+ assert.match(main,/return renderNotificationReliabilityNotice\(permission,state\.noticeExpanded\)/);
+ assert.match(notices,/id="alert-reliability-notice"/);
+ assert.match(notices,/<summary>Alert Reliability Notice<\/summary>/);
+ assert.match(notices,/expanded \? ' open' : ''/);
  assert.match(main,/addEventListener\('toggle',e=>\{state\.noticeExpanded=e\.currentTarget\.open;\}\)/);
  const render=main.slice(main.indexOf('function renderJourney(){'));
  assert.ok(render.indexOf('${notificationReliabilityNotice()}')>render.indexOf('<section class="panel">'));
