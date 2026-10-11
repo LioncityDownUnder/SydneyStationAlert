@@ -32,7 +32,7 @@ const LEVEL_LABELS: Record<string, string> = {
 };
 
 function hasKnownCarriages(leg: RailLegCrowding): boolean {
-  return Array.isArray(leg.carriages)
+  return crowdingCurrentlyVisible({available:true, legs:[leg]}) && Array.isArray(leg.carriages)
     && leg.carriages.some(car => Boolean(car.level && car.level !== 'unknown'));
 }
 
@@ -52,7 +52,7 @@ export function carriageCrowding(journey: CrowdingJourney): string {
   const legs = journey?.crowding?.legs;
   if (!crowdingCurrentlyVisible(journey?.crowding) || !Array.isArray(legs)) return '';
 
-  const leg = legs.find(item=>item.vehicleMatched && item.updatedAt && hasKnownCarriages(item));
+  const leg = legs.find(hasKnownCarriages);
   if (!leg || !Array.isArray(leg.carriages)) return '';
 
   const cars = leg.carriages
