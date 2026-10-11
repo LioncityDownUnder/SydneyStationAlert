@@ -31,6 +31,8 @@ jobs:
           php -l api/lib/station-discovery.php
           php -l api/lib/boarded-timetable.php
           php -l api/lib/boarded-timetable-handler.php
+          php -l api/lib/onward-recovery.php
+          php -l api/lib/onward-recovery-handler.php
           php -l api/gtfs-update.php
           php -l api/gtfs-index.php
           php -l api/lib/qa_route_rejections.php
