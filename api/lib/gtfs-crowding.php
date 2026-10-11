@@ -69,30 +69,81 @@ function parse_vehicle_positions_feed(string $data):array{
   $level=$wholeLevel;
   if($level==='unknown'&&$maxRank>=0)$level=['quiet','moderate','busy','very_busy'][$maxRank];
   $record=['tripId'=>$tripId,'vehicleId'=>$vehicleId,'level'=>$level,'timestamp'=>$timestamp,'stopId'=>pb_first_string($vehicle,7),'carriages'=>$carriages];
-  if(!isset($vehicles[$tripId])||$timestamp>($vehicles[$tripId]['timestamp']??0))$vehicles[$tripId]=$record;
+  if(!isset($vehicles[$tripId])||$timestamp>($vehicles[$tripId]['timestamp']??0)){$vehicles[$tripId]=$record;continue;}
+  if($timestamp===($vehicles[$tripId]['timestamp']??0)){
+   // Two different vehicles claiming the same trip at the same instant is
+   // ambiguous. Never choose one merely because of feed entity order.
+   $prior=$vehicles[$tripId];
+   if(($prior['vehicleId']??null)!==$vehicleId||$prior['level']!==$level||$prior['carriages']!==$carriages){
+    $vehicles[$tripId]=['tripId'=>$tripId,'vehicleId'=>null,'level'=>'unknown','timestamp'=>$timestamp,
+      'stopId'=>null,'carriages'=>[],'ambiguous'=>true];
+   }
+  }
  }
  return $vehicles;
 }
-function journey_crowding_from_feeds(array $route,array $feeds):array{
- $legs=[];$available=false;$overall='unknown';$overallRank=-1;$latest=0;
+/** TfNSW vehicle observation must be recent enough to describe this train now. */
+function crowding_observation_recent(array $vehicle,int $now):bool{
+ $timestamp=(int)($vehicle['timestamp']??0);
+ return $timestamp>0&&$timestamp>=$now-300&&$timestamp<=$now+60;
+}
+function crowding_leg_match(array $leg,array $feeds,int $now):array{
+ $mode=(string)val($leg,'mode','');
+ $ids=val($leg,'tripIds',[]);if(!is_array($ids))$ids=[];
+ $records=[];$seen=[];
+ foreach($ids as $id){
+  if(!is_string($id)&&!is_int($id))continue;
+  $tripId=strtolower(trim((string)$id));
+  if($tripId===''||isset($seen[$tripId]))continue;$seen[$tripId]=true;
+  if(isset($feeds[$mode][$tripId])&&is_array($feeds[$mode][$tripId]))$records[$tripId]=$feeds[$mode][$tripId];
+ }
+ $selected=null;$selectedId=null;$ambiguous=false;
+ foreach($records as $id=>$record){
+  if(!crowding_observation_recent($record,$now))continue;
+  if(!empty($record['ambiguous'])){$ambiguous=true;break;}
+  if($selected!==null){
+   $sameVehicle=isset($record['vehicleId'],$selected['vehicleId'])&&$record['vehicleId']!==''&&
+     $record['vehicleId']===$selected['vehicleId'];
+   // Alternative IDs must resolve to the same physical vehicle, never a
+   // merely similar train, line, time or occupancy level.
+   if(!$sameVehicle){$ambiguous=true;break;}
+  }
+  if($selected===null||(int)($record['timestamp']??0)>(int)($selected['timestamp']??0)){
+   $selected=$record;$selectedId=$id;
+  }
+ }
+ if($ambiguous)return ['status'=>'ambiguous','record'=>null,'tripId'=>null];
+ if($selected!==null)return ['status'=>'matched','record'=>$selected,'tripId'=>$selectedId];
+ return ['status'=>$records?'stale':'unmatched','record'=>null,'tripId'=>null];
+}
+function journey_crowding_from_feeds(array $route,array $feeds,?int $now=null):array{
+ $now=$now??time();$legs=[];$available=false;$overall='unknown';$overallRank=-1;$latest=0;
  foreach(val($route,'legs',[]) as $leg){
-  if(!is_array($leg))continue;$mode=(string)val($leg,'mode','');$match=null;$matchedTrip=null;
-  $tripIds=val($leg,'tripIds',[]);if(!is_array($tripIds))$tripIds=[];
-  foreach($tripIds as $tripId){$key=strtolower(trim((string)$tripId));if($key!==''&&isset($feeds[$mode][$key])){$match=$feeds[$mode][$key];$matchedTrip=$key;break;}}
+  if(!is_array($leg))continue;
+  $mode=(string)val($leg,'mode','');
+  $identity=crowding_leg_match($leg,$feeds,$now);$match=$identity['record'];
   $level=$match['level']??'unknown';$rank=crowding_rank($level);
-  if($match){$latest=max($latest,(int)($match['timestamp']??0));if($rank>=0)$available=true;if($rank>$overallRank){$overallRank=$rank;$overall=$level;}}
+  if($match){
+   $latest=max($latest,(int)$match['timestamp']);
+   if($rank>=0)$available=true;
+   if($rank>$overallRank){$overallRank=$rank;$overall=$level;}
+  }
   $legs[]=[
    'legId'=>(string)val($leg,'id',''),
    'mode'=>$mode,
    'vehicleMatched'=>$match!==null,
-   'tripId'=>$matchedTrip,
+   'tripId'=>$identity['tripId'],
    'vehicleId'=>$match['vehicleId']??null,
    'level'=>$level,
-   'updatedAt'=>isset($match['timestamp'])&&$match['timestamp']>0?gmdate('c',(int)$match['timestamp']):null,
-   'carriages'=>$match['carriages']??[]
+   'updatedAt'=>$match?gmdate('c',(int)$match['timestamp']):null,
+   'carriages'=>$match['carriages']??[],
+   // For commuter-safe unavailable messaging, no raw feed IDs or diagnostics.
+   'availability'=>$identity['status']==='matched'?($rank>=0?'available':'unknown'):$identity['status']
   ];
  }
- return ['available'=>$available,'level'=>$overall,'updatedAt'=>$latest>0?gmdate('c',$latest):gmdate('c'),'legs'=>$legs];
+ return ['available'=>$available,'level'=>$overall,
+  'updatedAt'=>$latest>0?gmdate('c',$latest):null,
+  'checkedAt'=>gmdate('c',$now),'legs'=>$legs];
 }
 function journey_crowding_status(array $route):array{
  $modes=[];foreach(val($route,'legs',[]) as $leg){if(is_array($leg))$modes[(string)val($leg,'mode','')]=true;}

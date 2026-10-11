@@ -6,6 +6,7 @@ import { loadStationIndex, saveStationIndex, findStationMatches, mergeStationEnt
 import { optionMarkup as stationOptionMarkup, stationField as stationFieldMarkup } from './station-markup.js';
 import { renderServiceUpdate, renderServiceDetails } from './service-notice-markup.js';
 import { crowdingSummary, carriageCrowding } from './crowding-markup.js';
+import { sanitizedSelectedCrowding, crowdingCurrentlyVisible } from './crowding-safety.js';
 import { saveConfirmedTrip, loadConfirmedTrip, clearConfirmedTrip } from './active-trip.js';
 import { sameService, firstDepartureTime } from './journey-service.js';
 import { findConnectionAtRisk, calculateDisplayedProgress } from './journey-monitoring.js';
@@ -184,7 +185,7 @@ async function refreshCrowding(generation=journeyGeneration){
  try{
   const result=await getCrowding(selected);
   if(generation!==journeyGeneration||serial!==crowdingRequestSerial||!state.journey||selectedCrowdingIdentity(state.journey)!==identity)return;
-  state.journey.crowding=result;state.crowdingChecked=true;
+  state.journey.crowding=sanitizedSelectedCrowding(selected,result);state.crowdingChecked=true;
   if(state.onboard)saveActiveTrip();renderJourneyStable();
  }catch{
   if(generation!==journeyGeneration||serial!==crowdingRequestSerial||!state.journey||selectedCrowdingIdentity(state.journey)!==identity)return;
@@ -192,7 +193,7 @@ async function refreshCrowding(generation=journeyGeneration){
  }
 }
 function crowdingUnavailable(j){
- return state.crowdingChecked&&!j?.crowding?.available?'<div class="muted" role="status">Crowding data unavailable for this service.</div>':'';
+ return (state.crowdingChecked||j?.crowding)&&!crowdingCurrentlyVisible(j?.crowding)?'<div class="muted" role="status">Crowding data unavailable for this service (missing or no longer current).</div>':'';
 }
 function renderJourneyStable(){const x=window.scrollX,y=window.scrollY;renderJourney();requestAnimationFrame(()=>window.scrollTo(x,y));}
 async function enrichJourney(generation){if(!state.journey)return;state.enriching=true;renderJourneyStable();const statusTimer=window.setTimeout(()=>{if(generation===journeyGeneration&&state.enriching){state.enriching=false;renderJourneyStable();}},5000);try{const updated=await getJourney(state.journey.origin,state.journey.destination,qaRailPilot);if(generation!==journeyGeneration||!state.journey)return;const adopted=adoptJourneyUpdate(updated);if(adopted){state.lastChecked=new Date();state.message='';}checkAlerts();}catch(e){if(generation===journeyGeneration&&state.journey)state.message='Live service details could not be verified. Showing previously saved journey information.';}finally{clearTimeout(statusTimer);if(generation===journeyGeneration){state.enriching=false;renderJourneyStable();}}}
@@ -375,6 +376,7 @@ window.addEventListener('pageshow',()=>{if(state.journey&&!state.paused){startTr
 if('Notification' in window&&Notification.permission==='default'){document.addEventListener('click',e=>{if(e.target.id==='set')void Notification.requestPermission().catch(()=>{});},{capture:true});}
 const restoredTrip=loadActiveTrip();
 if(restoredTrip){
+  if(restoredTrip.crowding)restoredTrip.crowding=sanitizedSelectedCrowding(restoredTrip,restoredTrip.crowding);
   state.journey=restoredTrip;
   state.origin=restoredTrip.origin;
   state.destination=restoredTrip.destination;
