@@ -219,3 +219,19 @@ $counts=qa_window_rejection_counts($windowRaw,$windowOrigin,$windowDest,$baseTim
 assertit(($counts['eligible']??0)===1,'Step 5AK categorizes eligible four-hour candidate');
 $lateCounts=qa_window_rejection_counts($windowRaw,$windowOrigin,$windowDest,$baseTime-18000);
 assertit(($lateCounts['beyond_four_hours']??0)===1,'Step 5AK categorizes departure beyond four hours');
+
+ 
+// Crowding diagnostics must classify missing feeds, mismatched trip IDs, and
+// matched vehicles without sending raw IDs/vehicles to the browser.
+$diagnosticRoute=['legs'=>[['mode'=>'train','tripIds'=>['selected-trip']]]];
+$missingFeed=crowding_match_diagnostics($diagnosticRoute,[]);
+assertit(($missingFeed[0]['reason']??'')==='feed_unavailable','Crowding diagnostic distinguishes unavailable feed');
+$notMatched=crowding_match_diagnostics($diagnosticRoute,['train'=>['other-trip'=>['level'=>'busy','carriages'=>[]]]]);
+assertit(($notMatched[0]['reason']??'')==='trip_not_matched','Crowding diagnostic detects trip ID mismatch');
+$noOccupancy=crowding_match_diagnostics($diagnosticRoute,['train'=>['selected-trip'=>['level'=>'unknown','carriages'=>[['level'=>'unknown']]]]]);
+assertit(($noOccupancy[0]['reason']??'')==='occupancy_missing','Crowding diagnostic distinguishes matched trip lacking occupancy');
+$hasOccupancy=crowding_match_diagnostics($diagnosticRoute,['train'=>['selected-trip'=>['level'=>'unknown','carriages'=>[['level'=>'moderate']]]]]);
+assertit(($hasOccupancy[0]['reason']??'')==='available'&&$hasOccupancy[0]['knownCarriages']===1,'Crowding diagnostic accepts matched carriage occupancy');
+$missingTrip=crowding_match_diagnostics(['legs'=>[['mode'=>'train','tripIds'=>[]]]],['train'=>[]]);
+assertit(($missingTrip[0]['reason']??'')==='trip_id_missing','Crowding diagnostic detects absent selected trip ID');
+assertit(!isset($hasOccupancy[0]['tripId'])&&!isset($hasOccupancy[0]['vehicleId']),'Crowding diagnostic never exposes identifying values');
