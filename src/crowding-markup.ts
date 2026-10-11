@@ -1,4 +1,5 @@
 import { escapeHTML as esc } from './logic.js';
+import { crowdingCurrentlyVisible } from './crowding-safety.js';
 
 /** Markup-only view of the optional TfNSW crowding response. */
 interface CarriageCrowding {
@@ -10,6 +11,9 @@ interface CarriageCrowding {
 interface RailLegCrowding {
   mode?: string;
   carriages?: CarriageCrowding[];
+  vehicleMatched?: boolean;
+  updatedAt?: string | null;
+  level?: string;
 }
 
 interface CrowdingJourney {
@@ -35,7 +39,7 @@ function hasKnownCarriages(leg: RailLegCrowding): boolean {
 /** Use overall crowding only when there is no usable per-carriage information. */
 export function crowdingSummary(journey: CrowdingJourney): string {
   const crowding = journey?.crowding;
-  if (!crowding?.available || !crowding.level || crowding.level === 'unknown') return '';
+  if (!crowdingCurrentlyVisible(crowding) || !crowding?.available || !crowding.level || crowding.level === 'unknown') return '';
 
   if (Array.isArray(crowding.legs) && crowding.legs.some(hasKnownCarriages)) return '';
 
@@ -46,9 +50,9 @@ export function crowdingSummary(journey: CrowdingJourney): string {
 /** Render only the first leg with usable carriage levels, preserving TfNSW order by position. */
 export function carriageCrowding(journey: CrowdingJourney): string {
   const legs = journey?.crowding?.legs;
-  if (!Array.isArray(legs)) return '';
+  if (!crowdingCurrentlyVisible(journey?.crowding) || !Array.isArray(legs)) return '';
 
-  const leg = legs.find(hasKnownCarriages);
+  const leg = legs.find(item=>item.vehicleMatched && item.updatedAt && hasKnownCarriages(item));
   if (!leg || !Array.isArray(leg.carriages)) return '';
 
   const cars = leg.carriages
