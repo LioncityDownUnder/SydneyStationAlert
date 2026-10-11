@@ -10,6 +10,7 @@ import { saveConfirmedTrip, loadConfirmedTrip, clearConfirmedTrip } from './acti
 import { sameService, firstDepartureTime } from './journey-service.js';
 import { findConnectionAtRisk, calculateDisplayedProgress } from './journey-monitoring.js';
 import { datedTrainTime, stopDisplayTime, displayLineName, transferDisplay } from './timetable-display.js';
+import { renderNotificationReliabilityNotice, renderRailTravelLinks } from './notice-markup.js';
 const root = document.getElementById('app');
 const state = { origin: null, destination: null, detected: false, manual: false, locating: false, location: null, journey: null, onboard: false, paused: false, busy: false, checking: false, recoveringConnection: false, noticeExpanded: false, suggestedConnection: null, suggestingConnection: false, boardingOptions: null, lastSuggestionCheck: 0, enriching: false, crowdingChecked: false, message: '', alert: '', searchResults: [], activeField: null, searchLoading: false, searchQuery: '', searchError: '', highlightedIndex: -1, lastChecked: null, offline: !navigator.onLine, noRoute: false, noRouteAlerts: null, noRouteAlertsLoading: false };
 let queryController = null;
@@ -99,8 +100,7 @@ const footer=`<footer class="footer">Designed for Sydney commuters by Y.T. Ng</f
 function message(text,warn=false){return text?`<p class="notice${warn?' warn':''}" role="status">${esc(text)}</p>`:'';}
 function notificationReliabilityNotice(){
  const permission=('Notification' in window)?Notification.permission:'unsupported';
- const status=permission==='granted'?'Notifications enabled while the app is active.':permission==='denied'?'Notifications blocked in browser settings.':permission==='default'?'Notifications not yet enabled.':'Notifications unavailable in this browser.';
- return '<details id="alert-reliability-notice" class="notice"'+(state.noticeExpanded?' open':'')+'><summary>Alert Reliability Notice</summary><p>'+esc(status)+' Location and timetable checks may stop when your phone is locked or the browser is suspended. Keep the app open for best results; do not rely on it as your only stop reminder.</p></details>';
+ return renderNotificationReliabilityNotice(permission,state.noticeExpanded);
 }
 function serviceUpdate(j){return renderServiceUpdate(j,message);}
 function serviceDetails(j){return renderServiceDetails(j);}
@@ -125,7 +125,7 @@ async function loadQaNoRouteAlerts(generation){
  }catch{if(generation===journeyGeneration)state.noRouteAlerts=null;}
  finally{if(generation===journeyGeneration){state.noRouteAlertsLoading=false;setup();}}
 }
-function qaRailPilotTravelLinks(){return qaRailPilot?'<p class="muted">Check <a href="https://transportnsw.info/alerts" target="_blank" rel="noopener noreferrer">TfNSW service alerts</a> or <a href="https://transportnsw.info/trip" target="_blank" rel="noopener noreferrer">TfNSW Trip Planner</a> for other transport arrangements.</p>':'';}
+function qaRailPilotTravelLinks(){return renderRailTravelLinks(qaRailPilot);}
 function stopQaRecoveryWatch(){if(qaRecoveryTimer!==null)window.clearInterval(qaRecoveryTimer);qaRecoveryTimer=null;qaRecoveredJourneyAvailable=false;}
 function startQaRecoveryWatch(){
  stopQaRecoveryWatch();
