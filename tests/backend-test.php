@@ -142,7 +142,7 @@ $liveRecord=['tripId'=>'trip-a','vehicleId'=>'vehicle-a','level'=>'busy','timest
  ['name'=>'A','position'=>1,'level'=>'busy']
 ]];
 $freshCrowding=journey_crowding_from_feeds($timedRoute,['train'=>['trip-a'=>$liveRecord]],1760000150);
-assertit($freshCrowding['available']===true&&$freshCrowding['updatedAt']==='2025-10-09T08:15:00+00:00','SSA-03 displays only fresh exact-trip crowding with source timestamp');
+assertit($freshCrowding['available']===true&&$freshCrowding['updatedAt']==='2025-10-09T08:55:00+00:00','SSA-03 displays only fresh exact-trip crowding with source timestamp');
 $staleCrowding=journey_crowding_from_feeds($timedRoute,['train'=>['trip-a'=>$liveRecord]],1760000500);
 assertit($staleCrowding['available']===false&&$staleCrowding['updatedAt']===null&&
  $staleCrowding['legs'][0]['vehicleMatched']===false&&$staleCrowding['legs'][0]['carriages']===[],
