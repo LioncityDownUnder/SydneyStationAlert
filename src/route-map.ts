@@ -20,8 +20,8 @@ export function renderRouteMap(j: RouteMapJourney, p: RouteMapProgress, location
   const coords=[...all,...(location?[location]:[])];
   const minLon=Math.min(...coords.map(s=>s.lon)),maxLon=Math.max(...coords.map(s=>s.lon)),minLat=Math.min(...coords.map(s=>s.lat)),maxLat=Math.max(...coords.map(s=>s.lat));
   const spanX=Math.max(.003,maxLon-minLon),spanY=Math.max(.003,maxLat-minLat);
-  const x=lon=>35+(lon-minLon)/spanX*290;
-  const y=lat=>250-(lat-minLat)/spanY*205;
+  const x=(lon: number)=>35+(lon-minLon)/spanX*290;
+  const y=(lat: number)=>250-(lat-minLat)/spanY*205;
   const legs=j.legs.map(l=>{const path=l.path.length?l.path:l.stops.map(s=>({lat:s.lat,lon:s.lon}));
   return `<polyline points="${path.map(q=>`${x(q.lon).toFixed(1)},${y(q.lat).toFixed(1)}`).join(' ')}" fill="none" stroke="${l.mode==='metro'?'#dc7b3d':'#566c61'}" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>`;}).join('');
   const markers=j.stops.map((s,i)=>`${i===p.index?`<circle class="map-active-pulse" cx="${x(s.lon)}" cy="${y(s.lat)}" r="11" fill="none" stroke="#ef7a2d" stroke-width="2"/>`:''}<circle cx="${x(s.lon)}" cy="${y(s.lat)}" r="${i===p.index?7:i===j.stops.length-1?6:3.8}" fill="${i===p.index?'#ef7a2d':i===j.stops.length-1?'#202421':'#fff'}" stroke="${i===p.index?'#ef7a2d':'#66766d'}" stroke-width="2"/>`).join('');
