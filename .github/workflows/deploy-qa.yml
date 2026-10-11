@@ -25,6 +25,7 @@ jobs:
           php -l api/lib/journey-performance.php
           php -l api/lib/upstream-transport.php
           php -l api/lib/service-alerts.php
+          php -l api/lib/gtfs-crowding.php
           php -l api/gtfs-update.php
           php -l api/gtfs-index.php
           php -l api/lib/qa_route_rejections.php
