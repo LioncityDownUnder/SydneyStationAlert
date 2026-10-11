@@ -75,7 +75,6 @@ export function validOnwardConnection(
   let minimum = required;
   for (const leg of route.legs) {
     if ((leg.mode !== 'train' && leg.mode !== 'metro') || !leg.origin || !leg.destination) return false;
-    if (!sameId(leg.origin, route.legs[0]?.origin) && leg === route.legs[0]) return false;
     const depart = firstDeparture(leg), arrival = lastArrival(leg);
     if (!Number.isFinite(depart) || !Number.isFinite(arrival) ||
         depart < minimum || arrival <= depart ||
