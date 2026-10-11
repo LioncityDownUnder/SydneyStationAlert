@@ -342,7 +342,7 @@ test('QA crowding fetch does not repeat the four-hour journey search',()=>{
  assert.match(client,/tripIds: \(leg\.tripIds \|\| \[\]\)\.slice\(0,8\)/);
  assert.match(server,/if\(\$action==='crowding'\)/);
  assert.match(server,/count\(\$legs\)>6/);
- assert.match(server,/journey_crowding_status\(\['legs'=>\$normalized\]\)/);
+ assert.match(server,/journey_crowding_status\(\['legs'=>\$normalized\],\$qaCrowdingDiagnostic\)/);
  assert.match(ui,/void refreshCrowding\(generation\)/);
  assert.match(ui,/void refreshCrowding\(journeyGeneration\)/);
  assert.match(ui,/selectedCrowdingIdentity\(state\.journey\)!==identity/);
