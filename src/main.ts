@@ -8,6 +8,7 @@ import { renderServiceUpdate, renderServiceDetails } from './service-notice-mark
 import { crowdingSummary, carriageCrowding } from './crowding-markup.js';
 import { saveConfirmedTrip, loadConfirmedTrip, clearConfirmedTrip } from './active-trip.js';
 import { sameService, firstDepartureTime } from './journey-service.js';
+import { findConnectionAtRisk, calculateDisplayedProgress } from './journey-monitoring.js';
 const root = document.getElementById('app');
 const state = { origin: null, destination: null, detected: false, manual: false, locating: false, location: null, journey: null, onboard: false, paused: false, busy: false, checking: false, recoveringConnection: false, noticeExpanded: false, suggestedConnection: null, suggestingConnection: false, boardingOptions: null, lastSuggestionCheck: 0, enriching: false, crowdingChecked: false, message: '', alert: '', searchResults: [], activeField: null, searchLoading: false, searchQuery: '', searchError: '', highlightedIndex: -1, lastChecked: null, offline: !navigator.onLine, noRoute: false, noRouteAlerts: null, noRouteAlertsLoading: false };
 let queryController = null;
@@ -233,19 +234,7 @@ async function refresh(){
  }
 }
 // A stale or distant GPS reading must never trigger a missed-connection warning.
-function connectionAtRisk(j){
- if(!state.onboard||state.paused||!j||!Array.isArray(j.legs))return null;
- for(let i=1;i<j.legs.length;i++){
-  const previous=j.legs[i-1],next=j.legs[i];
-  const arrival=Date.parse(previous.destination?.arrival||previous.arrival||'');
-  const departure=Date.parse(next.origin?.departure||next.departure||'');
-  if(!Number.isFinite(arrival)||!Number.isFinite(departure))continue;
-  // Three minutes is a conservative planning buffer, not a platform guarantee.
-  if(arrival+3*60000>departure&&Date.now()<departure+45*60000)
-   return {index:i,name:next.origin?.name||'the interchange',arrival,departure};
- }
- return null;
-}
+function connectionAtRisk(j){return findConnectionAtRisk(j,state.onboard,state.paused);}
 async function suggestOnwardConnection(){
  const risk=connectionAtRisk(state.journey);
  if(!risk||state.suggestingConnection||state.checking||!navigator.onLine||Date.now()-state.lastSuggestionCheck<120000)return;
@@ -269,16 +258,7 @@ function updateDelayConnectionWarning(){
  state.alert='Connection at risk at '+risk.name+': the first train arrival leaves less than 3 minutes to change. Check the next onward service using “I missed my connection”.';
 }
 function checkAlerts(){updateDelayConnectionWarning();if(!state.journey||state.paused||!state.location)return;const p=progress(state.journey,state.location);if(!p.nearest)return;for(const key of alertKeys(state.journey,p.index)){if(fired.has(key))continue;fired.add(key);const text=key==='destination-two'?`2 stops to ${state.journey.destination.name}`:key==='destination-one'?`1 stop to ${state.journey.destination.name}`:`Change trains at ${state.journey.transfers.find(t=>'transfer-'+t.id===key)?.name??'the next interchange'}`;state.alert=text;if(Notification.permission==='granted')try{new Notification('Sydney Station Alert',{body:text,tag:state.journey.id+'-'+key});}catch{}}}
-function displayedProgress(j){
- const gps=progress(j,state.location);
- if(!state.onboard)return progress(j,null);
- if(gps.nearest)return gps;
- const now=Date.now();let index=0;
- j.stops.forEach((s,i)=>{if(i>0&&i<j.stops.length-1&&!s.arrival&&!s.departure)return;const time=s.arrival||s.departure;const ts=time?Date.parse(time):NaN;if(Number.isFinite(ts)&&ts<=now)index=i;});
- const count=(from,to)=>j.stops.slice(from+1,to+1).filter((s,i)=>from+i+1===j.stops.length-1||s.arrival||s.departure).length;
- const next=(j.transfers||[]).map(t=>j.stops.findIndex(s=>s.id===t.id||s.name===t.name)).find(i=>i>index);
- return {index,remaining:count(index,j.stops.length-1),toChange:next===undefined?null:count(index,next),nearest:null};
-}
+function displayedProgress(j){return calculateDisplayedProgress(j,state.location,state.onboard);}
 function mapMarkup(j,p){const all=j.legs.flatMap(l=>l.path.length?l.path:l.stops.map(s=>({lat:s.lat,lon:s.lon})));if(!all.length)return '<p class="muted">Map geometry is unavailable. Follow the station list below.</p>';const coords=[...all,...(state.location?[state.location]:[])];const minLon=Math.min(...coords.map(s=>s.lon)),maxLon=Math.max(...coords.map(s=>s.lon)),minLat=Math.min(...coords.map(s=>s.lat)),maxLat=Math.max(...coords.map(s=>s.lat));const spanX=Math.max(.003,maxLon-minLon),spanY=Math.max(.003,maxLat-minLat);const x=lon=>35+(lon-minLon)/spanX*290;const y=lat=>250-(lat-minLat)/spanY*205;const legs=j.legs.map(l=>{const path=l.path.length?l.path:l.stops.map(s=>({lat:s.lat,lon:s.lon}));return `<polyline points="${path.map(q=>`${x(q.lon).toFixed(1)},${y(q.lat).toFixed(1)}`).join(' ')}" fill="none" stroke="${l.mode==='metro'?'#dc7b3d':'#566c61'}" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>`;}).join('');const markers=j.stops.map((s,i)=>`${i===p.index?`<circle class="map-active-pulse" cx="${x(s.lon)}" cy="${y(s.lat)}" r="11" fill="none" stroke="#ef7a2d" stroke-width="2"/>`:''}<circle cx="${x(s.lon)}" cy="${y(s.lat)}" r="${i===p.index?7:i===j.stops.length-1?6:3.8}" fill="${i===p.index?'#ef7a2d':i===j.stops.length-1?'#202421':'#fff'}" stroke="${i===p.index?'#ef7a2d':'#66766d'}" stroke-width="2"/>`).join('');const position=state.location?`<circle cx="${x(state.location.lon)}" cy="${y(state.location.lat)}" r="10" fill="#ef7a2d" opacity=".18"/><circle cx="${x(state.location.lon)}" cy="${y(state.location.lat)}" r="4" fill="#ef7a2d"/>`:'';return `<svg class="map" role="img" aria-label="Rail route map with station positions and your current location when available" viewBox="0 0 360 280" preserveAspectRatio="xMidYMid meet"><rect x="0" y="0" width="360" height="280" fill="#f2f3ef"/>${legs}${markers}${position}<text x="14" y="270" class="maplabel">${esc(j.legs.length>1?'Rail segments shown separately ·':'Rail route ·')} ${esc(j.destination.name)}</text></svg>`;}
 function sydneyDayLabel(value,now=new Date()){const time=new Date(value);if(!Number.isFinite(time.getTime()))return '';const day=new Intl.DateTimeFormat('en-CA',{timeZone:'Australia/Sydney',year:'numeric',month:'2-digit',day:'2-digit'});const current=day.format(now),target=day.format(time);if(target===current)return '';const tomorrow=new Date(now.getTime()+86400000);if(target===day.format(tomorrow))return 'Tomorrow, ';return new Intl.DateTimeFormat('en-AU',{timeZone:'Australia/Sydney',day:'numeric',month:'short'}).format(time)+', ';}
 function datedTrainTime(value){return value?sydneyDayLabel(value)+fmtTime(value):'';}
