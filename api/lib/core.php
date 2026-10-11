@@ -9,6 +9,7 @@ require_once __DIR__.'/rail-normalization.php';
 require_once __DIR__.'/boarded-timetable.php';
 
 require_once __DIR__.'/journey-routing.php';
+require_once __DIR__.'/onward-recovery.php';
 
 require_once __DIR__.'/upstream-transport.php';
 
