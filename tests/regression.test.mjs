@@ -419,3 +419,12 @@ test('QA crowding identifies precise invalid ID category without revealing value
  assert.match(core,/function crowding_trip_id_valid\(mixed \$id\):bool/);
  assert.match(ui,/id_control:'A selected trip identifier contains control characters'/);
 });
+
+test('QA crowding normalizes numeric TfNSW IDs without changing train selection',()=>{
+ const api=fs.readFileSync('api/index.php','utf8');
+ const core=fs.readFileSync('api/lib/core.php','utf8');
+ assert.match(api,/\$valid\[\]=crowding_trip_id_normalize\(\$id\)/);
+ assert.match(core,/if\(is_int\(\$id\)\)\$id=\(string\)\$id/);
+ assert.match(core,/return is_int\(\$id\)\?\(string\)\$id:\$id/);
+ assert.match(core,/function crowding_trip_id_invalid_reason\(mixed \$id\)/);
+});

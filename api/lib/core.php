@@ -807,11 +807,18 @@ function crowding_match_diagnostics(array $route,array $feeds):array{
 // Transport's opaque identifiers can contain spaces, pipes or other printable
 // separators; validate size and control bytes, not an invented ID alphabet.
 function crowding_trip_id_invalid_reason(mixed $id):?string{
+ // JSON may encode TfNSW numeric service IDs as integers. Normalize these
+ // losslessly; reject floats, booleans and structured values.
+ if(is_int($id))$id=(string)$id;
  if(!is_string($id))return 'CROWDING_ID_NOT_STRING';
  if(strlen($id)>150)return 'CROWDING_ID_TOO_LONG';
  if(trim($id)==='')return 'CROWDING_ID_BLANK';
  if(preg_match('/[\\x00-\\x1F\\x7F]/',$id))return 'CROWDING_ID_CONTROL';
  return null;
+}
+function crowding_trip_id_normalize(mixed $id):?string{
+ if(crowding_trip_id_invalid_reason($id)!==null)return null;
+ return is_int($id)?(string)$id:$id;
 }
 function crowding_trip_id_valid(mixed $id):bool{
  return crowding_trip_id_invalid_reason($id)===null;
