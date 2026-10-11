@@ -30,25 +30,58 @@ jobs:
               head -n1
           }
 
+          QA_API="https://trains.nytnetwork.work/qatest/api/index.php"
+          CORE_SUCCESS=0
+          CORE_UNAVAILABLE=0
+
           check_core() {
             local from_name="$1" to_name="$2" max_seconds="$3"
-            local from_id to_id tmp seconds
+            local from_id to_id tmp result status seconds qa_tmp qa_status
             from_id="$(station_id "$from_name")"
             to_id="$(station_id "$to_name")"
             test -n "$from_id"
             test -n "$to_id"
             tmp="$(mktemp)"
-            seconds="$(curl --fail --silent --show-error --get "$API"               --data-urlencode "action=journey"               --data-urlencode "from=$from_id"               --data-urlencode "to=$to_id"               --data-urlencode "fromName=$from_name"               --data-urlencode "toName=$to_name"               --data-urlencode "coreOnly=1"               -o "$tmp" -w '%{time_total}')"
+            result="$(curl --silent --show-error --max-time 40 --get "$API" \
+              --data-urlencode "action=journey" \
+              --data-urlencode "from=$from_id" --data-urlencode "to=$to_id" \
+              --data-urlencode "fromName=$from_name" --data-urlencode "toName=$to_name" \
+              --data-urlencode "coreOnly=1" \
+              -o "$tmp" -w '%{http_code} %{time_total}')"
+            status="$(printf '%s\n' "$result" | awk '{print $1}')"
+            seconds="$(printf '%s\n' "$result" | awk '{print $2}')"
+            echo "$from_name to $to_name: HTTP $status, $seconds seconds"
 
-            echo "$from_name → $to_name: ${seconds}s"
-            jq -e               --arg f "$from_name" --arg t "$to_name"               '.data.origin.name==$f and .data.destination.name==$t
-               and (.data.legs|length)>=1
-               and all(.data.legs[]; (.mode=="train" or .mode=="metro"))
-               and (.data.stops|length)>=2
-               and .data.serviceStatus.level=="unavailable"
-               and .data.crowding.available==false' "$tmp" >/dev/null
-
-            awk -v actual="$seconds" -v max="$max_seconds" 'BEGIN { exit !(actual <= max) }'
+            if [ "$status" = 200 ]; then
+              jq -e --arg f "$from_name" --arg t "$to_name" \
+                '.data.origin.name==$f and .data.destination.name==$t
+                 and (.data.legs|length)>=1
+                 and all(.data.legs[]; (.mode=="train" or .mode=="metro"))
+                 and (.data.stops|length)>=2
+                 and .data.serviceStatus.level=="unavailable"
+                 and .data.crowding.available==false' "$tmp" >/dev/null
+              awk -v actual="$seconds" -v max="$max_seconds" 'BEGIN { exit !(actual <= max) }'
+              CORE_SUCCESS=$((CORE_SUCCESS+1))
+            elif [ "$status" = 404 ] && jq -e '.error.code=="NO_ROUTE"' "$tmp" >/dev/null; then
+              # TfNSW weekend trackwork may replace all rail services with buses.
+              # Recheck the same route in QA; never accept unexpected statuses
+              # or production-only NO_ROUTE as successful smoke tests.
+              qa_tmp="$(mktemp)"
+              qa_status="$(curl --silent --show-error --max-time 40 --get "$QA_API" \
+                --data-urlencode "action=journey" \
+                --data-urlencode "from=$from_id" --data-urlencode "to=$to_id" \
+                --data-urlencode "fromName=$from_name" --data-urlencode "toName=$to_name" \
+                --data-urlencode "coreOnly=1" \
+                -o "$qa_tmp" -w '%{http_code}')"
+              test "$qa_status" = 404
+              jq -e '.error.code=="NO_ROUTE"' "$qa_tmp" >/dev/null
+              echo "::warning::No rail-only journey for $from_name to $to_name in both production and QA (possible trackwork)."
+              CORE_UNAVAILABLE=$((CORE_UNAVAILABLE+1))
+              rm -f "$qa_tmp"
+            else
+              echo "::error::Unexpected journey API response for $from_name to $to_name: HTTP $status"
+              exit 1
+            fi
             rm -f "$tmp"
           }
 
@@ -57,6 +90,9 @@ jobs:
           check_core "Chatswood" "Gadigal" "5.0"
           check_core "Hurstville" "Padstow" "5.0"
           check_core "Hurstville" "Casula" "5.0"
+
+          test "$CORE_SUCCESS" -ge 1
+          echo "Core routes validated: $CORE_SUCCESS; unavailable rail routes verified in QA: $CORE_UNAVAILABLE"
 
           echo "== Full live enrichment shape =="
           FROM="$(station_id Waterloo)"
