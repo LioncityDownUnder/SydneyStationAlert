@@ -199,9 +199,13 @@ test('Step 5AI QA pilot rejects departed first-leg services and labels overnight
  const main=fs.readFileSync('src/main.ts','utf8');
  assert.match(backend,/\$qaRailPilot\?qa_rail_route_in_window\(\$body,\$originSeed,\$destinationSeed,\$now->getTimestamp\(\),\$qaRailLatestDeparture\)/);
  assert.match(backend,/if\(\$qaRailPilot\)\$route=\$qaRouteWithinWindow\(\$route\)/);
- assert.match(main,/function sydneyDayLabel\(value,now=new Date\(\)\)/);
- assert.match(main,/timeZone:'Australia\/Sydney'/);
- assert.match(main,/return 'Tomorrow, '/);
+ const timetable=fs.readFileSync('src/timetable-display.ts','utf8');
+ // The date and transfer formatting is now tested with observable output in
+ // timetable-display.test.mjs; retain a guard that main uses that module.
+ assert.match(main,/from '\.\/timetable-display\.js'/);
+ assert.match(timetable,/export function sydneyDayLabel\(/);
+ assert.match(timetable,/timeZone: 'Australia\/Sydney'/);
+ assert.match(timetable,/return 'Tomorrow, '/);
  assert.match(main,/I boarded the \$\{esc\(datedTrainTime\(/);
 });
 
