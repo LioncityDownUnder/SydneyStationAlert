@@ -171,7 +171,9 @@ test('Step 5AB QA-only search budget is explicit and does not affect production 
  assert.match(api,/if\(\$qaBoundedSearch&&microtime\(true\)>=\$qaSearchDeadline\)/);
  assert.match(api,/No train-only journey was verified within the QA search time limit/);
  assert.match(api,/journey_search_qa_diagnostics_header\(\$qaSearchDiagnostics\)/);
- assert.match(core,/time_budget_exceeded/);
+ const performance=fs.readFileSync('api/lib/journey-performance.php','utf8');
+ assert.match(core,/journey-performance\.php/);
+ assert.match(performance,/time_budget_exceeded/);
 });
 
 test('Step 5AC makes incomplete QA searches distinct from confirmed no-route responses',()=>{
