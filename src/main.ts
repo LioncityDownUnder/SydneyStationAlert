@@ -2,6 +2,16 @@
 import { searchStations, preloadStations, nearbyStations, getJourney, getBoardingOptions, getCrowding, ApiRequestError } from './api.js';
 import { GEO, REFRESH_MS, SEARCH_DEBOUNCE_MS, STATION_CACHE_MS } from './constants.js';
 import { nearestStation, progress, alertKeys, fmtTime, escapeHTML as esc } from './logic.js';
+import { loadStationIndex, saveStationIndex, findStationMatches, mergeStationEntries } from './station-index.js';
+import { optionMarkup as stationOptionMarkup, stationField as stationFieldMarkup } from './station-markup.js';
+import { renderServiceUpdate, renderServiceDetails } from './service-notice-markup.js';
+import { crowdingSummary, carriageCrowding } from './crowding-markup.js';
+import { saveConfirmedTrip, loadConfirmedTrip, clearConfirmedTrip } from './active-trip.js';
+import { sameService, firstDepartureTime } from './journey-service.js';
+import { findConnectionAtRisk, calculateDisplayedProgress } from './journey-monitoring.js';
+import { datedTrainTime, stopDisplayTime, displayLineName, transferDisplay } from './timetable-display.js';
+import { renderNotificationReliabilityNotice, renderRailTravelLinks } from './notice-markup.js';
+import { renderRouteMap } from './route-map.js';
 const root = document.getElementById('app');
 const state = { origin: null, destination: null, detected: false, manual: false, locating: false, location: null, journey: null, onboard: false, paused: false, busy: false, checking: false, recoveringConnection: false, noticeExpanded: false, suggestedConnection: null, suggestingConnection: false, boardingOptions: null, lastSuggestionCheck: 0, enriching: false, crowdingChecked: false, message: '', alert: '', searchResults: [], activeField: null, searchLoading: false, searchQuery: '', searchError: '', highlightedIndex: -1, lastChecked: null, offline: !navigator.onLine, noRoute: false, noRouteAlerts: null, noRouteAlertsLoading: false };
 let queryController = null;
@@ -19,12 +29,9 @@ const isQaEnvironment = /^\/qatest(?:\/|$)/.test(window.location.pathname);
 const qaRailPilot = true; // Released rail-only search, service identity and alternative boarding on both sites.
 const STATION_CACHE_KEY = isQaEnvironment ? 'sydstnalert:qa:stations:v1' : 'sydney-station-alert:stations:v1';
 const ACTIVE_TRIP_KEY = isQaEnvironment ? 'sydstnalert:qa:active-trip:v1' : 'sydney-station-alert:active-trip:v1';
-function activeTripExpiry(j){const arrival=j?.legs?.[j.legs.length-1]?.arrival;const ts=arrival?+new Date(arrival):NaN;return Number.isFinite(ts)?ts+4*60*60*1000:Date.now()+8*60*60*1000;}
-function saveActiveTrip(){if(!state.onboard||!state.journey)return;try{localStorage.setItem(ACTIVE_TRIP_KEY,JSON.stringify({version:1,savedAt:Date.now(),expiresAt:activeTripExpiry(state.journey),journey:state.journey}));}catch{}}
-function clearActiveTrip(){try{localStorage.removeItem(ACTIVE_TRIP_KEY);}catch{}}
-function loadActiveTrip(){try{const raw=localStorage.getItem(ACTIVE_TRIP_KEY);if(!raw)return null;const p=JSON.parse(raw);if(!p||p.version!==1||!p.journey||!Array.isArray(p.journey.legs)||!Array.isArray(p.journey.stops)||Number(p.expiresAt)<=Date.now()){clearActiveTrip();return null;}return p.journey;}catch{clearActiveTrip();return null;}}
-function sameService(a,b){if(!a||!b||!Array.isArray(a.legs)||!Array.isArray(b.legs)||a.legs.length!==b.legs.length)return false;return a.legs.every((leg,i)=>{const other=b.legs[i];const ids=(leg.tripIds||[]).map(x=>String(x).toLowerCase());const otherIds=(other?.tripIds||[]).map(x=>String(x).toLowerCase());if(ids.length&&otherIds.length)return ids.some(id=>otherIds.includes(id));return leg.line===other?.line&&leg.origin?.id===other?.origin?.id&&leg.destination?.id===other?.destination?.id;});}
-function firstDepartureTime(j){return Date.parse(j?.legs?.[0]?.departure||j?.legs?.[0]?.origin?.departure||'');}
+function saveActiveTrip(){if(!state.onboard||!state.journey)return;saveConfirmedTrip(localStorage,ACTIVE_TRIP_KEY,state.journey);}
+function clearActiveTrip(){clearConfirmedTrip(localStorage,ACTIVE_TRIP_KEY);}
+function loadActiveTrip(){return loadConfirmedTrip(localStorage,ACTIVE_TRIP_KEY);}
 function qaSameSelectedTrain(a,b){
  if(!qaRailPilot)return sameService(a,b);
  if(!a||!b||!Array.isArray(a.legs)||!Array.isArray(b.legs)||a.legs.length!==b.legs.length)return false;
@@ -74,32 +81,30 @@ function adoptJourneyUpdate(updated){
  state.journey=updated;saveActiveTrip();updateDelayConnectionWarning();void suggestOnwardConnection();return true;
 }
 
-function loadStationCache() { try {
-    const raw = localStorage.getItem(STATION_CACHE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    if (!parsed || !Array.isArray(parsed.stations) || Date.now() - Number(parsed.savedAt) > STATION_CACHE_MS) {
-        localStorage.removeItem(STATION_CACHE_KEY); return [];
-    }
-    return parsed.stations;
-} catch { return []; } }
-function saveStationCache(stations) { try { localStorage.setItem(STATION_CACHE_KEY, JSON.stringify({ savedAt: Date.now(), stations })); } catch {} }
-let stationIndex = loadStationCache();
-function localStationMatches(q) { const n = q.trim().toLocaleLowerCase(); if (n.length < 2) return []; return stationIndex.filter(s => s.name.toLocaleLowerCase().includes(n)).sort((a,b)=>{ const an=a.name.toLocaleLowerCase(),bn=b.name.toLocaleLowerCase(); const ap=an.startsWith(n)?0:1,bp=bn.startsWith(n)?0:1; return ap-bp||a.name.localeCompare(b.name); }).slice(0,12); }
-async function warmStationIndex() { if (stationIndex.length) return; try { const stations=await preloadStations(); if(stations.length){stationIndex=stations;saveStationCache(stations);} } catch {} }
-function mergeStationIndex(stations){ if(!stations.length)return; const map=new Map(stationIndex.map(s=>[s.id,s])); for(const s of stations)map.set(s.id,s); stationIndex=[...map.values()];saveStationCache(stationIndex); }
+let stationIndex=loadStationIndex(localStorage,STATION_CACHE_KEY,STATION_CACHE_MS);
+function saveStationCache(stations){saveStationIndex(localStorage,STATION_CACHE_KEY,stations);}
+function localStationMatches(query){return findStationMatches(stationIndex,query);}
+async function warmStationIndex(){
+ if(stationIndex.length)return;
+ try{
+  const stations=await preloadStations();
+  if(stations.length){stationIndex=stations;saveStationCache(stations);}
+ }catch{}
+}
+function mergeStationIndex(stations){
+ if(!stations.length)return;
+ stationIndex=mergeStationEntries(stationIndex,stations);
+ saveStationCache(stationIndex);
+}
 const brand=`<header class="top"><div class="brand"><div class="mark" aria-hidden="true">↗</div>Sydney Station Alert</div><div class="topmeta">SYDNEY TRAINS <span style="color:#d46d2c">/</span> METRO</div></header>`;
 const footer=`<footer class="footer">Designed for Sydney commuters by Y.T. Ng</footer>`;
 function message(text,warn=false){return text?`<p class="notice${warn?' warn':''}" role="status">${esc(text)}</p>`:'';}
 function notificationReliabilityNotice(){
  const permission=('Notification' in window)?Notification.permission:'unsupported';
- const status=permission==='granted'?'Notifications enabled while the app is active.':permission==='denied'?'Notifications blocked in browser settings.':permission==='default'?'Notifications not yet enabled.':'Notifications unavailable in this browser.';
- return '<details id="alert-reliability-notice" class="notice"'+(state.noticeExpanded?' open':'')+'><summary>Alert Reliability Notice</summary><p>'+esc(status)+' Location and timetable checks may stop when your phone is locked or the browser is suspended. Keep the app open for best results; do not rely on it as your only stop reminder.</p></details>';
+ return renderNotificationReliabilityNotice(permission,state.noticeExpanded);
 }
-function serviceUpdate(j){const s=j?.serviceStatus;if(!s||s.level==='ok'||s.level==='unavailable'||!Array.isArray(s.alerts)||!s.alerts.length)return '';if(s.revalidationAttempted&&s.replacementFound){const via=Array.isArray(j.transfers)&&j.transfers.length?` via ${j.transfers.map(t=>t.name).filter(Boolean).join(' and ')}`:'';return '<div class="alarm" role="alert">⚠ '+esc(`Original service affected · showing the next valid route${via}.`)+'</div>';}const first=s.alerts[0];const title=first?.title||'TfNSW has issued a service update for this journey.';const text=`${s.level==='major'?'Service disruption':'Service update'}: ${title}`;return s.level==='major'||s.level==='warning'?'<div class="alarm" role="alert">⚠ '+esc(text)+'</div>':message(text);}
-function serviceDetails(j){const s=j?.serviceStatus;if(!s||!Array.isArray(s.alerts)||!s.alerts.length)return '';const a=s.alerts[0];const note=a.materialChange?'Selected service may be affected.':'Broader line or station notice.';const body=(a.description||'').trim();return `<details class="notice"><summary>View disruption details</summary><div>${esc(note)}${body?`<p>${esc(body)}</p>`:''}</div></details>`;}
-function crowdingSummary(j){const c=j?.crowding;if(!c?.available||!c.level||c.level==='unknown')return '';const hasCarriages=Array.isArray(c.legs)&&c.legs.some(l=>Array.isArray(l.carriages)&&l.carriages.some(car=>car.level&&car.level!=='unknown'));if(hasCarriages)return '';const labels={quiet:'Quiet',moderate:'Moderate',busy:'Busy',very_busy:'Very busy'};const label=labels[c.level];return label?`<div class="stateline">Crowding: ${esc(label)}</div>`:'';}
-function carriageCrowding(j){const legs=j?.crowding?.legs;if(!Array.isArray(legs))return '';const labels={quiet:'Quiet',moderate:'Moderate',busy:'Busy',very_busy:'Very busy'};const leg=legs.find(l=>Array.isArray(l.carriages)&&l.carriages.some(c=>c.level&&c.level!=='unknown'));if(!leg)return '';const cars=leg.carriages.filter(c=>c.level&&c.level!=='unknown').sort((a,b)=>(Number(a.position)>0?Number(a.position):999)-(Number(b.position)>0?Number(b.position):999));if(!cars.length)return '';const trainType=leg.mode==='metro'?'Metro train':'train';return `<div class="stateline"><strong>Carriage crowding · ${esc(String(cars.length))}-car ${esc(trainType)}</strong></div><div class="crowding-bars" style="--car-count:${esc(String(cars.length))}" aria-label="Carriage crowding">${cars.map((car,i)=>{const label=labels[car.level]||'Unknown';const carNo=String(i+1);const code=car.name?` · TfNSW code ${car.name}`:'';return `<span class="crowding-bar crowding-bar-${esc(car.level)}" title="Car ${esc(carNo)}: ${esc(label)}${esc(code)}" aria-label="Car ${esc(carNo)}, ${esc(label)}${esc(code)}"></span>`;}).join('')}</div><div class="crowding-legend" aria-label="Crowding colour legend"><span><i class="crowding-dot crowding-dot-quiet"></i>Quiet</span><span><i class="crowding-dot crowding-dot-moderate"></i>Moderate</span><span><i class="crowding-dot crowding-dot-busy"></i>Busy</span></div>`;}
+function serviceUpdate(j){return renderServiceUpdate(j,message);}
+function serviceDetails(j){return renderServiceDetails(j);}
 function qaNoRouteAlertDetails(){
  if(!isQaEnvironment||state.origin?.id!=='222010')return '';
  if(state.noRouteAlertsLoading)return '<p class="notice" role="status">Checking TfNSW disruption information…</p>';
@@ -121,7 +126,7 @@ async function loadQaNoRouteAlerts(generation){
  }catch{if(generation===journeyGeneration)state.noRouteAlerts=null;}
  finally{if(generation===journeyGeneration){state.noRouteAlertsLoading=false;setup();}}
 }
-function qaRailPilotTravelLinks(){return qaRailPilot?'<p class="muted">Check <a href="https://transportnsw.info/alerts" target="_blank" rel="noopener noreferrer">TfNSW service alerts</a> or <a href="https://transportnsw.info/trip" target="_blank" rel="noopener noreferrer">TfNSW Trip Planner</a> for other transport arrangements.</p>':'';}
+function qaRailPilotTravelLinks(){return renderRailTravelLinks(qaRailPilot);}
 function stopQaRecoveryWatch(){if(qaRecoveryTimer!==null)window.clearInterval(qaRecoveryTimer);qaRecoveryTimer=null;qaRecoveredJourneyAvailable=false;}
 function startQaRecoveryWatch(){
  stopQaRecoveryWatch();
@@ -142,9 +147,8 @@ function startQaRecoveryWatch(){
  },180000);
 }
 function routeUnavailableMessage(text){const limited=state.noRouteLimited;const compact=qaRailPilot&&state.noRoute&&!limited;return text?`<section class="no-service" role="alert" aria-live="assertive"><div class="eyebrow">${limited?'SEARCH TIME LIMIT REACHED':'JOURNEY NOT FOUND'}</div><strong>${compact?'No train-only journey verified within the next 4 hours.':esc(text)}</strong>${compact?'':`<p>${limited?'We could not finish checking all possible trains. This does not confirm service cancellation. Check TfNSW Trip Planner for current options, or retry.':'We could not verify a train-only journey. This does not mean all trains are cancelled. Try searching again or choose a different destination.'}</p>`}${qaRailPilotTravelLinks()}${qaRecoveredJourneyAvailable&&compact?'<div class="notice" role="status"><strong>A train-only journey may now be available.</strong> <button type="button" id="qa-recheck-available" class="secondary">Search again to confirm</button></div>':''}${isQaEnvironment?qaNoRouteAlertDetails():''}${isQaEnvironment?'<button type="button" id="retry-no-route" class="secondary">Retry journey search</button>':''}</section>`:'';}
-function highlightName(name,query){const i=name.toLocaleLowerCase().indexOf(query.toLocaleLowerCase());if(!query||i<0)return esc(name);return `${esc(name.slice(0,i))}<mark>${esc(name.slice(i,i+query.length))}</mark>${esc(name.slice(i+query.length))}`;}
-function optionMarkup(s,i){return `<button id="station-option-${i}" role="option" aria-selected="${state.highlightedIndex===i}" type="button" data-pick="${i}"><span>${highlightName(s.name,state.searchQuery)}</span><small>${s.mode==='metro'?'Sydney Metro':'Sydney Trains'}</small></button>`;}
-function stationField(field,label,placeholder){const chosen=state[field];if(chosen)return `<div class="field selected-field"><span class="fieldlabel">${esc(label)}</span><div class="selected-station"><div class="selected-copy"><strong>${esc(chosen.name)}</strong><span>${chosen.mode==='metro'?'Sydney Metro':'Sydney Trains'}</span></div><button type="button" class="change-station" id="edit-${field}" aria-label="Change ${esc(label.toLowerCase())}">Change</button></div></div>`;const open=state.activeField===field;const activeDesc=open&&state.highlightedIndex>=0?` aria-activedescendant="station-option-${state.highlightedIndex}"`:'';return `<div class="field"><label for="${field}">${label}</label><div class="input-shell"><input id="${field}" type="search" role="combobox" aria-autocomplete="list" aria-haspopup="listbox" aria-expanded="${open}" aria-controls="options-${field}"${activeDesc} autocomplete="off" autocapitalize="words" spellcheck="false" placeholder="${placeholder}"/></div><div id="options-${field}" class="searchlist" role="listbox" aria-label="${esc(label)} suggestions" ${open?'':'hidden'}></div></div>`;}
+function optionMarkup(station,index){return stationOptionMarkup(station,index,state.searchQuery,state.highlightedIndex);}
+function stationField(field,label,placeholder){return stationFieldMarkup(field,label,placeholder,state[field],state.activeField,state.highlightedIndex);}
 function setup(){const originField=stationField('origin','Boarding station','Start typing a station');const locateAction=!state.locating&&!state.detected?'<button class="detect-action" id="locate" type="button"><span class="detect-icon" aria-hidden="true">◎</span><span>Use my current station</span></button>':'';const detectedNote=state.detected&&state.origin?'<span class="detected-inline"><span aria-hidden="true">●</span> Detected near your location</span>':'';root.innerHTML=`<main class="shell">${brand}<section class="hero"><div class="hero-copy"><div class="eyebrow">YOUR JOURNEY, IN FOCUS</div><h1>Your stop.<br/>Right on time.</h1><p class="lead">Choose where you're going. We'll keep track of the stations ahead and let you know when it's time to get ready.</p></div><div class="panel setup-panel"><h2 class="sectiontitle">SET UP YOUR JOURNEY</h2><div class="boarding-group">${originField}<div class="origin-actions">${detectedNote}${state.locating?message('Finding your nearest station…'):locateAction}</div></div>${stationField('destination','Destination station','Start typing a station')}<button id="set" class="primary" ${!state.origin||!state.destination||state.origin.id===state.destination.id||state.busy?'disabled':''} ${state.busy?'aria-busy="true"':''}>${state.busy?'<span class="journey-button-loading"><span class="journey-spinner" aria-hidden="true"></span>Finding your train…</span>':'Set my journey'}</button>${state.busy?'<div class="journey-search-status" role="status" aria-live="polite"><span class="journey-search-pulse" aria-hidden="true"><span></span><span></span><span></span></span><span>Checking live services and connections. Please wait…</span></div>':''}${state.noRoute?routeUnavailableMessage(state.message):message(state.message,!!state.message)}</div></section>${footer}</main>${state.offline?offline():''}`;wireSetup();}
 function resetSearch(){searchGeneration++;clearTimeout(debounce);queryController?.abort();queryController=null;state.searchResults=[];state.searchLoading=false;state.searchQuery='';state.searchError='';state.highlightedIndex=-1;}
 function editField(field){state[field]=null;if(field==='origin'){state.detected=false;state.manual=true;}state.activeField=field;state.message='';state.noRoute=false;resetSearch();state.activeField=field;setup();queueMicrotask(()=>document.getElementById(field)?.focus());}
@@ -232,19 +236,7 @@ async function refresh(){
  }
 }
 // A stale or distant GPS reading must never trigger a missed-connection warning.
-function connectionAtRisk(j){
- if(!state.onboard||state.paused||!j||!Array.isArray(j.legs))return null;
- for(let i=1;i<j.legs.length;i++){
-  const previous=j.legs[i-1],next=j.legs[i];
-  const arrival=Date.parse(previous.destination?.arrival||previous.arrival||'');
-  const departure=Date.parse(next.origin?.departure||next.departure||'');
-  if(!Number.isFinite(arrival)||!Number.isFinite(departure))continue;
-  // Three minutes is a conservative planning buffer, not a platform guarantee.
-  if(arrival+3*60000>departure&&Date.now()<departure+45*60000)
-   return {index:i,name:next.origin?.name||'the interchange',arrival,departure};
- }
- return null;
-}
+function connectionAtRisk(j){return findConnectionAtRisk(j,state.onboard,state.paused);}
 async function suggestOnwardConnection(){
  const risk=connectionAtRisk(state.journey);
  if(!risk||state.suggestingConnection||state.checking||!navigator.onLine||Date.now()-state.lastSuggestionCheck<120000)return;
@@ -268,38 +260,8 @@ function updateDelayConnectionWarning(){
  state.alert='Connection at risk at '+risk.name+': the first train arrival leaves less than 3 minutes to change. Check the next onward service using “I missed my connection”.';
 }
 function checkAlerts(){updateDelayConnectionWarning();if(!state.journey||state.paused||!state.location)return;const p=progress(state.journey,state.location);if(!p.nearest)return;for(const key of alertKeys(state.journey,p.index)){if(fired.has(key))continue;fired.add(key);const text=key==='destination-two'?`2 stops to ${state.journey.destination.name}`:key==='destination-one'?`1 stop to ${state.journey.destination.name}`:`Change trains at ${state.journey.transfers.find(t=>'transfer-'+t.id===key)?.name??'the next interchange'}`;state.alert=text;if(Notification.permission==='granted')try{new Notification('Sydney Station Alert',{body:text,tag:state.journey.id+'-'+key});}catch{}}}
-function displayedProgress(j){
- const gps=progress(j,state.location);
- if(!state.onboard)return progress(j,null);
- if(gps.nearest)return gps;
- const now=Date.now();let index=0;
- j.stops.forEach((s,i)=>{if(i>0&&i<j.stops.length-1&&!s.arrival&&!s.departure)return;const time=s.arrival||s.departure;const ts=time?Date.parse(time):NaN;if(Number.isFinite(ts)&&ts<=now)index=i;});
- const count=(from,to)=>j.stops.slice(from+1,to+1).filter((s,i)=>from+i+1===j.stops.length-1||s.arrival||s.departure).length;
- const next=(j.transfers||[]).map(t=>j.stops.findIndex(s=>s.id===t.id||s.name===t.name)).find(i=>i>index);
- return {index,remaining:count(index,j.stops.length-1),toChange:next===undefined?null:count(index,next),nearest:null};
-}
-function mapMarkup(j,p){const all=j.legs.flatMap(l=>l.path.length?l.path:l.stops.map(s=>({lat:s.lat,lon:s.lon})));if(!all.length)return '<p class="muted">Map geometry is unavailable. Follow the station list below.</p>';const coords=[...all,...(state.location?[state.location]:[])];const minLon=Math.min(...coords.map(s=>s.lon)),maxLon=Math.max(...coords.map(s=>s.lon)),minLat=Math.min(...coords.map(s=>s.lat)),maxLat=Math.max(...coords.map(s=>s.lat));const spanX=Math.max(.003,maxLon-minLon),spanY=Math.max(.003,maxLat-minLat);const x=lon=>35+(lon-minLon)/spanX*290;const y=lat=>250-(lat-minLat)/spanY*205;const legs=j.legs.map(l=>{const path=l.path.length?l.path:l.stops.map(s=>({lat:s.lat,lon:s.lon}));return `<polyline points="${path.map(q=>`${x(q.lon).toFixed(1)},${y(q.lat).toFixed(1)}`).join(' ')}" fill="none" stroke="${l.mode==='metro'?'#dc7b3d':'#566c61'}" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>`;}).join('');const markers=j.stops.map((s,i)=>`${i===p.index?`<circle class="map-active-pulse" cx="${x(s.lon)}" cy="${y(s.lat)}" r="11" fill="none" stroke="#ef7a2d" stroke-width="2"/>`:''}<circle cx="${x(s.lon)}" cy="${y(s.lat)}" r="${i===p.index?7:i===j.stops.length-1?6:3.8}" fill="${i===p.index?'#ef7a2d':i===j.stops.length-1?'#202421':'#fff'}" stroke="${i===p.index?'#ef7a2d':'#66766d'}" stroke-width="2"/>`).join('');const position=state.location?`<circle cx="${x(state.location.lon)}" cy="${y(state.location.lat)}" r="10" fill="#ef7a2d" opacity=".18"/><circle cx="${x(state.location.lon)}" cy="${y(state.location.lat)}" r="4" fill="#ef7a2d"/>`:'';return `<svg class="map" role="img" aria-label="Rail route map with station positions and your current location when available" viewBox="0 0 360 280" preserveAspectRatio="xMidYMid meet"><rect x="0" y="0" width="360" height="280" fill="#f2f3ef"/>${legs}${markers}${position}<text x="14" y="270" class="maplabel">${esc(j.legs.length>1?'Rail segments shown separately ·':'Rail route ·')} ${esc(j.destination.name)}</text></svg>`;}
-function sydneyDayLabel(value,now=new Date()){const time=new Date(value);if(!Number.isFinite(time.getTime()))return '';const day=new Intl.DateTimeFormat('en-CA',{timeZone:'Australia/Sydney',year:'numeric',month:'2-digit',day:'2-digit'});const current=day.format(now),target=day.format(time);if(target===current)return '';const tomorrow=new Date(now.getTime()+86400000);if(target===day.format(tomorrow))return 'Tomorrow, ';return new Intl.DateTimeFormat('en-AU',{timeZone:'Australia/Sydney',day:'numeric',month:'short'}).format(time)+', ';}
-function datedTrainTime(value){return value?sydneyDayLabel(value)+fmtTime(value):'';}
-function stopDisplayTime(s,i){const value=i===0?(s.departure||s.arrival):(s.arrival||s.departure);return datedTrainTime(value);}
-function displayLineName(line){
- const raw=String(line||'').trim();const code=raw.toUpperCase();
- const names={SCO:'South Coast Line',SHL:'Southern Highlands Line',BMT:'Blue Mountains Line',CCN:'Central Coast & Newcastle Line',HUN:'Hunter Line',T1:'T1 North Shore & Western Line',T2:'T2 Inner West & Leppington Line',T3:'T3 Liverpool & Inner West Line',T4:'T4 Eastern Suburbs & Illawarra Line',T5:'T5 Cumberland Line',T6:'T6 Lidcombe & Bankstown Line',T7:'T7 Olympic Park Line',T8:'T8 Airport & South Line',T9:'T9 Northern Line',M1:'M1 Metro North West & Bankstown'};
- return names[code]||raw;
-}
-function transferDisplay(j,s){
- const index=j.legs.findIndex((leg,i)=>i>0&&(leg.origin?.id===s.id||leg.origin?.name===s.name));
- if(index<1)return '';
- const arriving=j.legs[index-1],connecting=j.legs[index];
- const arrival=arriving.destination?.arrival||arriving.arrival;
- const departure=connecting.origin?.departure||connecting.departure;
- const arrivalPlatform=arriving.destination?.platform;
- const departurePlatform=connecting.origin?.platform||connecting.platform;
- const format=(time,platform)=>[time?fmtTime(time):'Time unavailable',platform?'Platform '+platform:'Platform unavailable'].join(' · ');
- const wait=arrival&&departure?Math.round((new Date(departure)-new Date(arrival))/60000):NaN;
- const waitLabel=Number.isFinite(wait)&&wait>=0?' · '+wait+' min to change':'';
- return `<div class="transfer-detail"><small><span class="transfer-label">ARRIVE · ${esc(displayLineName(arriving.line))}</span>${esc(format(arrival,arrivalPlatform))}</small><small><span class="transfer-label">CONNECT · ${esc(displayLineName(connecting.line))}</span>${esc(format(departure,departurePlatform))}</small><span class="transfer">↗ Change trains here${esc(waitLabel)}</span></div>`;
-}
+function displayedProgress(j){return calculateDisplayedProgress(j,state.location,state.onboard);}
+function mapMarkup(j,p){return renderRouteMap(j,p,state.location);}
 function qaOnwardConnectionIsValid(onward,transfer,prior,recoveryRequestedAt){
  if(!qaRailPilot)return true;
  const first=onward?.legs?.[0];
