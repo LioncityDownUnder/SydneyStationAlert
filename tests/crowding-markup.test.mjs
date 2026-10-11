@@ -26,8 +26,8 @@ test('no crowding markup for absent, unverified or stale occupancy', () => {
 
 test('whole-train levels display only when carriage levels are unavailable', () => {
   const fallback = verified('very_busy',[{ mode: 'train', level:'very_busy',carriages: [{ level: 'unknown' }] }]);
-  assert.equal(crowdingSummary(fallback), '<div class="stateline">Crowding: Very busy</div>');
-  assert.equal(crowdingSummary(verified('quiet',[{mode:'train',level:'quiet',carriages:[]}])), '<div class="stateline">Crowding: Quiet</div>');
+  assert.match(crowdingSummary(fallback), /^<div class="stateline">Crowding: Very busy<\/div><div class="muted crowding-freshness">TfNSW crowding observed less than a minute ago<\/div>$/);
+  assert.match(crowdingSummary(verified('quiet',[{mode:'train',level:'quiet',carriages:[]}])), /Crowding: Quiet.*TfNSW crowding observed less than a minute ago/);
   const withCars = verified('busy',[{ mode: 'metro', level:'busy',carriages: [{ level: 'moderate', position: 1 }] }]);
   assert.equal(crowdingSummary(withCars), '');
   assert.match(carriageCrowding(withCars), /Carriage crowding · 1-car Metro train/);
