@@ -35,7 +35,7 @@ jobs:
               echo "HTTP / seconds: $result"
               jq -c '{error: .error,route: (if .data.legs? then {origin:.data.origin,destination:.data.destination, source:.data.source,legCount:(.data.legs|length),legs:[.data.legs[] | {mode,line,origin:{name:.origin.name,id:.origin.id,platform:.origin.platform,departure:.origin.departure},destination:{name:.destination.name,id:.destination.id,platform:.destination.platform,arrival:.destination.arrival},stopCount:(.stops|length)}],transfers:.data.transfers,stops:[.data.stops[]|{name,id,mode,platform,arrival,departure}]} else null end)}' /tmp/route.json
               echo "== POTENTIAL PLATFORM-AS-STATION NAME $env $type =="
-              jq -c '[.data.stops[]? | select((.name//""|ascii_downcase|test("^\\s*(platform|plat\\.?|pl\\.?)[[:space:]]+[0-9]+")))] | {name,id,platform}]' /tmp/route.json
+              jq -c '[.data.stops[]? | select((.name//"") | startswith("Platform ")) | {name,id,platform}]' /tmp/route.json
             done
           done
           echo 'ROUTE-DIAGNOSTIC-COMPLETE'
