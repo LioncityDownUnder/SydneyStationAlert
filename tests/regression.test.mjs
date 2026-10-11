@@ -428,3 +428,22 @@ test('QA crowding normalizes numeric TfNSW IDs without changing train selection'
  assert.match(core,/return is_int\(\$id\)\?\(string\)\$id:\$id/);
  assert.match(core,/function crowding_trip_id_invalid_reason\(mixed \$id\)/);
 });
+
+test('QA onboard refresh stays on selected service without searching for a replacement',()=>{
+ const src=fs.readFileSync('src/main.ts','utf8');
+ const refresh=src.slice(src.indexOf('async function refresh(){'),src.indexOf('// A stale or distant GPS',src.indexOf('async function refresh(){')));
+ assert.match(refresh,/if\(qaRailPilot&&state\.onboard\)/);
+ assert.match(refresh,/await refreshCrowding\(generation\)/);
+ assert.match(refresh,/const updated=await getJourney/);
+ assert.ok(refresh.indexOf('await refreshCrowding(generation)')<refresh.indexOf('const updated=await getJourney'));
+ assert.match(refresh,/state\.checking=true;[\s\S]*?renderJourneyStable\(\)/);
+ assert.match(refresh,/finally\{[\s\S]*?state\.checking=false/);
+ assert.match(refresh,/live timetable and delay updates for this exact service are not yet verified/);
+});
+test('Refresh button displays busy spinner and live status',()=>{
+ const src=fs.readFileSync('src/main.ts','utf8');
+ assert.match(src,/aria-label="\$\{state\.checking\?'Refreshing journey':'Refresh journey'\}"/);
+ assert.match(src,/journey-spinner.*Refreshing…/);
+ assert.match(src,/state\.checking\?'Refreshing selected service…'/);
+ assert.match(src,/Monitoring is paused\. Tap Resume before refreshing\./);
+});
