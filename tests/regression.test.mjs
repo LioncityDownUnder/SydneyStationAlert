@@ -398,11 +398,24 @@ test('QA crowding request failures display a safe diagnostic category',()=>{
 test('QA crowding failures show precise safe validation categories',()=>{
  const api=fs.readFileSync('api/index.php','utf8');
  const ui=fs.readFileSync('src/main.ts','utf8');
- for(const code of ['CROWDING_REQUEST_SIZE','CROWDING_LEGS_INVALID','CROWDING_MODE_INVALID','CROWDING_ID_COUNT','CROWDING_ID_FORMAT']){
+ for(const code of ['CROWDING_REQUEST_SIZE','CROWDING_LEGS_INVALID','CROWDING_MODE_INVALID','CROWDING_ID_COUNT']){
   assert.ok(api.includes(code),code+' has a backend failure category');
   assert.ok(ui.includes(code),code+' reaches the QA diagnostic UI');
  }
  assert.match(ui,/request_size:'Crowding request exceeded the API size limit'/);
  assert.match(ui,/id_format:'Crowding trip-ID format or length rejected'/);
  assert.match(ui,/diagnostics:isQaEnvironment\?/);
+});
+
+test('QA crowding identifies precise invalid ID category without revealing value',()=>{
+ const core=fs.readFileSync('api/lib/core.php','utf8');
+ const api=fs.readFileSync('api/index.php','utf8');
+ const ui=fs.readFileSync('src/main.ts','utf8');
+ for(const kind of ['CROWDING_ID_NOT_STRING','CROWDING_ID_TOO_LONG','CROWDING_ID_BLANK','CROWDING_ID_CONTROL']){
+  assert.ok(core.includes(kind),kind+' defined in validator');
+  assert.ok(ui.includes(kind),kind+' shown in QA diagnostics');
+ }
+ assert.match(api,/crowding_trip_id_invalid_reason\(\$id\)/);
+ assert.match(core,/function crowding_trip_id_valid\(mixed \$id\):bool/);
+ assert.match(ui,/id_control:'A selected trip identifier contains control characters'/);
 });
