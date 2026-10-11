@@ -379,3 +379,15 @@ assertit(($estimatedStop['plannedDeparture']??null)==='2026-10-11T10:00:00+11:00
  'SSA-01 preserves provider planned timestamp for estimated-delay calculation');
 assertit(($estimatedStop['departure']??null)==='2026-10-11T10:06:00+11:00',
  'SSA-01 uses provider estimated timetable timestamp when available');
+
+// SSA-02: independently normalized rail options must be catchable, not merely
+// the next itinerary from "now". Fixtures never contact TfNSW.
+$onwardFixture=json_decode(file_get_contents(__DIR__.'/fixtures/success.json'),true);
+$onwardStart=strtotime('2026-10-07T14:20:00+11:00');
+$foundOnward=safe_onward_options([$onwardFixture],$origin,$dest,$onwardStart-60,$onwardStart+1800);
+assertit(count($foundOnward)===1&&route_departure_ts($foundOnward[0])===$onwardStart,'SSA-02 selects a verified same-day train after achievable interchange arrival');
+assertit(safe_onward_options([$onwardFixture],$origin,$dest,$onwardStart+60,$onwardStart+3600)===[],'SSA-02 excludes a train already departed by the time a delayed commuter arrives');
+assertit(safe_onward_options([$onwardFixture],$origin,$dest,$onwardStart-3600,$onwardStart-60)===[],'SSA-02 excludes rail journeys outside the bounded forward window');
+$mixedOnward=json_decode(file_get_contents(__DIR__.'/fixtures/mixed.json'),true);
+assertit(safe_onward_options([$mixedOnward],$origin,$dest,$onwardStart-3600,$onwardStart+3600)===[],'SSA-02 will not turn a bus-containing route into an onward train');
+assertit(safe_onward_options([],$origin,$dest,$onwardStart,$onwardStart+3600)===[],'SSA-02 empty provider result retains original connection');
