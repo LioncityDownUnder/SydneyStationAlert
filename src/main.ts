@@ -1,19 +1,22 @@
 // @ts-nocheck
-import { searchStations, preloadStations, nearbyStations, getJourney, getBoardingOptions, getCrowding, ApiRequestError } from './api.js';
+import { searchStations, preloadStations, nearbyStations, getJourney, getBoardingOptions, getCrowding, getBoardedTimetable, getOnwardOptions, ApiRequestError } from './api.js';
 import { GEO, REFRESH_MS, SEARCH_DEBOUNCE_MS, STATION_CACHE_MS } from './constants.js';
 import { nearestStation, progress, alertKeys, fmtTime, escapeHTML as esc } from './logic.js';
 import { loadStationIndex, saveStationIndex, findStationMatches, mergeStationEntries } from './station-index.js';
 import { optionMarkup as stationOptionMarkup, stationField as stationFieldMarkup } from './station-markup.js';
 import { renderServiceUpdate, renderServiceDetails } from './service-notice-markup.js';
 import { crowdingSummary, carriageCrowding } from './crowding-markup.js';
+import { sanitizedSelectedCrowding, crowdingCurrentlyVisible } from './crowding-safety.js';
 import { saveConfirmedTrip, loadConfirmedTrip, clearConfirmedTrip } from './active-trip.js';
 import { sameService, firstDepartureTime } from './journey-service.js';
 import { findConnectionAtRisk, calculateDisplayedProgress } from './journey-monitoring.js';
 import { datedTrainTime, stopDisplayTime, displayLineName, transferDisplay } from './timetable-display.js';
 import { renderNotificationReliabilityNotice, renderRailTravelLinks } from './notice-markup.js';
 import { renderRouteMap } from './route-map.js';
+import { earliestCatchableDeparture, validOnwardConnection, verifiedLateConnectionRisk, buildRecoveredJourney } from './connection-recovery.js';
+import { canCheckBoardedTimetable, mergeVerifiedBoardedTimetable, estimatedStopDelayMinutes } from './boarded-timetable.js';
 const root = document.getElementById('app');
-const state = { origin: null, destination: null, detected: false, manual: false, locating: false, location: null, journey: null, onboard: false, paused: false, busy: false, checking: false, recoveringConnection: false, noticeExpanded: false, suggestedConnection: null, suggestingConnection: false, boardingOptions: null, lastSuggestionCheck: 0, enriching: false, crowdingChecked: false, message: '', alert: '', searchResults: [], activeField: null, searchLoading: false, searchQuery: '', searchError: '', highlightedIndex: -1, lastChecked: null, offline: !navigator.onLine, noRoute: false, noRouteAlerts: null, noRouteAlertsLoading: false };
+const state = { origin: null, destination: null, detected: false, manual: false, locating: false, location: null, journey: null, onboard: false, paused: false, busy: false, checking: false, recoveringConnection: false, noticeExpanded: false, suggestedConnection: null, suggestingConnection: false, boardingOptions: null, lastSuggestionCheck: 0, enriching: false, crowdingChecked: false, timetableStatus: 'not_checked', message: '', alert: '', searchResults: [], activeField: null, searchLoading: false, searchQuery: '', searchError: '', highlightedIndex: -1, lastChecked: null, offline: !navigator.onLine, noRoute: false, noRouteAlerts: null, noRouteAlertsLoading: false };
 let queryController = null;
 let debounce;
 let watchId = null;
@@ -182,7 +185,7 @@ async function refreshCrowding(generation=journeyGeneration){
  try{
   const result=await getCrowding(selected);
   if(generation!==journeyGeneration||serial!==crowdingRequestSerial||!state.journey||selectedCrowdingIdentity(state.journey)!==identity)return;
-  state.journey.crowding=result;state.crowdingChecked=true;
+  state.journey.crowding=sanitizedSelectedCrowding(selected,result);state.crowdingChecked=true;
   if(state.onboard)saveActiveTrip();renderJourneyStable();
  }catch{
   if(generation!==journeyGeneration||serial!==crowdingRequestSerial||!state.journey||selectedCrowdingIdentity(state.journey)!==identity)return;
@@ -190,11 +193,11 @@ async function refreshCrowding(generation=journeyGeneration){
  }
 }
 function crowdingUnavailable(j){
- return state.crowdingChecked&&!j?.crowding?.available?'<div class="muted" role="status">Crowding data unavailable for this service.</div>':'';
+ return (state.crowdingChecked||j?.crowding)&&!crowdingCurrentlyVisible(j?.crowding)?'<div class="muted" role="status">Crowding data unavailable for this service (missing or no longer current).</div>':'';
 }
 function renderJourneyStable(){const x=window.scrollX,y=window.scrollY;renderJourney();requestAnimationFrame(()=>window.scrollTo(x,y));}
 async function enrichJourney(generation){if(!state.journey)return;state.enriching=true;renderJourneyStable();const statusTimer=window.setTimeout(()=>{if(generation===journeyGeneration&&state.enriching){state.enriching=false;renderJourneyStable();}},5000);try{const updated=await getJourney(state.journey.origin,state.journey.destination,qaRailPilot);if(generation!==journeyGeneration||!state.journey)return;const adopted=adoptJourneyUpdate(updated);if(adopted){state.lastChecked=new Date();state.message='';}checkAlerts();}catch(e){if(generation===journeyGeneration&&state.journey)state.message='Live service details could not be verified. Showing previously saved journey information.';}finally{clearTimeout(statusTimer);if(generation===journeyGeneration){state.enriching=false;renderJourneyStable();}}}
-async function setJourney(){stopQaRecoveryWatch();if(!state.origin||!state.destination||state.origin.id===state.destination.id)return;const generation=++journeyGeneration;state.busy=true;state.enriching=false;state.message='';state.noRoute=false;state.noRouteLimited=false;state.noRouteAlerts=null;state.noRouteAlertsLoading=false;setup();try{const j=await getJourney(state.origin,state.destination,true);if(generation!==journeyGeneration)return;state.journey=j;state.crowdingChecked=false;state.boardingOptions=null;state.suggestedConnection=null;state.lastSuggestionCheck=0;state.onboard=false;clearActiveTrip();state.busy=false;state.paused=false;state.lastChecked=new Date();state.alert='';fired.clear();startTracking();startPolling();renderJourney();void enrichJourney(generation);void refreshCrowding(generation);}catch(e){if(generation!==journeyGeneration)return;state.busy=false;state.enriching=false;state.journey=null;state.noRoute=e instanceof ApiRequestError&&(e.code==='NO_ROUTE'||e.code==='SEARCH_TIME_LIMIT');state.noRouteLimited=e instanceof ApiRequestError&&e.code==='SEARCH_TIME_LIMIT';state.message=e.message;setup();if(state.noRoute){void loadQaNoRouteAlerts(generation);startQaRecoveryWatch();}}}
+async function setJourney(){stopQaRecoveryWatch();if(!state.origin||!state.destination||state.origin.id===state.destination.id)return;const generation=++journeyGeneration;state.busy=true;state.enriching=false;state.message='';state.noRoute=false;state.noRouteLimited=false;state.noRouteAlerts=null;state.noRouteAlertsLoading=false;setup();try{const j=await getJourney(state.origin,state.destination,true);if(generation!==journeyGeneration)return;state.journey=j;state.crowdingChecked=false;state.timetableStatus='not_checked';state.boardingOptions=null;state.suggestedConnection=null;state.lastSuggestionCheck=0;state.onboard=false;clearActiveTrip();state.busy=false;state.paused=false;state.lastChecked=new Date();state.alert='';fired.clear();startTracking();startPolling();renderJourney();void enrichJourney(generation);void refreshCrowding(generation);}catch(e){if(generation!==journeyGeneration)return;state.busy=false;state.enriching=false;state.journey=null;state.noRoute=e instanceof ApiRequestError&&(e.code==='NO_ROUTE'||e.code==='SEARCH_TIME_LIMIT');state.noRouteLimited=e instanceof ApiRequestError&&e.code==='SEARCH_TIME_LIMIT';state.message=e.message;setup();if(state.noRoute){void loadQaNoRouteAlerts(generation);startQaRecoveryWatch();}}}
 function stopTracking(){if(watchId!==null&&navigator.geolocation)navigator.geolocation.clearWatch(watchId);watchId=null;clearInterval(pollId);pollId=undefined;}
 function startTracking(){if(watchId!==null||!navigator.geolocation||state.paused)return;try{watchId=navigator.geolocation.watchPosition(p=>{state.location={lat:p.coords.latitude,lon:p.coords.longitude};checkAlerts();renderJourneyStable();},()=>{},{...GEO.options,maximumAge:20000});}catch{}}
 function startPolling(){clearInterval(pollId);if(!state.paused)pollId=window.setInterval(()=>{if(!document.hidden&&navigator.onLine)void refresh();},REFRESH_MS);}
@@ -207,13 +210,34 @@ async function refresh(){
  renderJourneyStable();
  try{
   if(state.onboard){
-   // A general origin-to-destination search finds the next departure, not
-   // necessarily the train already boarded. Never use it to update that train.
+   // A general origin-to-destination search finds the next departure. NEVER use
+   // it to replace a train that the commuter already confirmed boarding.
    await refreshCrowding(generation);
    if(generation!==journeyGeneration||!state.journey)return;
+   const selected=state.journey;
+   if(!canCheckBoardedTimetable(selected)){
+    state.timetableStatus='unavailable';
+    state.message='Exact service timetable unavailable: this saved train lacks verified trip or stop identifiers. Your boarded train and saved times are unchanged.';
+   }else{
+    const checked=await getBoardedTimetable(selected);
+    if(generation!==journeyGeneration||state.journey!==selected)return;
+    const merged=checked?.status==='matched'
+     ?mergeVerifiedBoardedTimetable(selected,checked.journey,checked.checkedAt):null;
+    if(merged){
+     state.journey=merged;
+     state.timetableStatus='verified';
+     saveActiveTrip();
+     state.message='Exact boarded service matched by TfNSW trip ID. Timetable checked; estimated delays are shown when available.';
+     // A changed departure invalidates old async crowding responses.
+     void refreshCrowding(generation);
+     updateDelayConnectionWarning();
+    }else{
+     state.timetableStatus='unavailable';
+     state.message='Live timetable for your exact boarded train could not be verified. Showing saved times; no alternative train was selected.';
+    }
+   }
    checkAlerts();
    state.lastChecked=new Date();
-   state.message='Selected boarded train retained. Crowding and location checked; live timetable and delay updates for this exact service are not yet verified.';
   }else{
    const updated=await getJourney(state.journey.origin,state.journey.destination,qaRailPilot);
    if(generation!==journeyGeneration||!state.journey)return;
@@ -231,7 +255,7 @@ async function refresh(){
   if(generation===journeyGeneration){
    state.checking=false;
    renderJourneyStable();
-   if(!state.onboard)void suggestOnwardConnection();
+   if(state.onboard)void suggestOnwardConnection();
   }
  }
 }
@@ -239,24 +263,32 @@ async function refresh(){
 function connectionAtRisk(j){return findConnectionAtRisk(j,state.onboard,state.paused);}
 async function suggestOnwardConnection(){
  const risk=connectionAtRisk(state.journey);
- if(!risk||state.suggestingConnection||state.checking||!navigator.onLine||Date.now()-state.lastSuggestionCheck<120000)return;
- state.lastSuggestionCheck=Date.now();
- const original=state.journey,generation=journeyGeneration;
+ if(!risk||!verifiedLateConnectionRisk(state.journey,risk)||state.suggestingConnection||state.checking||!navigator.onLine||Date.now()-state.lastSuggestionCheck<120000)return;
+ const original=state.journey,generation=journeyGeneration,prior=original.legs.slice(0,risk.index);
+ if(state.suggestedConnection?.journeyId===original.id&&state.suggestedConnection.index===risk.index)return;
  const transfer=original.legs[risk.index]?.origin;
- if(!transfer)return;
- state.suggestingConnection=true;
+ const notBefore=earliestCatchableDeparture(prior,Date.now());
+ if(!transfer||notBefore===null||notBefore>Date.now()+4*3600000)return;
+ state.lastSuggestionCheck=Date.now();state.suggestingConnection=true;
  try{
-  const onward=await getJourney(transfer,original.destination,true);
-  if(generation!==journeyGeneration||state.journey!==original||!state.onboard)return;
-  const departure=Date.parse(onward.legs?.[0]?.departure||onward.legs?.[0]?.origin?.departure||'');
-  if(!Number.isFinite(departure)||departure<risk.arrival+3*60000)return;
-  state.suggestedConnection={index:risk.index,departure,transfer:transfer.name,journeyId:original.id};
-  state.alert='Connection at risk at '+transfer.name+'. A later onward service departing at '+fmtTime(new Date(departure).toISOString())+' is available. Use “I missed my connection” to update your route.';
+  const result=await getOnwardOptions(transfer,original.destination,notBefore);
+  if(generation!==journeyGeneration||state.journey!==original||!state.onboard||state.paused)return;
+  const onward=(result?.options||[]).find(candidate=>validOnwardConnection(candidate,transfer,original.destination,prior,notBefore));
+  if(!onward)return;
+  const departure=Date.parse(onward.legs[0]?.departure||onward.legs[0]?.origin?.departure||'');
+  state.suggestedConnection={index:risk.index,departure,transfer:transfer.name,journeyId:original.id,onward,notBefore};
+  updateDelayConnectionWarning();
  }catch{}finally{state.suggestingConnection=false;if(generation===journeyGeneration)renderJourneyStable();}
 }
 function updateDelayConnectionWarning(){
  const risk=connectionAtRisk(state.journey);
- if(!risk)return;
+ if(!risk){state.suggestedConnection=null;return;}
+ const suggested=state.suggestedConnection;
+ if(suggested&&suggested.journeyId===state.journey.id&&suggested.index===risk.index
+   &&suggested.departure>Date.now()&&verifiedLateConnectionRisk(state.journey,risk)){
+  state.alert='Connection at risk at '+risk.name+'. A later rail service departing '+fmtTime(new Date(suggested.departure).toISOString())+' has been verified as a possible replacement. Review before changing your onward train.';
+  return;
+ }
  state.alert='Connection at risk at '+risk.name+': the first train arrival leaves less than 3 minutes to change. Check the next onward service using “I missed my connection”.';
 }
 function checkAlerts(){updateDelayConnectionWarning();if(!state.journey||state.paused||!state.location)return;const p=progress(state.journey,state.location);if(!p.nearest)return;for(const key of alertKeys(state.journey,p.index)){if(fired.has(key))continue;fired.add(key);const text=key==='destination-two'?`2 stops to ${state.journey.destination.name}`:key==='destination-one'?`1 stop to ${state.journey.destination.name}`:`Change trains at ${state.journey.transfers.find(t=>'transfer-'+t.id===key)?.name??'the next interchange'}`;state.alert=text;if(Notification.permission==='granted')try{new Notification('Sydney Station Alert',{body:text,tag:state.journey.id+'-'+key});}catch{}}}
@@ -264,40 +296,50 @@ function displayedProgress(j){return calculateDisplayedProgress(j,state.location
 function mapMarkup(j,p){return renderRouteMap(j,p,state.location);}
 function qaOnwardConnectionIsValid(onward,transfer,prior,recoveryRequestedAt){
  if(!qaRailPilot)return true;
- const first=onward?.legs?.[0];
- if(!first||!Array.isArray(onward.legs)||!onward.legs.length)return false;
- if(String(first.origin?.id||'')!==String(transfer?.id||''))return false;
- const priorArrival=Date.parse(prior[prior.length-1]?.arrival||prior[prior.length-1]?.destination?.arrival||'');
- if(!Number.isFinite(priorArrival))return false;
- let previousArrival=priorArrival;
- for(const leg of onward.legs){
-  if(leg.mode!=='train'&&leg.mode!=='metro')return false;
-  const departure=Date.parse(leg.departure||leg.origin?.departure||'');
-  const arrival=Date.parse(leg.arrival||leg.destination?.arrival||'');
-  if(!Number.isFinite(departure)||!Number.isFinite(arrival)||arrival<=departure||departure<previousArrival+2*60000)return false;
-  previousArrival=arrival;
- }
- const firstDeparture=Date.parse(first.departure||first.origin?.departure||'');
- return firstDeparture>=recoveryRequestedAt;
+ return validOnwardConnection(onward,transfer,state.journey?.destination,prior,recoveryRequestedAt);
+}
+function applyRecoveredConnection(original,legIndex,onward,requestedAt,transferName){
+ const updated=buildRecoveredJourney(original,legIndex,onward,requestedAt);
+ if(!updated)return false;
+ journeyGeneration++;state.suggestedConnection=null;state.journey=updated;state.crowdingChecked=false;
+ state.timetableStatus='not_checked';
+ state.lastChecked=new Date();state.alert='Onward journey updated from '+transferName+'. Check the new boarding time and platform; your already-boarded train has been retained.';
+ state.message='';fired.clear();saveActiveTrip();
+ void refreshCrowding(journeyGeneration);
+ return true;
 }
 async function recoverMissedConnection(legIndex){
  if(!state.onboard||state.checking||!state.journey||legIndex<1)return;
  const original=state.journey,prior=original.legs.slice(0,legIndex),transfer=original.legs[legIndex]?.origin;
  if(!transfer||!prior.length)return;
- const recoveryRequestedAt=Date.now();const generation=journeyGeneration;state.checking=true;state.recoveringConnection=true;state.message='Finding another train from '+transfer.name+'…';renderJourneyStable();
+ const recoveryRequestedAt=Date.now(),notBefore=earliestCatchableDeparture(prior,recoveryRequestedAt);
+ if(notBefore===null||notBefore>recoveryRequestedAt+4*3600000){
+  state.message='The expected interchange arrival is unavailable or outside the next four hours. Your existing trip is unchanged.';
+  renderJourneyStable();return;
+ }
+ const generation=journeyGeneration;state.checking=true;state.recoveringConnection=true;state.message='Finding a catchable train from '+transfer.name+'…';renderJourneyStable();
  try{
-  const onward=await getJourney(transfer,original.destination,true);
+  const result=await getOnwardOptions(transfer,original.destination,notBefore);
   if(generation!==journeyGeneration||state.journey!==original)return;
-  const departure=Date.parse(onward.legs?.[0]?.departure||onward.legs?.[0]?.origin?.departure||'');
-  if(!Number.isFinite(departure)||departure<recoveryRequestedAt)throw new Error('No connection departing after your recovery request was verified. Please retry shortly.');
-  if(!qaOnwardConnectionIsValid(onward,transfer,prior,recoveryRequestedAt))throw new Error('The proposed interchange connection could not be verified. Keep your existing journey and check TfNSW Trip Planner.');
-  const legs=[...prior,...onward.legs];
-  const stops=[];for(const leg of legs)for(const station of leg.stops||[leg.origin,leg.destination]){if(!station)continue;const last=stops[stops.length-1];if(last&&(last.id===station.id||last.name===station.name)){stops[stops.length-1]={...last,...station,arrival:last.arrival||station.arrival,departure:station.departure||last.departure};}else stops.push(station);}
-  const transfers=[];for(let i=1;i<legs.length;i++){const previous=legs[i-1].destination,current=legs[i].origin;transfers.push({id:current.id,name:current.name,mode:current.mode,lat:current.lat,lon:current.lon,arrivalPlatform:previous.platform,departurePlatform:current.platform});}
-  state.suggestedConnection=null;state.journey={...original,legs,stops,transfers,id:original.id+'-recovered-'+Date.now(),fetchedAt:new Date().toISOString()};
-  state.lastChecked=new Date();state.alert='New connection found from '+transfer.name+'. Check the updated boarding time and platform.';state.message='';fired.clear();saveActiveTrip();
+  const onward=(result?.options||[]).find(candidate=>qaOnwardConnectionIsValid(candidate,transfer,prior,notBefore));
+  if(!onward||!applyRecoveredConnection(original,legIndex,onward,recoveryRequestedAt,transfer.name))
+   throw new Error('No verified rail connection departing after your expected arrival and changeover buffer was found. Your journey is unchanged.');
  }catch(e){if(generation===journeyGeneration)state.message='Unable to find a replacement connection: '+(e?.message||'Please try again.');}
- finally{if(generation===journeyGeneration){state.checking=false;state.recoveringConnection=false;renderJourneyStable();}}
+ finally{state.checking=false;state.recoveringConnection=false;renderJourneyStable();}
+}
+function acceptSuggestedConnection(legIndex){
+ const original=state.journey,suggestion=state.suggestedConnection;
+ if(!state.onboard||state.checking||!original||!suggestion||suggestion.journeyId!==original.id||suggestion.index!==legIndex)return;
+ const prior=original.legs.slice(0,legIndex),transfer=original.legs[legIndex]?.origin;
+ if(!transfer)return;
+ const now=Date.now(),notBefore=earliestCatchableDeparture(prior,now);
+ if(notBefore===null||!qaOnwardConnectionIsValid(suggestion.onward,transfer,prior,notBefore)){
+  state.suggestedConnection=null;state.message='That suggested train is no longer verified as catchable. Use “I missed my connection” to search again.';renderJourneyStable();return;
+ }
+ const departure=Date.parse(suggestion.onward.legs[0]?.departure||'');
+ const detail=transfer.name+' · '+(suggestion.onward.legs[0]?.line||'Rail')+' · '+fmtTime(new Date(departure).toISOString());
+ if(!window.confirm('Use this onward train?\\n'+detail+'\\n\\nOnly the unboarded connection changes. Your earlier boarded train is kept.'))return;
+ if(applyRecoveredConnection(original,legIndex,suggestion.onward,now,transfer.name))renderJourneyStable();
 }
 async function confirmDifferentTrain(){
  if(!qaRailPilot||state.onboard||state.checking||!state.journey||!navigator.onLine)return;
@@ -321,9 +363,9 @@ function confirmBoardingOption(index){
  const detail=[first.line||'Rail service',datedTrainTime(first.departure||first.origin?.departure),first.origin?.name||candidate.origin?.name].join(' · ');
  if(!window.confirm('Did you board this exact train?\n'+detail+'\n\nConfirm only if this is your service. Cancel keeps the original journey.'))return;
  // Explicit commuter selection is the only path that changes the monitored service.
- journeyGeneration++;state.journey=candidate;state.crowdingChecked=false;state.onboard=true;state.boardingOptions=null;state.alert='Different train confirmed by you. Monitoring this selected service.';state.message='';state.lastChecked=new Date();fired.clear();saveActiveTrip();checkAlerts();renderJourneyStable();void refreshCrowding(journeyGeneration);
+ journeyGeneration++;state.journey=candidate;state.crowdingChecked=false;state.onboard=true;state.boardingOptions=null;state.timetableStatus='not_checked';state.journey.boardedDepartureAnchor=state.journey.legs[0]?.departure||state.journey.legs[0]?.origin?.departure;state.alert='Different train confirmed by you. Monitoring this selected service.';state.message='';state.lastChecked=new Date();fired.clear();saveActiveTrip();checkAlerts();renderJourneyStable();void refreshCrowding(journeyGeneration);
 }
-function renderJourney(){const j=state.journey;if(!j){setup();return;}const p=displayedProgress(j);const latest=state.lastChecked?fmtTime(state.lastChecked.toISOString()):'not yet';const optionChoices=qaRailPilot&&!state.onboard&&Array.isArray(state.boardingOptions)?'<section class="panel" aria-label="Alternative train choices"><h2>Which train did you board?</h2><p>Choose only the service matching your actual departure. If it is not listed, keep your original journey.</p>'+state.boardingOptions.map((choice,i)=>{const leg=choice.legs[0];return '<button type="button" class="secondary boarding-action" data-board-option="'+i+'">'+esc([leg.line||'Rail',datedTrainTime(leg.departure||leg.origin?.departure),leg.origin?.name||choice.origin?.name].join(' · '))+'</button>';}).join('')+'<button type="button" class="subtle" id="cancel-boarding-choices">Cancel</button></section>':'';const stationItems=j.stops.map((s,i)=>{const transfer=transferDisplay(j,s);const time=stopDisplayTime(s,i);const bypassed=i>0&&i<j.stops.length-1&&!s.arrival&&!s.departure;const detail=[time,s.platform?`Platform ${s.platform}`:''].filter(Boolean).join(' · ');return `<li class="stop ${bypassed?'bypassed ':''}${i===p.index?'current':''} ${i===j.stops.length-1?'destination':''} ${i<p.index?'past':''}"><strong>${esc(s.name)}</strong>${transfer|| (bypassed?'<small>Does not stop</small>':detail?`<small>${esc(detail)}</small>`:'')}${transfer&&state.onboard?`<button type="button" class="secondary missed-connection-action" data-recover-leg="${j.legs.findIndex((leg,k)=>k>0&&(leg.origin?.id===s.id||leg.origin?.name===s.name))}" ${state.checking?"disabled":""}>${state.recoveringConnection?"Finding another train…":"I missed my connection"}</button>`:""}${i===p.index&&!bypassed?'<small>Nearest station</small>':''}${i===0?(state.onboard?'<small class="boarding-confirmed">✓ Boarded this selected train</small>':`<button id="board" class="secondary boarding-action" type="button">I boarded the ${esc(datedTrainTime(j.legs[0]?.departure||s.departure||s.arrival))} train</button><small>Confirm only when you are on this selected service.</small>${qaRailPilot?'<button id="different-train" class="secondary boarding-action" type="button">I boarded a different train</button>':''}`):''}</li>`;}).join('');root.innerHTML=`<main class="shell">${brand}<section class="journeyhead"><div class="eyebrow">JOURNEY MONITOR</div><h1>${esc(j.origin.name)} <span style="color:#e6762d">→</span> ${esc(j.destination.name)}</h1><div class="subtitle">${j.omittedNonRail?'Mixed-mode suggestion · rail portion':j.legs.length>1?`${j.legs.length-1} train change${j.legs.length>2?'s':''} required`:'Direct rail journey'} · ${j.legs.map(l=>esc(displayLineName(l.line))).join(' / ')}</div></section><div class="toolbar"><span class="pill">${state.onboard?'● ON BOARD':state.paused?'MONITORING PAUSED':'● MONITORING'}</span><button id="refresh" class="secondary" type="button" ${state.checking?'disabled aria-busy="true"':''} aria-label="${state.checking?'Refreshing journey':'Refresh journey'}">${state.checking?'<span class="journey-button-loading"><span class="journey-spinner" aria-hidden="true"></span>Refreshing…</span>':'↻ Refresh'}</button><button id="pause" class="secondary">${state.paused?'Resume':'Pause'}</button><button id="${state.onboard?'abandon':'new'}" class="subtle">${state.onboard?'Abandon trip':'New journey'}</button></div>${state.alert?`<div class="alarm" role="alert">● ${esc(state.alert)}</div>`:''}${serviceUpdate(j)}${serviceDetails(j)}${message(state.message,true)}${optionChoices}${j.omittedNonRail?message(`TfNSW suggested a mixed-mode journey. Non-rail legs are omitted from this display.${j.railStart&&!j.railStartsAtOrigin?` The rail portion begins at ${esc(j.railStart.name)}.`:''} Rail stops and map geometry show trains and metro only.`):''}<section class="panel"><div class="statusrow"><div><div class="eyebrow">REMAINING</div><div class="bigstatus">${p.remaining} <small>${j.omittedNonRail&&!j.railStartsAtOrigin?'rail ':''}stop${p.remaining===1?'':'s'} ${j.omittedNonRail&&!j.railStartsAtOrigin?'shown to destination':'to destination'}</small></div>${crowdingSummary(j)}${carriageCrowding(j)}${crowdingUnavailable(j)}${p.toChange!==null?`<div class="stateline" style="color:#ae5d2a;font-weight:720">${p.toChange} stop${p.toChange===1?'':'s'} to change · ${p.remaining} to ${esc(j.destination.name)}</div>`:''}</div><div class="muted ${state.checking?'checking':''}">${state.checking?'Refreshing selected service…':state.enriching?'Checking live service details…':`Last checked ${latest}`}</div></div><div class="divider"></div><div class="layout"><section><div class="eyebrow">STATIONS AHEAD</div><ol class="route">${stationItems}</ol></section><div class="sidecards"><section class="tinycard"><div class="eyebrow">YOUR ROUTE</div>${mapMarkup(j,p)}<div class="muted" style="margin-top:10px">${state.location?'Orange dot marks your location.':'Allow location access to see your position.'} ${j.legs.some(l=>!l.path.length)?'Some segments use station coordinates where TfNSW geometry is missing.':''}</div></section></div></div></section>${notificationReliabilityNotice()}${footer}</main>${state.offline?offline():''}`;document.getElementById('alert-reliability-notice')?.addEventListener('toggle',e=>{state.noticeExpanded=e.currentTarget.open;});document.getElementById('refresh')?.addEventListener('click',()=>void refresh());document.getElementById('pause')?.addEventListener('click',()=>{state.paused=!state.paused;if(state.paused)stopTracking();else{startTracking();startPolling();}renderJourneyStable();});root.querySelectorAll('[data-recover-leg]').forEach(button=>button.addEventListener('click',()=>{const leg=Number(button.dataset.recoverLeg);const station=state.journey?.legs?.[leg]?.origin?.name||'this interchange';if(window.confirm('Confirm missed connection at '+station+'?\n\nSelect OK to find another train and update your journey, or Cancel to keep your current journey.'))void recoverMissedConnection(leg);}));document.getElementById('board')?.addEventListener('click',()=>{state.boardingOptions=null;state.onboard=true;saveActiveTrip();renderJourneyStable();});document.getElementById('different-train')?.addEventListener('click',()=>void confirmDifferentTrain());root.querySelectorAll('[data-board-option]').forEach(button=>button.addEventListener('click',()=>confirmBoardingOption(Number(button.dataset.boardOption))));document.getElementById('cancel-boarding-choices')?.addEventListener('click',()=>{state.boardingOptions=null;state.message='';renderJourneyStable();});document.getElementById('abandon')?.addEventListener('click',()=>{clearActiveTrip();stopTracking();journeyGeneration++;state.onboard=false;state.enriching=false;state.journey=null;state.message='';state.noRoute=false;state.alert='';state.origin=null;state.destination=null;state.activeField=null;state.searchResults=[];setup();});document.getElementById('new')?.addEventListener('click',()=>{clearActiveTrip();stopTracking();journeyGeneration++;state.onboard=false;state.enriching=false;state.journey=null;state.message='';state.noRoute=false;state.alert='';state.activeField=null;state.searchResults=[];setup();});}
+function renderJourney(){const j=state.journey;if(!j){setup();return;}const p=displayedProgress(j);const latest=state.lastChecked?fmtTime(state.lastChecked.toISOString()):'not yet';const optionChoices=qaRailPilot&&!state.onboard&&Array.isArray(state.boardingOptions)?'<section class="panel" aria-label="Alternative train choices"><h2>Which train did you board?</h2><p>Choose only the service matching your actual departure. If it is not listed, keep your original journey.</p>'+state.boardingOptions.map((choice,i)=>{const leg=choice.legs[0];return '<button type="button" class="secondary boarding-action" data-board-option="'+i+'">'+esc([leg.line||'Rail',datedTrainTime(leg.departure||leg.origin?.departure),leg.origin?.name||choice.origin?.name].join(' · '))+'</button>';}).join('')+'<button type="button" class="subtle" id="cancel-boarding-choices">Cancel</button></section>':'';const stationItems=j.stops.map((s,i)=>{const transfer=transferDisplay(j,s);const time=stopDisplayTime(s,i);const bypassed=i>0&&i<j.stops.length-1&&!s.arrival&&!s.departure;const delay=state.onboard&&state.timetableStatus==='verified'?estimatedStopDelayMinutes(s,i===0):null;const detail=[time,s.platform?`Platform ${s.platform}`:'',delay!==null?`+${delay} min estimated delay`:''].filter(Boolean).join(' · ');const suggestion=state.suggestedConnection;const suggestedButton=transfer&&state.onboard&&suggestion?.journeyId===j.id&&suggestion?.index===j.legs.findIndex((leg,k)=>k>0&&String(leg.origin?.id)===String(s.id))&&suggestion.departure>Date.now()?`<button type="button" class="secondary missed-connection-action" data-accept-suggested="${suggestion.index}" ${state.checking?'disabled':''}>Use suggested onward train · ${esc(datedTrainTime(new Date(suggestion.departure).toISOString()))}</button>`:'';return `<li class="stop ${bypassed?'bypassed ':''}${i===p.index?'current':''} ${i===j.stops.length-1?'destination':''} ${i<p.index?'past':''}"><strong>${esc(s.name)}</strong>${transfer|| (bypassed?'<small>Does not stop</small>':detail?`<small>${esc(detail)}</small>`:'')}${suggestedButton}${transfer&&state.onboard?`<button type="button" class="secondary missed-connection-action" data-recover-leg="${j.legs.findIndex((leg,k)=>k>0&&(leg.origin?.id===s.id||leg.origin?.name===s.name))}" ${state.checking?"disabled":""}>${state.recoveringConnection?"Finding another train…":"I missed my connection"}</button>`:""}${i===p.index&&!bypassed?'<small>Nearest station</small>':''}${i===0?(state.onboard?'<small class="boarding-confirmed">✓ Boarded this selected train</small>':`<button id="board" class="secondary boarding-action" type="button">I boarded the ${esc(datedTrainTime(j.legs[0]?.departure||s.departure||s.arrival))} train</button><small>Confirm only when you are on this selected service.</small>${qaRailPilot?'<button id="different-train" class="secondary boarding-action" type="button">I boarded a different train</button>':''}`):''}</li>`;}).join('');root.innerHTML=`<main class="shell">${brand}<section class="journeyhead"><div class="eyebrow">JOURNEY MONITOR</div><h1>${esc(j.origin.name)} <span style="color:#e6762d">→</span> ${esc(j.destination.name)}</h1><div class="subtitle">${j.omittedNonRail?'Mixed-mode suggestion · rail portion':j.legs.length>1?`${j.legs.length-1} train change${j.legs.length>2?'s':''} required`:'Direct rail journey'} · ${j.legs.map(l=>esc(displayLineName(l.line))).join(' / ')}</div></section><div class="toolbar"><span class="pill">${state.onboard?'● ON BOARD':state.paused?'MONITORING PAUSED':'● MONITORING'}</span><button id="refresh" class="secondary" type="button" ${state.checking?'disabled aria-busy="true"':''} aria-label="${state.checking?'Refreshing journey':'Refresh journey'}">${state.checking?'<span class="journey-button-loading"><span class="journey-spinner" aria-hidden="true"></span>Refreshing…</span>':'↻ Refresh'}</button><button id="pause" class="secondary">${state.paused?'Resume':'Pause'}</button><button id="${state.onboard?'abandon':'new'}" class="subtle">${state.onboard?'Abandon trip':'New journey'}</button></div>${state.alert?`<div class="alarm" role="alert">● ${esc(state.alert)}</div>`:''}${serviceUpdate(j)}${serviceDetails(j)}${message(state.message,true)}${optionChoices}${j.omittedNonRail?message(`TfNSW suggested a mixed-mode journey. Non-rail legs are omitted from this display.${j.railStart&&!j.railStartsAtOrigin?` The rail portion begins at ${esc(j.railStart.name)}.`:''} Rail stops and map geometry show trains and metro only.`):''}<section class="panel"><div class="statusrow"><div><div class="eyebrow">REMAINING</div><div class="bigstatus">${p.remaining} <small>${j.omittedNonRail&&!j.railStartsAtOrigin?'rail ':''}stop${p.remaining===1?'':'s'} ${j.omittedNonRail&&!j.railStartsAtOrigin?'shown to destination':'to destination'}</small></div>${crowdingSummary(j)}${carriageCrowding(j)}${crowdingUnavailable(j)}${p.toChange!==null?`<div class="stateline" style="color:#ae5d2a;font-weight:720">${p.toChange} stop${p.toChange===1?'':'s'} to change · ${p.remaining} to ${esc(j.destination.name)}</div>`:''}</div><div class="muted ${state.checking?'checking':''}">${state.checking?'Refreshing selected service…':state.enriching?'Checking live service details…':`Last checked ${latest}`}</div></div><div class="divider"></div><div class="layout"><section><div class="eyebrow">STATIONS AHEAD</div><ol class="route">${stationItems}</ol></section><div class="sidecards"><section class="tinycard"><div class="eyebrow">YOUR ROUTE</div>${mapMarkup(j,p)}<div class="muted" style="margin-top:10px">${state.location?'Orange dot marks your location.':'Allow location access to see your position.'} ${j.legs.some(l=>!l.path.length)?'Some segments use station coordinates where TfNSW geometry is missing.':''}</div></section></div></div></section>${notificationReliabilityNotice()}${footer}</main>${state.offline?offline():''}`;document.getElementById('alert-reliability-notice')?.addEventListener('toggle',e=>{state.noticeExpanded=e.currentTarget.open;});document.getElementById('refresh')?.addEventListener('click',()=>void refresh());document.getElementById('pause')?.addEventListener('click',()=>{state.paused=!state.paused;if(state.paused)stopTracking();else{startTracking();startPolling();}renderJourneyStable();});root.querySelectorAll('[data-accept-suggested]').forEach(button=>button.addEventListener('click',()=>acceptSuggestedConnection(Number(button.dataset.acceptSuggested))));root.querySelectorAll('[data-recover-leg]').forEach(button=>button.addEventListener('click',()=>{const leg=Number(button.dataset.recoverLeg);const station=state.journey?.legs?.[leg]?.origin?.name||'this interchange';if(window.confirm('Confirm missed connection at '+station+'?\n\nSelect OK to find another train and update your journey, or Cancel to keep your current journey.'))void recoverMissedConnection(leg);}));document.getElementById('board')?.addEventListener('click',()=>{state.boardingOptions=null;state.onboard=true;state.timetableStatus='not_checked';state.journey.boardedDepartureAnchor=state.journey.legs[0]?.departure||state.journey.legs[0]?.origin?.departure;saveActiveTrip();renderJourneyStable();});document.getElementById('different-train')?.addEventListener('click',()=>void confirmDifferentTrain());root.querySelectorAll('[data-board-option]').forEach(button=>button.addEventListener('click',()=>confirmBoardingOption(Number(button.dataset.boardOption))));document.getElementById('cancel-boarding-choices')?.addEventListener('click',()=>{state.boardingOptions=null;state.message='';renderJourneyStable();});document.getElementById('abandon')?.addEventListener('click',()=>{clearActiveTrip();stopTracking();journeyGeneration++;state.onboard=false;state.enriching=false;state.journey=null;state.message='';state.noRoute=false;state.alert='';state.origin=null;state.destination=null;state.activeField=null;state.searchResults=[];setup();});document.getElementById('new')?.addEventListener('click',()=>{clearActiveTrip();stopTracking();journeyGeneration++;state.onboard=false;state.enriching=false;state.journey=null;state.message='';state.noRoute=false;state.alert='';state.activeField=null;state.searchResults=[];setup();});}
 function offline(){return '<div class="offline" role="status">You’re offline. Showing the most recently loaded journey details.</div>';}
 window.addEventListener('online',()=>{state.offline=false;state.journey?void refresh():setup();});
 window.addEventListener('offline',()=>{state.offline=true;state.journey?renderJourney():setup();});
@@ -334,6 +376,7 @@ window.addEventListener('pageshow',()=>{if(state.journey&&!state.paused){startTr
 if('Notification' in window&&Notification.permission==='default'){document.addEventListener('click',e=>{if(e.target.id==='set')void Notification.requestPermission().catch(()=>{});},{capture:true});}
 const restoredTrip=loadActiveTrip();
 if(restoredTrip){
+  if(restoredTrip.crowding)restoredTrip.crowding=sanitizedSelectedCrowding(restoredTrip,restoredTrip.crowding);
   state.journey=restoredTrip;
   state.origin=restoredTrip.origin;
   state.destination=restoredTrip.destination;

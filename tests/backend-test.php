@@ -124,17 +124,53 @@ $transferCrowdingRoute=[
   ['id'=>'leg-b','mode'=>'metro','tripIds'=>['trip-b']]
  ]
 ];
-$combinedCrowding=journey_crowding_from_feeds($transferCrowdingRoute,['train'=>$trainUnknown,'metro'=>$metroKnown]);
+$combinedCrowding=journey_crowding_from_feeds($transferCrowdingRoute,['train'=>$trainUnknown,'metro'=>$metroKnown],1760000002);
 assertit($combinedCrowding['available']===true,'known crowding on one transfer leg makes journey crowding available');
 assertit($combinedCrowding['level']==='busy','journey crowding uses the busiest known leg');
 assertit($combinedCrowding['legs'][0]['vehicleMatched']===true&&$combinedCrowding['legs'][0]['level']==='unknown','matched vehicle with unknown occupancy stays unknown');
 assertit($combinedCrowding['legs'][1]['vehicleMatched']===true&&$combinedCrowding['legs'][1]['level']==='busy','known Metro occupancy is retained on transfer leg');
 
-$unknownOnly=journey_crowding_from_feeds(['legs'=>[['id'=>'leg-a','mode'=>'train','tripIds'=>['trip-a']]]],['train'=>$trainUnknown]);
+$unknownOnly=journey_crowding_from_feeds(['legs'=>[['id'=>'leg-a','mode'=>'train','tripIds'=>['trip-a']]]],['train'=>$trainUnknown],1760000002);
 assertit($unknownOnly['available']===false&&$unknownOnly['level']==='unknown','matched vehicle without occupancy does not claim crowding is available');
 
 $mismatch=journey_crowding_from_feeds(['legs'=>[['id'=>'leg-x','mode'=>'train','tripIds'=>['missing-trip']]]],['train'=>$trainUnknown]);
 assertit($mismatch['available']===false&&$mismatch['legs'][0]['vehicleMatched']===false,'trip-id mismatch fails open without crowding data');
+
+// SSA-03: source timestamps and conflicting GTFS matches must not be shown as live occupancy.
+$timedRoute=['legs'=>[['id'=>'leg-s','mode'=>'train','tripIds'=>['TRIP-A','alias-trip']]]];
+$liveRecord=['tripId'=>'trip-a','vehicleId'=>'vehicle-a','level'=>'busy','timestamp'=>1760000100,'carriages'=>[
+ ['name'=>'A','position'=>1,'level'=>'busy']
+]];
+$freshCrowding=journey_crowding_from_feeds($timedRoute,['train'=>['trip-a'=>$liveRecord]],1760000150);
+assertit($freshCrowding['available']===true&&$freshCrowding['updatedAt']==='2025-10-09T08:55:00+00:00','SSA-03 displays only fresh exact-trip crowding with source timestamp');
+$staleCrowding=journey_crowding_from_feeds($timedRoute,['train'=>['trip-a'=>$liveRecord]],1760000500);
+assertit($staleCrowding['available']===false&&$staleCrowding['updatedAt']===null&&
+ $staleCrowding['legs'][0]['vehicleMatched']===false&&$staleCrowding['legs'][0]['carriages']===[],
+ 'SSA-03 old vehicle observation never displays stale crowding');
+$futureCrowding=journey_crowding_from_feeds($timedRoute,['train'=>['trip-a'=>array_merge($liveRecord,['timestamp'=>1760000800])]],1760000150);
+assertit($futureCrowding['available']===false,'SSA-03 rejects implausible future vehicle timestamps');
+$noTimestamp=journey_crowding_from_feeds($timedRoute,['train'=>['trip-a'=>array_merge($liveRecord,['timestamp'=>0])]],1760000150);
+assertit($noTimestamp['available']===false,'SSA-03 missing TfNSW observation timestamp never becomes now');
+$conflictingFeeds=journey_crowding_from_feeds($timedRoute,['train'=>[
+ 'trip-a'=>$liveRecord,'alias-trip'=>array_merge($liveRecord,['vehicleId'=>'unrelated-vehicle'])
+]],1760000150);
+assertit($conflictingFeeds['available']===false&&$conflictingFeeds['legs'][0]['availability']==='ambiguous',
+ 'SSA-03 multiple exact IDs resolving to different physical vehicles fail safely');
+$sameVehicle=journey_crowding_from_feeds($timedRoute,['train'=>[
+ 'trip-a'=>$liveRecord,'alias-trip'=>array_merge($liveRecord,['timestamp'=>1760000120])
+]],1760000150);
+assertit($sameVehicle['available']===true&&$sameVehicle['legs'][0]['vehicleId']==='vehicle-a',
+ 'SSA-03 alternate exact IDs may agree only when tied to same physical vehicle');
+$anotherTrip=journey_crowding_from_feeds(['legs'=>[['id'=>'leg-s','mode'=>'train','tripIds'=>['another']]]],
+ ['train'=>['trip-a'=>$liveRecord]],1760000150);
+assertit($anotherTrip['available']===false,'SSA-03 shared line and departure never substitute a different trip ID');
+$duplicateVehicle=test_pb_msg(1,$tripMsg).test_pb_int(5,1760000000).test_pb_msg(8,test_pb_string(1,'train-other')).test_pb_int(9,3);
+$duplicateEnvelope=test_pb_msg(2,$entityMsg).test_pb_msg(2,test_pb_string(1,'entity-2').test_pb_msg(4,$duplicateVehicle));
+$duplicateDecoded=parse_vehicle_positions_feed($duplicateEnvelope);
+assertit(!empty($duplicateDecoded['3001.nsw-2-t4.1.ta.1432.sj2']['ambiguous'])&&
+ ($duplicateDecoded['3001.nsw-2-t4.1.ta.1432.sj2']['level']??null)==='unknown',
+ 'SSA-03 duplicate vehicle entities with same trip and timestamp are conservatively ambiguous');
+
 
 
 $routeWithKnownTransfer=[
@@ -338,3 +374,56 @@ $cacheDir=upstream_cache_directory();
 assertit($cacheDir===sys_get_temp_dir().'/sydney_station_alert_'.substr(hash('sha256',dirname(__DIR__).'/api/lib'),0,8),'Shared cache directory retains original path');
 assertit(is_dir($cacheDir),'Shared cache directory exists');
 assertit($cacheDir===upstream_cache_directory(),'Shared cache directory is stable across calls');
+
+// SSA-01: a commuter's saved trip IDs and station sequence are mandatory for
+// matching a timetable. Never substitute services by line or departure time.
+$boardedCandidate=[
+ 'legs'=>[[
+  'mode'=>'train','tripIds'=>['realtime-trip-77','train-77'],
+  'origin'=>['id'=>'100'],'destination'=>['id'=>'200'],
+  'stops'=>[['id'=>'100'],['id'=>'150'],['id'=>'200']],
+  'departure'=>'2026-10-11T10:06:00+11:00'
+ ]]
+];
+$boardedSelected=[
+ 'anchor'=>'2026-10-11T10:00:00+11:00',
+ 'legs'=>[[
+  'mode'=>'train','tripIds'=>['REALTIME-TRIP-77'],
+  'originId'=>'100','destinationId'=>'200','stopIds'=>['100','150','200']
+ ]]
+];
+assertit(boarded_timetable_matches($boardedSelected,$boardedCandidate),'SSA-01 accepts exact ID-matched selected train and same stopping sequence');
+$otherTrain=$boardedCandidate;$otherTrain['legs'][0]['tripIds']=['different-train'];
+assertit(!boarded_timetable_matches($boardedSelected,$otherTrain),'SSA-01 rejects next departure with different train IDs');
+$missingId=$boardedSelected;$missingId['legs'][0]['tripIds']=[];
+assertit(!boarded_timetable_matches($missingId,$boardedCandidate),'SSA-01 rejects time-only matching');
+$changedStops=$boardedCandidate;$changedStops['legs'][0]['stops'][1]['id']='151';
+assertit(!boarded_timetable_matches($boardedSelected,$changedStops),'SSA-01 rejects changed stop sequence');
+$changedOrigin=$boardedCandidate;$changedOrigin['legs'][0]['origin']['id']='999';
+assertit(!boarded_timetable_matches($boardedSelected,$changedOrigin),'SSA-01 rejects unrelated boarding station');
+$lateTrain=$boardedCandidate;$lateTrain['legs'][0]['departure']='2026-10-11T13:00:00+11:00';
+assertit(!boarded_timetable_matches($boardedSelected,$lateTrain),'SSA-01 rejects implausible same-trip delayed departure');
+$extraLeg=$boardedCandidate;$extraLeg['legs'][]=$boardedCandidate['legs'][0];
+assertit(!boarded_timetable_matches($boardedSelected,$extraLeg),'SSA-01 does not silently alter interchange legs');
+assertit(boarded_timetable_find($boardedSelected,[],['id'=>'100'],['id'=>'200'])===null,'SSA-01 no provider data yields unavailable, not a guessed replacement');
+
+$estimatedRaw=['id'=>'100','name'=>'Origin','coord'=>[151.1,-33.9],
+ 'departureTimePlanned'=>'2026-10-11T10:00:00+11:00',
+ 'departureTimeEstimated'=>'2026-10-11T10:06:00+11:00'];
+$estimatedStop=stop($estimatedRaw,'train');
+assertit(($estimatedStop['plannedDeparture']??null)==='2026-10-11T10:00:00+11:00',
+ 'SSA-01 preserves provider planned timestamp for estimated-delay calculation');
+assertit(($estimatedStop['departure']??null)==='2026-10-11T10:06:00+11:00',
+ 'SSA-01 uses provider estimated timetable timestamp when available');
+
+// SSA-02: independently normalized rail options must be catchable, not merely
+// the next itinerary from "now". Fixtures never contact TfNSW.
+$onwardFixture=json_decode(file_get_contents(__DIR__.'/fixtures/success.json'),true);
+$onwardStart=strtotime('2026-10-07T14:20:00+11:00');
+$foundOnward=safe_onward_options([$onwardFixture],$origin,$dest,$onwardStart-60,$onwardStart+1800);
+assertit(count($foundOnward)===1&&route_departure_ts($foundOnward[0])===$onwardStart,'SSA-02 selects a verified same-day train after achievable interchange arrival');
+assertit(safe_onward_options([$onwardFixture],$origin,$dest,$onwardStart+60,$onwardStart+3600)===[],'SSA-02 excludes a train already departed by the time a delayed commuter arrives');
+assertit(safe_onward_options([$onwardFixture],$origin,$dest,$onwardStart-3600,$onwardStart-60)===[],'SSA-02 excludes rail journeys outside the bounded forward window');
+$mixedOnward=json_decode(file_get_contents(__DIR__.'/fixtures/mixed.json'),true);
+assertit(safe_onward_options([$mixedOnward],$origin,$dest,$onwardStart-3600,$onwardStart+3600)===[],'SSA-02 will not turn a bus-containing route into an onward train');
+assertit(safe_onward_options([],$origin,$dest,$onwardStart,$onwardStart+3600)===[],'SSA-02 empty provider result retains original connection');

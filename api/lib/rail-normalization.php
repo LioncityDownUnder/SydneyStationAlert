@@ -76,7 +76,7 @@ function stop(mixed $raw,?string $transportMode=null):?array{
  $props=val($raw,'properties',[]);
  $platform=platform_from_name($raw);
  if(!$platform)$platform=normalize_platform(val($props,'platform',val($raw,'platform')));
- return $s+['platform'=>$platform,'arrival'=>val($raw,'arrivalTimeEstimated',val($raw,'arrivalTimePlanned')),'departure'=>val($raw,'departureTimeEstimated',val($raw,'departureTimePlanned'))];
+ return $s+['platform'=>$platform,'arrival'=>val($raw,'arrivalTimeEstimated',val($raw,'arrivalTimePlanned')),'departure'=>val($raw,'departureTimeEstimated',val($raw,'departureTimePlanned')),'plannedArrival'=>val($raw,'arrivalTimePlanned'),'plannedDeparture'=>val($raw,'departureTimePlanned')];
 }
 function parse_path(mixed $raw):array{
  $path=val($raw,'pathCoordinates',val($raw,'coords',val($raw,'coordinates',[])));
@@ -123,13 +123,15 @@ function sequence_stop(mixed $raw,?string $transportMode=null):?array{
  $arrival=val($raw,'arrivalTimeEstimated',val($raw,'arrivalTimePlanned',$s['arrival']??null));
  $departure=val($raw,'departureTimeEstimated',val($raw,'departureTimePlanned',$s['departure']??null));
  $s['arrival']=$arrival;$s['departure']=$departure;
+ $s['plannedArrival']=val($raw,'arrivalTimePlanned',$s['plannedArrival']??null);
+ $s['plannedDeparture']=val($raw,'departureTimePlanned',$s['plannedDeparture']??null);
  return $s;
 }
 function append_unique_station(array &$list,array $station):void{
  if(!$list){$list[]=$station;return;}
  $last=$list[count($list)-1];
  if(same_station($last,$station)){
-  foreach(['platform','arrival','departure'] as $k){if(empty($last[$k])&&!empty($station[$k]))$last[$k]=$station[$k];}
+  foreach(['platform','arrival','departure','plannedArrival','plannedDeparture'] as $k){if(empty($last[$k])&&!empty($station[$k]))$last[$k]=$station[$k];}
   $list[count($list)-1]=$last;return;
  }
  $list[]=$station;
@@ -138,10 +140,10 @@ function leg_stop_sequence(array $leg,string $transportMode,array $originStop,ar
  $sequence=val($leg,'stopSequence',[]);$stops=[];
  if(is_array($sequence)){foreach($sequence as $raw){$s=sequence_stop($raw,$transportMode);if($s)append_unique_station($stops,$s);}}
  if(!$stops||!same_station($stops[0],$originStop))array_unshift($stops,$originStop);
- else {foreach(['platform','departure'] as $k){if(empty($stops[0][$k])&&!empty($originStop[$k]))$stops[0][$k]=$originStop[$k];}}
+ else {foreach(['platform','departure','plannedDeparture'] as $k){if(empty($stops[0][$k])&&!empty($originStop[$k]))$stops[0][$k]=$originStop[$k];}}
  $last=$stops[count($stops)-1];
  if(!same_station($last,$destStop))$stops[]=$destStop;
- else {foreach(['platform','arrival'] as $k){if(empty($last[$k])&&!empty($destStop[$k]))$last[$k]=$destStop[$k];}$stops[count($stops)-1]=$last;}
+ else {foreach(['platform','arrival','plannedArrival'] as $k){if(empty($last[$k])&&!empty($destStop[$k]))$last[$k]=$destStop[$k];}$stops[count($stops)-1]=$last;}
  return $stops;
 }
 function transportation_trip_ids(array $transport):array{
