@@ -51,3 +51,10 @@ export const getBoardedTimetable = journey => get('boarded-timetable', {
     fromName: journey.origin.name, toName: journey.destination.name,
     selected: JSON.stringify(selectedTimetableRequest(journey))
 }, undefined, 35000);
+
+// Search only rail itineraries leaving AFTER the commuter can reach the interchange.
+export const getOnwardOptions = (transfer, destination, notBefore) => get('onward-options', {
+    from: transfer.id, to: destination.id,
+    fromName: transfer.name, toName: destination.name,
+    notBefore: new Date(notBefore).toISOString()
+}, undefined, 35000);
