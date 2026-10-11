@@ -59,6 +59,12 @@ function test_pb_int(int $field,int $value):string{return test_pb_varint(($field
 function test_pb_msg(int $field,string $value):string{return test_pb_varint(($field<<3)|2).test_pb_varint(strlen($value)).$value;}
 function test_pb_string(int $field,string $value):string{return test_pb_msg($field,$value);}
 
+$crowdingModule=realpath(__DIR__.'/../api/lib/gtfs-crowding.php');
+assertit($crowdingModule!==false,'GTFS vehicle parser module exists');
+foreach(['pb_fields','parse_vehicle_positions_feed','journey_crowding_from_feeds','journey_crowding_status'] as $fn){
+ assertit(realpath((string)(new ReflectionFunction($fn))->getFileName())===$crowdingModule,"$fn loads from GTFS crowding module");
+}
+assertit(parse_vehicle_positions_feed('')===[],'Empty binary vehicle feed has no inferred train locations');
 $tripMsg=test_pb_string(1,'3001.nsw-2-T4.1.TA.1432.sj2');
 $vehicleDescriptor=test_pb_string(1,'train-123');
 $carriage1=test_pb_string(1,'D1234').test_pb_int(2,1).test_pb_int(3,1).test_pb_int(4,1).test_pb_int(5,2).test_pb_int(6,1);
