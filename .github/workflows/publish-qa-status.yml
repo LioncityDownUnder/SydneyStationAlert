@@ -1,0 +1,91 @@
+name: Publish QA Staging Deployment Status
+
+on:
+  workflow_run:
+    workflows: ["Deploy QA Staging"]
+    types: [completed]
+  push:
+    branches: [main]
+    paths: ['.github/workflows/publish-qa-status.yml']
+  schedule:
+    - cron: '23 * * * *'
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  issues: write
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Read latest QA run and publish status to issue 12
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const issue_number = 12;
+            let run = context.eventName === 'workflow_run'
+              ? context.payload.workflow_run
+              : null;
+            if (!run) {
+              const response = await github.rest.actions.listWorkflowRuns({
+                owner, repo, workflow_id: 'deploy-qa.yml',
+                branch: 'develop', status: 'completed', per_page: 5
+              });
+              run = response.data.workflow_runs[0];
+            }
+            if (!run || run.status !== 'completed') {
+              core.info('No completed QA run to report.');
+              return;
+            }
+            if (run.head_branch !== 'develop') {
+              core.info('Skipping non-QA branch run.');
+              return;
+            }
+            const marker = `<!-- qa-run:${run.id}:attempt:${run.run_attempt} -->`;
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner, repo, issue_number, per_page: 100
+            });
+            if (comments.some(c => (c.body || '').includes(marker))) {
+              core.info('Run already published.');
+              return;
+            }
+            const jobs = await github.paginate(github.rest.actions.listJobsForWorkflowRun, {
+              owner, repo, run_id: run.id, per_page: 100
+            });
+            const bad = jobs.filter(j => j.conclusion !== 'success' && j.conclusion !== 'skipped');
+            const failures = bad.map(j => {
+              const steps = (j.steps || []).filter(s =>
+                s.conclusion === 'failure' || s.conclusion === 'cancelled' || s.conclusion === 'timed_out'
+              ).map(s => s.name).slice(0, 8);
+              const clean = value => String(value || '').replace(/[\r\n|]/g, ' ').slice(0, 150);
+              return `- **${clean(j.name)}**: ${clean(j.conclusion)}${steps.length ? ' — '+steps.map(clean).join(', ') : ''}`;
+            }).slice(0, 12);
+            const success = run.conclusion === 'success' &&
+              jobs.some(j => j.name === 'deploy-qa' && j.conclusion === 'success' &&
+              jobs.some(j => j.name === 'verify-qa-browser' && j.conclusion === 'success') &&
+              jobs.some(j => j.name === 'verify-qa-endpoints' && j.conclusion === 'success'));
+            const outcome = success ? 'PASS' : 'FAIL';
+            const body = [
+              marker,
+              `### QA staging deployment: ${outcome}`,
+              `- Commit: \`${run.head_sha}\``,
+              `- Workflow conclusion: \`${run.conclusion || 'unknown'}\``,
+              `- Completed: ${run.updated_at || 'unknown'}`,
+              `- Run: ${run.html_url}`,
+              `- Run ID: ${run.id} (attempt ${run.run_attempt})`,
+              success
+                ? '- Result: QA deploy, browser smoke, and endpoint verification jobs all passed.'
+                : '- Result: QA deployment is not verified. Review failed jobs below.',
+              ...failures
+            ].join('\n');
+            await github.rest.issues.createComment({
+              owner, repo, issue_number, body
+            });
+            core.summary.addHeading(`QA staging deployment: ${outcome}`);
+            await core.summary.addRaw(body).write();
+            if (!success) core.warning('QA staging deployment did not pass; see issue #12.');
