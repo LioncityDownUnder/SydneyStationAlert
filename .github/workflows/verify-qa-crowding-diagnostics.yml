@@ -1,0 +1,27 @@
+name: Verify QA Crowding Diagnostics
+
+on:
+  push:
+    branches: [diagnostics/qa-crowding-feed-match]
+  pull_request:
+    branches: [develop]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: npm install --no-save typescript@5.9.3
+      - name: Frontend and regression checks
+        run: npm run check
+      - name: PHP syntax and backend fixtures
+        run: |
+          find api -name '*.php' -print0 | xargs -0 -n1 php -l
+          php tests/backend-test.php

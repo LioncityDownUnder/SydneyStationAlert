@@ -342,7 +342,7 @@ test('QA crowding fetch does not repeat the four-hour journey search',()=>{
  assert.match(client,/tripIds: \(leg\.tripIds \|\| \[\]\)\.slice\(0,8\)/);
  assert.match(server,/if\(\$action==='crowding'\)/);
  assert.match(server,/count\(\$legs\)>6/);
- assert.match(server,/journey_crowding_status\(\['legs'=>\$normalized\]\)/);
+ assert.match(server,/journey_crowding_status\(\['legs'=>\$normalized\],\$qaCrowdingDiagnostic\)/);
  assert.match(ui,/void refreshCrowding\(generation\)/);
  assert.match(ui,/void refreshCrowding\(journeyGeneration\)/);
  assert.match(ui,/selectedCrowdingIdentity\(state\.journey\)!==identity/);
@@ -361,4 +361,18 @@ test('QA selected-service crowding does not change confirmed boarding',()=>{
  assert.match(segment,/generation!==journeyGeneration/);
  assert.match(segment,/serial!==crowdingRequestSerial/);
  assert.match(segment,/if\(state\.onboard\)saveActiveTrip\(\)/);
+});
+
+test('QA crowding diagnostics are privacy-safe and disabled outside staging',()=>{
+ const backend=fs.readFileSync('api/index.php','utf8');
+ const core=fs.readFileSync('api/lib/core.php','utf8');
+ const main=fs.readFileSync('src/main.ts','utf8');
+ assert.match(backend,/\$qaCrowdingDiagnostic=str_contains\(\(string\)\(\$_SERVER\['SCRIPT_NAME'\]\?\?''\),'\/qatest\/api\/'\)/);
+ assert.match(backend,/journey_crowding_status\(\['legs'=>\$normalized\],\$qaCrowdingDiagnostic\)/);
+ assert.match(core,/function crowding_match_diagnostics\(/);
+ assert.match(core,/if\(\$includeDiagnostics\)\$result\['diagnostics'\]/);
+ assert.match(main,/if\(!isQaEnvironment\|\|!Array\.isArray\(j\?\.crowding\?\.diagnostics\)\)return ''/);
+ assert.match(main,/QA crowding diagnostics/);
+ assert.match(main,/selected IDs:/);
+ assert.doesNotMatch(main,/d\.tripId\}/);
 });
