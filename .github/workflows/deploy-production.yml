@@ -34,6 +34,20 @@ jobs:
       - name: PHP fixture tests
         run: php tests/backend-test.php
 
+      - name: Remove QA-only administrative files from production artifact
+        run: |
+          rm -f dist/api/gtfs-update.php dist/api/gtfs-index.php
+          test ! -e dist/api/gtfs-update.php
+          test ! -e dist/api/gtfs-index.php
+          test -f dist/api/lib/qa_route_rejections.php
+          test ! -e dist/api/diagnostics.php
+          test ! -e dist/diagnostics.html
+
+      - name: Stamp release commit into deployment artifact
+        run: |
+          printf '{"commit":"%s"}\n' "$GITHUB_SHA" > dist/release.json
+          test -s dist/release.json
+
       - name: Upload production build
         uses: actions/upload-artifact@v4
         with:
@@ -100,6 +114,7 @@ jobs:
           NAMECHEAP_DEPLOY_PATH: ${{ secrets.NAMECHEAP_DEPLOY_PATH }}
         run: |
           sshpass -e rsync -az --delete \
+            --exclude='/qatest/' \
             --exclude='api/config.local.php' \
             --exclude='api/cache/' \
             --exclude='*.log' \
@@ -107,7 +122,35 @@ jobs:
             dist/ \
             "$NAMECHEAP_USERNAME@$NAMECHEAP_HOST:$NAMECHEAP_DEPLOY_PATH/"
 
-      - name: Verify production health
+      - name: Verify deployed commit and production health
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
         run: |
-          curl --fail --silent --show-error --retry 3 --retry-delay 3 \
-            "https://trains.nytnetwork.work/api/index.php?action=health"
+          set -euo pipefail
+          base="https://trains.nytnetwork.work"
+          curl -fsS --retry 4 --retry-delay 4 --max-time 25 "$base/release.json" -o /tmp/production-release.json
+          jq -e --arg sha "$EXPECTED_SHA" '.commit == $sha' /tmp/production-release.json
+          curl -fsS --retry 3 --retry-delay 3 --max-time 25 "$base/api/index.php?action=health" -o /tmp/production-health.json
+          jq -e '.data.ok == true and .data.configured == true' /tmp/production-health.json
+          curl -fsS --retry 3 --retry-delay 3 --max-time 25 "$base/" -o /tmp/production-index.html
+          grep -F 'Sydney Station Alert' /tmp/production-index.html
+          curl -fsS --retry 3 --retry-delay 3 --max-time 25 "$base/assets/main.js" -o /tmp/production-main.js
+          test -s /tmp/production-main.js
+          curl -fsS --retry 3 --retry-delay 3 --max-time 25 "$base/api/index.php?action=stations&q=Parramatta" -o /tmp/production-stations.json
+          jq -e '.data | type == "array"' /tmp/production-stations.json
+          {
+            echo "### Production smoke checks passed"
+            echo "- Deployed commit matches $EXPECTED_SHA"
+            echo "- API configured and healthy"
+            echo "- Website, application bundle and station lookup available"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Verify QA staging survived production deployment
+        run: |
+          set -euo pipefail
+          qa="https://trains.nytnetwork.work/qatest"
+          curl -fsS --retry 3 --retry-delay 3 --max-time 25 "$qa/" -o /tmp/qa-index.html
+          grep -F 'Sydney Station Alert' /tmp/qa-index.html
+          curl -fsS --retry 3 --retry-delay 3 --max-time 25 "$qa/api/index.php?action=health" -o /tmp/qa-health.json
+          jq -e '.data.ok == true and .data.configured == true' /tmp/qa-health.json
+          echo "- QA site and API remained accessible" >> "$GITHUB_STEP_SUMMARY"

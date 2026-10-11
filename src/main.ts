@@ -16,7 +16,7 @@ let qaRecoveryTimer=null;
 let qaRecoverySearching=false;
 let qaRecoveredJourneyAvailable=false;
 const isQaEnvironment = /^\/qatest(?:\/|$)/.test(window.location.pathname);
-const qaRailPilot = isQaEnvironment;
+const qaRailPilot = true; // Released rail-only search, service identity and alternative boarding on both sites.
 const STATION_CACHE_KEY = isQaEnvironment ? 'sydstnalert:qa:stations:v1' : 'sydney-station-alert:stations:v1';
 const ACTIVE_TRIP_KEY = isQaEnvironment ? 'sydstnalert:qa:active-trip:v1' : 'sydney-station-alert:active-trip:v1';
 function activeTripExpiry(j){const arrival=j?.legs?.[j.legs.length-1]?.arrival;const ts=arrival?+new Date(arrival):NaN;return Number.isFinite(ts)?ts+4*60*60*1000:Date.now()+8*60*60*1000;}
@@ -141,7 +141,7 @@ function startQaRecoveryWatch(){
   }catch{}finally{qaRecoverySearching=false;}
  },180000);
 }
-function routeUnavailableMessage(text){const limited=isQaEnvironment&&state.noRouteLimited;const compact=qaRailPilot&&state.noRoute&&!limited;return text?`<section class="no-service" role="alert" aria-live="assertive"><div class="eyebrow">${limited?'SEARCH TIME LIMIT REACHED':'JOURNEY NOT FOUND'}</div><strong>${compact?'No train-only journey verified within the next 4 hours.':esc(text)}</strong>${compact?'':`<p>${limited?'We could not finish checking all possible trains. This does not confirm service cancellation. Check TfNSW Trip Planner for current options, or retry.':'We could not verify a train-only journey. This does not mean all trains are cancelled. Try searching again or choose a different destination.'}</p>`}${qaRailPilotTravelLinks()}${qaRecoveredJourneyAvailable&&compact?'<div class="notice" role="status"><strong>A train-only journey may now be available.</strong> <button type="button" id="qa-recheck-available" class="secondary">Search again to confirm</button></div>':''}${isQaEnvironment?qaNoRouteAlertDetails():''}${isQaEnvironment?'<button type="button" id="retry-no-route" class="secondary">Retry journey search</button>':''}</section>`:'';}
+function routeUnavailableMessage(text){const limited=state.noRouteLimited;const compact=qaRailPilot&&state.noRoute&&!limited;return text?`<section class="no-service" role="alert" aria-live="assertive"><div class="eyebrow">${limited?'SEARCH TIME LIMIT REACHED':'JOURNEY NOT FOUND'}</div><strong>${compact?'No train-only journey verified within the next 4 hours.':esc(text)}</strong>${compact?'':`<p>${limited?'We could not finish checking all possible trains. This does not confirm service cancellation. Check TfNSW Trip Planner for current options, or retry.':'We could not verify a train-only journey. This does not mean all trains are cancelled. Try searching again or choose a different destination.'}</p>`}${qaRailPilotTravelLinks()}${qaRecoveredJourneyAvailable&&compact?'<div class="notice" role="status"><strong>A train-only journey may now be available.</strong> <button type="button" id="qa-recheck-available" class="secondary">Search again to confirm</button></div>':''}${isQaEnvironment?qaNoRouteAlertDetails():''}${isQaEnvironment?'<button type="button" id="retry-no-route" class="secondary">Retry journey search</button>':''}</section>`:'';}
 function highlightName(name,query){const i=name.toLocaleLowerCase().indexOf(query.toLocaleLowerCase());if(!query||i<0)return esc(name);return `${esc(name.slice(0,i))}<mark>${esc(name.slice(i,i+query.length))}</mark>${esc(name.slice(i+query.length))}`;}
 function optionMarkup(s,i){return `<button id="station-option-${i}" role="option" aria-selected="${state.highlightedIndex===i}" type="button" data-pick="${i}"><span>${highlightName(s.name,state.searchQuery)}</span><small>${s.mode==='metro'?'Sydney Metro':'Sydney Trains'}</small></button>`;}
 function stationField(field,label,placeholder){const chosen=state[field];if(chosen)return `<div class="field selected-field"><span class="fieldlabel">${esc(label)}</span><div class="selected-station"><div class="selected-copy"><strong>${esc(chosen.name)}</strong><span>${chosen.mode==='metro'?'Sydney Metro':'Sydney Trains'}</span></div><button type="button" class="change-station" id="edit-${field}" aria-label="Change ${esc(label.toLowerCase())}">Change</button></div></div>`;const open=state.activeField===field;const activeDesc=open&&state.highlightedIndex>=0?` aria-activedescendant="station-option-${state.highlightedIndex}"`:'';return `<div class="field"><label for="${field}">${label}</label><div class="input-shell"><input id="${field}" type="search" role="combobox" aria-autocomplete="list" aria-haspopup="listbox" aria-expanded="${open}" aria-controls="options-${field}"${activeDesc} autocomplete="off" autocapitalize="words" spellcheck="false" placeholder="${placeholder}"/></div><div id="options-${field}" class="searchlist" role="listbox" aria-label="${esc(label)} suggestions" ${open?'':'hidden'}></div></div>`;}
@@ -169,8 +169,6 @@ function renderOptions(field){const box=document.getElementById(`options-${field
 function pickStation(field,index){const chosen=state.searchResults[index];if(!chosen)return;const other=field==='origin'?state.destination:state.origin;if(other?.id===chosen.id){state.message='Boarding and destination stations must be different.';state.noRoute=false;return setup();}state[field]=chosen;if(field==='origin'){state.manual=true;state.detected=false;}resetSearch();state.activeField=null;state.message='';state.noRoute=false;setup();}
 function syncButton(){const button=document.getElementById('set');if(button)button.disabled=!state.origin||!state.destination||state.origin.id===state.destination.id||state.busy;}
 async function locate(){state.locating=true;state.message='';state.noRoute=false;setup();if(!navigator.geolocation){state.locating=false;state.manual=true;state.message='Location is not available in this browser. Choose your boarding station manually.';return setup();}navigator.geolocation.getCurrentPosition(async p=>{try{state.location={lat:p.coords.latitude,lon:p.coords.longitude};const stations=await nearbyStations(state.location);const nearest=nearestStation(stations,state.location);state.locating=false;if(nearest){state.origin=nearest;state.detected=true;state.manual=false;state.message='';}else{state.manual=true;state.message='We could not find a supported train or metro station nearby. Choose your boarding station manually.';}}catch{state.locating=false;state.manual=true;state.message='We could not check nearby stations just now. You can still choose your boarding station manually.';}setup();},()=>{state.locating=false;state.manual=true;state.message='Location permission was not available. Choose your boarding station manually.';setup();},GEO.options);}
-function renderJourneyStable(){const x=window.scrollX,y=window.scrollY;renderJourney();requestAnimationFrame(()=>window.scrollTo(x,y));}
-// Match the currently selected service, not simply the latest journey search result.
 function selectedCrowdingIdentity(j){
  return JSON.stringify((j?.legs||[]).map(l=>[l.mode,l.origin?.id,l.destination?.id,l.departure,(l.tripIds||[]).map(String).sort()]));
 }
@@ -204,7 +202,7 @@ async function refresh(){
  // Immediately acknowledge the click; the old handler only rendered at completion.
  renderJourneyStable();
  try{
-  if(qaRailPilot&&state.onboard){
+  if(state.onboard){
    // A general origin-to-destination search finds the next departure, not
    // necessarily the train already boarded. Never use it to update that train.
    await refreshCrowding(generation);
@@ -359,7 +357,7 @@ function confirmBoardingOption(index){
  if(!Number.isFinite(departure)||departure>now+10*60000||departure<now-90*60000){state.message='That departure is outside the available boarding window. Search again.';state.boardingOptions=null;renderJourneyStable();return;}
  const first=candidate.legs[0];
  const detail=[first.line||'Rail service',datedTrainTime(first.departure||first.origin?.departure),first.origin?.name||candidate.origin?.name].join(' · ');
- if(!window.confirm('Did you board this exact train?\\n'+detail+'\\n\\nConfirm only if this is your service. Cancel keeps the original journey.'))return;
+ if(!window.confirm('Did you board this exact train?\n'+detail+'\n\nConfirm only if this is your service. Cancel keeps the original journey.'))return;
  // Explicit commuter selection is the only path that changes the monitored service.
  journeyGeneration++;state.journey=candidate;state.crowdingChecked=false;state.onboard=true;state.boardingOptions=null;state.alert='Different train confirmed by you. Monitoring this selected service.';state.message='';state.lastChecked=new Date();fired.clear();saveActiveTrip();checkAlerts();renderJourneyStable();void refreshCrowding(journeyGeneration);
 }
@@ -375,7 +373,6 @@ if('Notification' in window&&Notification.permission==='default'){document.addEv
 const restoredTrip=loadActiveTrip();
 if(restoredTrip){
   state.journey=restoredTrip;
-  state.crowdingChecked=false;
   state.origin=restoredTrip.origin;
   state.destination=restoredTrip.destination;
   state.onboard=true;

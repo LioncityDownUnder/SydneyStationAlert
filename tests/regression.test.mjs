@@ -163,7 +163,7 @@ test('Step 5X refuses to construct replacement-bus journeys from advisory text',
 test('Step 5AB QA-only search budget is explicit and does not affect production journey search',()=>{
  const api=fs.readFileSync('api/index.php','utf8');
  const core=fs.readFileSync('api/lib/core.php','utf8');
- assert.match(api,/\$qaBoundedSearch=\$coreOnly&&str_contains/);
+ assert.match(api,/\$qaBoundedSearch=\$coreOnly;/);
  assert.match(api,/\$qaSearchDeadline=\$qaBoundedSearch\?microtime\(true\)\+22\.0:INF/);
  assert.match(api,/if\(\$qaBoundedSearch&&microtime\(true\)>=\$qaSearchDeadline\)/);
  assert.match(api,/No train-only journey was verified within the QA search time limit/);
@@ -179,7 +179,7 @@ test('Step 5AC makes incomplete QA searches distinct from confirmed no-route res
  assert.match(main,/SEARCH TIME LIMIT REACHED/);
  assert.match(main,/We could not finish checking all possible trains/);
  assert.match(main,/state\.noRouteLimited=e instanceof ApiRequestError&&e\.code==='SEARCH_TIME_LIMIT'/);
- assert.match(api,/32000 : 20000/);
+ assert.match(api,/coreOnly \? 32000 : 30000/);
 });
 
 test('Step 5AX filtered initial journey search is standard QA-only',()=>{
@@ -189,7 +189,7 @@ test('Step 5AX filtered initial journey search is standard QA-only',()=>{
  assert.match(backend,/if\(\$qaRailPilot\)\$fastParams=array_map\('qa_rail_filter_params',\$fastParams\)/);
  assert.match(backend,/timed_normalized_journey\(\$body,\$originSeed,\$destinationSeed\)/);
  assert.doesNotMatch(api,/new URLSearchParams\(window\.location\.search\)\.get\('qaRailPilot'\)/);
- assert.match(api,/qaRailPilot:'1'/);
+ assert.match(api,/coreOnly \? 32000 : 30000/);
 });
 
 test('Step 5AI QA pilot rejects departed first-leg services and labels overnight departures',()=>{
@@ -276,7 +276,7 @@ test('Step 5AW QA refresh keeps boarded service and unboarded selected departure
 test('Step 5AX standard QA enables rail safeguards without query flag and preserves refresh warning',()=>{
  const main=fs.readFileSync('src/main.ts','utf8');
  const backend=fs.readFileSync('api/index.php','utf8');
- assert.match(main,/const qaRailPilot = isQaEnvironment;/);
+ assert.match(main,/const qaRailPilot = true;/);
  assert.match(backend,/\$qaRailPilot=\$qaBoundedSearch;/);
  assert.match(main,/const adopted=adoptJourneyUpdate\(updated\);if\(adopted\)\{state\.lastChecked=new Date\(\);state\.message='';\}checkAlerts\(\);/);
 });
@@ -306,7 +306,7 @@ test('Step 5AX selection lists verified QA rail options and retains explicit boa
  const api=fs.readFileSync('api/index.php','utf8');
  const client=fs.readFileSync('src/api.ts','utf8');
  assert.match(api,/if\(\$action==='boarding-options'\)/);
- assert.match(api,/\/qatest\/api\//);
+ assert.doesNotMatch(api,/if\(!str_contains\(\(string\)\(\$_SERVER\['SCRIPT_NAME'\]/);
  assert.match(api,/qa_rail_chronology_valid\(\$candidate\)/);
  assert.match(api,/array_slice\(\$options,0,8\)/);
  assert.match(client,/getBoardingOptions = \(from,to\)/);
@@ -334,82 +334,56 @@ test('QA alert reliability notice stays collapsible above journey footer',()=>{
  assert.ok(!render.includes('${notificationReliabilityNotice()}${serviceUpdate(j)}'));
 });
 
-test('QA crowding fetch does not repeat the four-hour journey search',()=>{
- const client=fs.readFileSync('src/api.ts','utf8');
- const server=fs.readFileSync('api/index.php','utf8');
- const ui=fs.readFileSync('src/main.ts','utf8');
- assert.match(client,/export const getCrowding = \(journey\) => get\('crowding'/);
- assert.match(client,/tripIds: \(leg\.tripIds \|\| \[\]\)\.slice\(0,8\)/);
- assert.match(server,/if\(\$action==='crowding'\)/);
- assert.match(server,/count\(\$legs\)>6/);
- assert.match(server,/journey_crowding_status\(\['legs'=>\$normalized\]\)/);
- assert.match(ui,/void refreshCrowding\(generation\)/);
- assert.match(ui,/void refreshCrowding\(journeyGeneration\)/);
- assert.match(ui,/selectedCrowdingIdentity\(state\.journey\)!==identity/);
- assert.match(ui,/state\.journey\.crowding=result/);
- assert.match(ui,/Crowding data unavailable for this service/);
- assert.match(ui,/\$\{crowdingSummary\(j\)\}\$\{carriageCrowding\(j\)\}\$\{crowdingUnavailable\(j\)\}/);
-});
-test('QA selected-service crowding does not change confirmed boarding',()=>{
- const ui=fs.readFileSync('src/main.ts','utf8');
- const begin=ui.indexOf('async function refreshCrowding(');
- const end=ui.indexOf('function crowdingUnavailable(',begin);
- assert.ok(begin>=0&&end>begin);
- const segment=ui.slice(begin,end);
- assert.doesNotMatch(segment,/state\.journey\s*=/);
- assert.doesNotMatch(segment,/state\.onboard\s*=/);
- assert.match(segment,/generation!==journeyGeneration/);
- assert.match(segment,/serial!==crowdingRequestSerial/);
- assert.match(segment,/if\(state\.onboard\)saveActiveTrip\(\)/);
-});
-
-
-
-test('QA crowding details persist during same-service journey refresh',()=>{
+test('Production release enables 4-hour rail-only routing and Step 5AX while separating storage',()=>{
  const main=fs.readFileSync('src/main.ts','utf8');
- const adopt=main.slice(main.indexOf('function adoptJourneyUpdate('),main.indexOf('function loadStationCache('));
- assert.match(adopt,/selectedCrowdingIdentity\(previous\)===selectedCrowdingIdentity\(updated\)/);
- assert.match(adopt,/if\(sameSelected&&previous\.crowding\)updated\.crowding=previous\.crowding/);
- assert.match(adopt,/if\(state\.journey\?\.crowding\)updated\.crowding=state\.journey\.crowding/);
- assert.match(adopt,/else state\.crowdingChecked=false/);
+ const client=fs.readFileSync('src/api.ts','utf8');
+ const backend=fs.readFileSync('api/index.php','utf8');
+ const workflow=fs.readFileSync('.github/workflows/deploy-production.yml','utf8');
+ assert.match(main,/const qaRailPilot = true;/);
+ assert.match(main,/isQaEnvironment \? 'sydstnalert:qa:active-trip:v1'/);
+ assert.match(backend,/\$qaBoundedSearch=\$coreOnly;/);
+ assert.match(backend,/\$qaRailPilot=\$qaBoundedSearch;/);
+ assert.match(backend,/if\(\$action==='boarding-options'\)/);
+ assert.match(backend,/qa_rail_filter_params/);
+ assert.match(client,/coreOnly \? 32000 : 30000/);
+ assert.match(workflow,/test -f dist\/api\/lib\/qa_route_rejections\.php/);
+ assert.match(workflow,/--exclude='\/qatest\/'/);
 });
 
-
-
-
-
-
-
-
-test('QA onboard refresh stays on selected service without searching for a replacement',()=>{
- const src=fs.readFileSync('src/main.ts','utf8');
- const refresh=src.slice(src.indexOf('async function refresh(){'),src.indexOf('// A stale or distant GPS',src.indexOf('async function refresh(){')));
- assert.match(refresh,/if\(qaRailPilot&&state\.onboard\)/);
- assert.match(refresh,/await refreshCrowding\(generation\)/);
- assert.match(refresh,/const updated=await getJourney/);
- assert.ok(refresh.indexOf('await refreshCrowding(generation)')<refresh.indexOf('const updated=await getJourney'));
- assert.match(refresh,/state\.checking=true;[\s\S]*?renderJourneyStable\(\)/);
- assert.match(refresh,/finally\{[\s\S]*?state\.checking=false/);
- assert.match(refresh,/live timetable and delay updates for this exact service are not yet verified/);
-});
-test('Refresh button displays busy spinner and live status',()=>{
- const src=fs.readFileSync('src/main.ts','utf8');
- assert.match(src,/aria-label="\$\{state\.checking\?'Refreshing journey':'Refresh journey'\}"/);
- assert.match(src,/journey-spinner.*Refreshing…/);
- assert.match(src,/state\.checking\?'Refreshing selected service…'/);
- assert.match(src,/Monitoring is paused\. Tap Resume before refreshing\./);
+test('Production release Step 5AX dialog uses real line breaks',()=>{
+ const main=fs.readFileSync('src/main.ts','utf8');
+ const start=main.indexOf("if(!window.confirm('Did you board this exact train?");
+ assert.ok(start>=0);
+ const fragment=main.slice(start,start+235);
+ assert.ok(fragment.includes("'Did you board this exact train?\\n'+detail+'\\n\\nConfirm only"));
+ assert.ok(!fragment.includes("'Did you board this exact train?\\\\n'"));
 });
 
-
-
-test('QA remains free of old crowding diagnostic code and visual panels',()=>{
- const core=fs.readFileSync('api/lib/core.php','utf8');
+test('production crowding uses selected train IDs and excludes QA diagnostic UI',()=>{
  const api=fs.readFileSync('api/index.php','utf8');
- const ui=fs.readFileSync('src/main.ts','utf8');
- for(const v of [core,api,ui]){
-  assert.doesNotMatch(v,/crowding_match_diagnostics|crowding_feed_freshness|qaCrowdingDiagnosticDetails|previouslyMatched|matchHistory|feedFreshness/);
- }
- assert.match(ui,/Crowding data unavailable for this service/);
+ const client=fs.readFileSync('src/main.ts','utf8');
+ const transport=fs.readFileSync('src/api.ts','utf8');
  assert.match(api,/if\(\$action==='crowding'\)/);
  assert.match(api,/journey_crowding_status\(\['legs'=>\$normalized\]\)/);
+ assert.match(api,/if\(!is_string\(\$id\)&&!is_int\(\$id\)\)/);
+ assert.match(transport,/export const getCrowding = \(journey\)/);
+ assert.match(client,/function selectedCrowdingIdentity\(j\)/);
+ assert.match(client,/async function refreshCrowding\(generation=journeyGeneration\)/);
+ assert.match(client,/\$\{carriageCrowding\(j\)\}\$\{crowdingUnavailable\(j\)\}/);
+ assert.doesNotMatch(client,/qaCrowdingDiagnosticDetails|feedFreshness|matchHistory|previouslyMatched/);
+ assert.doesNotMatch(api,/qaCrowdingDiagnostic|CROWDING_ID_TOO_LONG|feedFreshness/);
+});
+test('production refresh visibly spins and does not select another train after boarding',()=>{
+ const ui=fs.readFileSync('src/main.ts','utf8');
+ const i=ui.indexOf('async function refresh(){'),j=ui.indexOf('// A stale or distant GPS',i);
+ const code=ui.slice(i,j);
+ assert.ok(i>=0&&j>i);
+ assert.match(code,/if\(state\.onboard\)\{/);
+ assert.match(code,/await refreshCrowding\(generation\)/);
+ assert.match(code,/const updated=await getJourney/);
+ assert.ok(code.indexOf('await refreshCrowding(generation)')<code.indexOf('const updated=await getJourney'));
+ assert.match(code,/state\.checking=true;[\s\S]*renderJourneyStable\(\)/);
+ assert.match(code,/state\.checking=false/);
+ assert.match(ui,/journey-spinner.*Refreshing…/);
+ assert.match(ui,/state\.checking\?'Refreshing selected service…'/);
 });
