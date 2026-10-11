@@ -241,7 +241,7 @@ assertit(crowding_trip_id_valid('metro | 123 / 456'),'Crowding accepts printable
 assertit(crowding_trip_id_valid('M1:123#ABC@2030'),'Crowding accepts opaque punctuation in trip IDs');
 assertit(!crowding_trip_id_valid(''),'Crowding rejects empty trip ID');
 assertit(!crowding_trip_id_valid('   '),'Crowding rejects blank trip ID');
-assertit(!crowding_trip_id_valid("abc\\n123"),'Crowding rejects line breaks in trip IDs');
-assertit(!crowding_trip_id_valid("abc\\x00def"),'Crowding rejects null bytes in trip IDs');
+assertit(!crowding_trip_id_valid("abc\n123"),'Crowding rejects line breaks in trip IDs');
+assertit(!crowding_trip_id_valid("abc\x00def"),'Crowding rejects null bytes in trip IDs');
 assertit(!crowding_trip_id_valid(str_repeat('a',151)),'Crowding rejects oversized trip IDs');
 assertit(!crowding_trip_id_valid(123),'Crowding rejects non-string trip ID');
