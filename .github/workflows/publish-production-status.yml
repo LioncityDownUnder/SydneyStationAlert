@@ -82,5 +82,5 @@ jobs:
               owner, repo, issue_number, body
             });
             core.summary.addHeading(`Production deployment: ${outcome}`);
-            core.summary.addRaw(body).write();
+            await core.summary.addRaw(body).write();
             if (!success) core.warning('Production deployment did not pass; see issue #9.');
