@@ -7,6 +7,7 @@ import { optionMarkup as stationOptionMarkup, stationField as stationFieldMarkup
 import { renderServiceUpdate, renderServiceDetails } from './service-notice-markup.js';
 import { crowdingSummary, carriageCrowding } from './crowding-markup.js';
 import { saveConfirmedTrip, loadConfirmedTrip, clearConfirmedTrip } from './active-trip.js';
+import { sameService, firstDepartureTime } from './journey-service.js';
 const root = document.getElementById('app');
 const state = { origin: null, destination: null, detected: false, manual: false, locating: false, location: null, journey: null, onboard: false, paused: false, busy: false, checking: false, recoveringConnection: false, noticeExpanded: false, suggestedConnection: null, suggestingConnection: false, boardingOptions: null, lastSuggestionCheck: 0, enriching: false, crowdingChecked: false, message: '', alert: '', searchResults: [], activeField: null, searchLoading: false, searchQuery: '', searchError: '', highlightedIndex: -1, lastChecked: null, offline: !navigator.onLine, noRoute: false, noRouteAlerts: null, noRouteAlertsLoading: false };
 let queryController = null;
@@ -27,8 +28,6 @@ const ACTIVE_TRIP_KEY = isQaEnvironment ? 'sydstnalert:qa:active-trip:v1' : 'syd
 function saveActiveTrip(){if(!state.onboard||!state.journey)return;saveConfirmedTrip(localStorage,ACTIVE_TRIP_KEY,state.journey);}
 function clearActiveTrip(){clearConfirmedTrip(localStorage,ACTIVE_TRIP_KEY);}
 function loadActiveTrip(){return loadConfirmedTrip(localStorage,ACTIVE_TRIP_KEY);}
-function sameService(a,b){if(!a||!b||!Array.isArray(a.legs)||!Array.isArray(b.legs)||a.legs.length!==b.legs.length)return false;return a.legs.every((leg,i)=>{const other=b.legs[i];const ids=(leg.tripIds||[]).map(x=>String(x).toLowerCase());const otherIds=(other?.tripIds||[]).map(x=>String(x).toLowerCase());if(ids.length&&otherIds.length)return ids.some(id=>otherIds.includes(id));return leg.line===other?.line&&leg.origin?.id===other?.origin?.id&&leg.destination?.id===other?.destination?.id;});}
-function firstDepartureTime(j){return Date.parse(j?.legs?.[0]?.departure||j?.legs?.[0]?.origin?.departure||'');}
 function qaSameSelectedTrain(a,b){
  if(!qaRailPilot)return sameService(a,b);
  if(!a||!b||!Array.isArray(a.legs)||!Array.isArray(b.legs)||a.legs.length!==b.legs.length)return false;
