@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { selectedTimetableRequest } from './boarded-timetable.js';
 export class ApiRequestError extends Error {
     code;
     constructor(code, message) {
@@ -43,3 +44,10 @@ export const getCrowding = (journey) => get('crowding', {
         mode: leg.mode, tripIds: (leg.tripIds || []).slice(0,8)
     })).slice(0,6))
 }, undefined, 12000);
+
+// Only an explicitly identified boarded service can be checked. No next-train substitution.
+export const getBoardedTimetable = journey => get('boarded-timetable', {
+    from: journey.origin.id, to: journey.destination.id,
+    fromName: journey.origin.name, toName: journey.destination.name,
+    selected: JSON.stringify(selectedTimetableRequest(journey))
+}, undefined, 35000);

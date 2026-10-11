@@ -35,7 +35,7 @@ test('confirmed boarding only adopts updates for the same service',()=>{
  const main=fs.readFileSync('src/main.ts','utf8');
  assert.match(main,/function adoptJourneyUpdate\(updated\)/);
  assert.match(main,/if\(!qaSameSelectedTrain\(state\.journey,updated\)\)return false/);
- assert.match(main,/state\.onboard=true;saveActiveTrip\(\)/);
+ assert.match(main,/state\.onboard=true;state\.timetableStatus='not_checked';state\.journey\.boardedDepartureAnchor=[^;]+;saveActiveTrip\(\)/);
  assert.match(main,/const restoredTrip=loadActiveTrip\(\)/);
  assert.match(main,/clearActiveTrip\(\);stopTracking\(\)/);
 });
