@@ -804,6 +804,11 @@ function crowding_match_diagnostics(array $route,array $feeds):array{
  }
  return $rows;
 }
+// Transport's opaque identifiers can contain spaces, pipes or other printable
+// separators; validate size and control bytes, not an invented ID alphabet.
+function crowding_trip_id_valid(mixed $id):bool{
+ return is_string($id)&&strlen($id)<=150&&trim($id)!==''&&!preg_match('/[\\x00-\\x1F\\x7F]/',$id);
+}
 function journey_crowding_status(array $route,bool $includeDiagnostics=false):array{
  $modes=[];foreach(val($route,'legs',[]) as $leg){if(is_array($leg))$modes[(string)val($leg,'mode','')]=true;}
  $feeds=[];
