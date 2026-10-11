@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import {
   canCheckBoardedTimetable, selectedTimetableRequest,
   mergeVerifiedBoardedTimetable, estimatedStopDelayMinutes
@@ -89,7 +90,7 @@ test('SSA-01 only presents positive provider-estimated delays',()=>{
 });
 
 test('SSA-01 refresh never falls back to a next-train search when already boarded',()=>{
- const main = (await import('node:fs')).readFileSync('src/main.ts','utf8');
+ const main = fs.readFileSync('src/main.ts','utf8');
  const section=main.slice(main.indexOf('async function refresh(){'),
    main.indexOf('// A stale or distant GPS',main.indexOf('async function refresh(){')));
  assert.match(section,/if\(state\.onboard\)\{/);
@@ -97,5 +98,7 @@ test('SSA-01 refresh never falls back to a next-train search when already boarde
  assert.match(section,/mergeVerifiedBoardedTimetable\(selected,checked\.journey,checked\.checkedAt\)/);
  assert.match(section,/generation!==journeyGeneration\|\|state\.journey!==selected/);
  assert.match(section,/no alternative train was selected/);
- assert.ok(section.indexOf('const updated=await getJourney')>section.indexOf('}else{\n   const updated=await getJourney')-10);
+ const elseIndex=section.indexOf('}else{\n   const updated=await getJourney');
+ assert.ok(elseIndex>0);
+ assert.doesNotMatch(section.slice(0,elseIndex),/getJourney\(/);
 });
