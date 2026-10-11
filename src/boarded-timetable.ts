@@ -78,7 +78,7 @@ export function mergeVerifiedBoardedTimetable(
   if (!Number.isFinite(anchor) || !Number.isFinite(changed) ||
       Math.abs(changed - anchor) > 2 * 3600 * 1000) return null;
   for (let i = 0; i < current.legs.length; i++) {
-    const before = current.legs[i], after = candidate.legs[i];
+    const before = current.legs[i]!, after = candidate.legs[i];
     if (!after || before.mode !== after.mode ||
         id(before.origin.id) !== id(after.origin.id) ||
         id(before.destination.id) !== id(after.destination.id) ||
@@ -88,7 +88,7 @@ export function mergeVerifiedBoardedTimetable(
   }
   return {
     ...current,
-    boardedDepartureAnchor: selectedTimetableRequest(current).anchor,
+    boardedDepartureAnchor: selectedTimetableRequest(current).anchor || undefined,
     timingVerifiedAt: verifiedAt,
     fetchedAt: verifiedAt,
     legs: current.legs.map((before, i) => {
