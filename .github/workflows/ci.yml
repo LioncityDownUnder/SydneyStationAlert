@@ -18,7 +18,6 @@ jobs:
       - run: npm run check
       - name: PHP syntax
         run: |
-          php -l api/index.php
-          php -l api/lib/core.php
+          find api -name '*.php' -print0 | xargs -0 -n1 php -l
       - name: PHP fixture tests
         run: php tests/backend-test.php
