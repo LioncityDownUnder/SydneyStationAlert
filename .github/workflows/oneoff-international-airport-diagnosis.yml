@@ -1,0 +1,36 @@
+name: One-off International Airport station name verification
+on:
+  push:
+    branches:
+      - diagnostic/international-airport-station-labels
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - name: Compare production and QA station IDs and route stop labels
+        shell: bash
+        run: |
+          set -euo pipefail
+          root=https://trains.nytnetwork.work
+          TZ=Australia/Sydney date '+%F %T %Z'
+          for st in 'Circular Quay' 'International Airport' 'Domestic Airport' 'Padstow'; do
+            echo "== SEARCH $st =="
+            curl -fsS --get --max-time 20 --data-urlencode action=stations --data-urlencode "q=$st" "$root/api/index.php" |
+              jq -c '{stations: [.data[]? | {name,id,mode}]}'
+          done
+          for env in production qa; do
+            if [ "$env" = production ]; then api="$root/api/index.php"; else api="$root/qatest/api/index.php"; fi
+            for trip in 'Circular Quay|International Airport|200020|202030' 'International Airport|Padstow|202030|221110' 'Circular Quay|Padstow|200020|221110'; do
+              IFS='|' read -r fromName toName from to <<<"$trip"
+              echo "== ROUTE $env: $fromName -> $toName =="
+              status="$(curl -sS --max-time 65 --get "$api" --data-urlencode action=journey --data-urlencode coreOnly=1 --data-urlencode "from=$from" --data-urlencode "to=$to" --data-urlencode "fromName=$fromName" --data-urlencode "toName=$toName" -o /tmp/airport-route.json -w '%{http_code} %{time_total}')"
+              echo "HTTP status/time $status"
+              jq -c '{error: .error,route: (if .data.legs? then {legs: [.data.legs[] | {mode,line,origin: {id:.origin.id,name:.origin.name,platform:.origin.platform},destination:{id:.destination.id,name:.destination.name,platform:.destination.platform}}],stops: [.data.stops[] | {id,name,platform,arrival,departure}]} else null end)}' /tmp/airport-route.json
+              echo '== AIRPORT STOP IDS, INCLUDING MISLABELLED ENTRIES =='
+              jq -c '[.data.stops[]? | select((.id|tostring)=="202091" or (.id|tostring)=="202092" or (.id|tostring)=="2020101" or (.id|tostring)=="2020102" or (.name//""|startswith("Platform "))) | {id,name,platform}]' /tmp/airport-route.json
+            done
+          done
+          echo 'AIRPORT-STATION-VERIFICATION-COMPLETE'
