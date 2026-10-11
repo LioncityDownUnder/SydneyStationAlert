@@ -9,6 +9,15 @@ foreach(['better_route','stitch_routes','prioritized_transfer_candidates','journ
 assertit(better_route(null,null)===null,'Route ranking keeps empty alternatives unavailable');
 assertit(route_departure_ts([])===PHP_INT_MAX,'Unknown departure does not become a valid future service');
 assertit(stitch_routes([],[],[],[])===null,'Incomplete connections are never stitched');
+$normalizationModule=realpath(__DIR__.'/../api/lib/rail-normalization.php');
+assertit($normalizationModule!==false,'Rail normalization module exists');
+foreach(['point','mode','station','stop','normalized_journey','normalized_journeys'] as $fn){
+ assertit(realpath((string)(new ReflectionFunction($fn))->getFileName())===$normalizationModule,"$fn comes from rail normalization module");
+}
+$coord=point(['coord'=>[151.206,-33.883]]);
+assertit($coord!==null&&abs($coord['lat']+33.883)<0.00001&&abs($coord['lon']-151.206)<0.00001,'Longitude-first TfNSW coordinates preserve Sydney latitude/longitude');
+assertit(normalize_platform('Platform 4A')==='4A','Platform normalization preserves a valid alphanumeric platform');
+assertit(clean_station_name('Central Station')==='Central','Station display name removes redundant station suffix');
 $origin=['id'=>'101','name'=>'Central','lat'=>-33.883,'lon'=>151.206,'mode'=>'train'];$dest=['id'=>'103','name'=>'Town Hall','lat'=>-33.873,'lon'=>151.207,'mode'=>'train'];
 $fixtures=['success','transfer','mixed','no-route','partial','missing-platform'];foreach($fixtures as $key){$body=json_decode(file_get_contents(__DIR__.'/fixtures/'.$key.'.json'),true);$fixtureDest=$key==='transfer'?['id'=>'105','name'=>'Barangaroo','lat'=>-33.862,'lon'=>151.202,'mode'=>'metro']:$dest;$result=normalized_journey($body,$origin,$fixtureDest);if(in_array($key,['no-route','partial','mixed'])){assertit($result===null,"$key is rejected safely");continue;}assertit($result!==null,"$key normalized");if($key==='success'){assertit(count($result['stops'])===3,'intermediate stops retained');assertit(count($result['legs'][0]['path'])===3,'rail geometry retained');assertit($result['legs'][0]['platform']==='4','platform parsed');assertit($result['stops'][1]['arrival']==='2026-10-07T14:24:00+11:00','estimated intermediate arrival is preferred');assertit($result['stops'][1]['departure']==='2026-10-07T14:24:30+11:00','intermediate departure is retained');assertit($result['stops'][2]['arrival']==='2026-10-07T14:26:00+11:00','destination arrival is retained');}if($key==='transfer')assertit(count($result['transfers'])===1&&count($result['legs'])===2,'transfer legs separate');if($key==='missing-platform')assertit($result['legs'][0]['platform']===null,'missing platform fallback is possible');}
 assertit(mode(['product'=>['class'=>5],'name'=>'Bus'])===null,'bus is not a rail mode');
