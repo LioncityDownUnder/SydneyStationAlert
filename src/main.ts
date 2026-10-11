@@ -189,9 +189,19 @@ async function refreshCrowding(generation=journeyGeneration){
   renderJourneyStable();
  }
 }
+function qaCrowdingDiagnosticDetails(j){
+ if(!isQaEnvironment||!Array.isArray(j?.crowding?.diagnostics))return '';
+ const labels={feed_unavailable:'TfNSW vehicle feed could not be retrieved',trip_id_missing:'Selected service has no trip identifier',trip_not_matched:'Selected trip not found in vehicle feed',occupancy_missing:'Train found, but occupancy fields are missing',available:'Occupancy information available'};
+ const rows=j.crowding.diagnostics.map(d=>{
+  const description=labels[d.reason]||'Occupancy status unknown';
+  return '<li>'+esc(d.mode==='metro'?'Metro':'Sydney Trains')+' leg '+esc(String(Number(d.legIndex)+1))+': '+esc(description)+
+   ' (selected IDs: '+esc(String(d.tripIdCount))+', feed vehicles: '+esc(String(d.feedVehicleCount))+', carriages with occupancy: '+esc(String(d.knownCarriages))+')</li>';
+ }).join('');
+ return '<details class="notice"><summary>QA crowding diagnostics</summary><p>Counts only; no train identifiers or API credentials are shown.</p><ul>'+rows+'</ul></details>';
+}
 function crowdingUnavailable(j){
  return state.crowdingChecked&&!j?.crowding?.available
-   ?'<div class="muted" role="status">Crowding data unavailable for this service.</div>':'';
+   ?'<div class="muted" role="status">Crowding data unavailable for this service.</div>'+qaCrowdingDiagnosticDetails(j):'';
 }
 async function enrichJourney(generation){if(!state.journey)return;state.enriching=true;renderJourneyStable();const statusTimer=window.setTimeout(()=>{if(generation===journeyGeneration&&state.enriching){state.enriching=false;renderJourneyStable();}},5000);try{const updated=await getJourney(state.journey.origin,state.journey.destination,qaRailPilot);if(generation!==journeyGeneration||!state.journey)return;const adopted=adoptJourneyUpdate(updated);if(adopted){state.lastChecked=new Date();state.message='';}checkAlerts();}catch(e){if(generation===journeyGeneration&&state.journey)state.message='Live service details could not be verified. Showing previously saved journey information.';}finally{clearTimeout(statusTimer);if(generation===journeyGeneration){state.enriching=false;renderJourneyStable();}}}
 async function setJourney(){stopQaRecoveryWatch();if(!state.origin||!state.destination||state.origin.id===state.destination.id)return;const generation=++journeyGeneration;state.busy=true;state.enriching=false;state.message='';state.noRoute=false;state.noRouteLimited=false;state.noRouteAlerts=null;state.noRouteAlertsLoading=false;setup();try{const j=await getJourney(state.origin,state.destination,true);if(generation!==journeyGeneration)return;state.journey=j;state.crowdingChecked=false;state.boardingOptions=null;state.suggestedConnection=null;state.lastSuggestionCheck=0;state.onboard=false;clearActiveTrip();state.busy=false;state.paused=false;state.lastChecked=new Date();state.alert='';fired.clear();startTracking();startPolling();renderJourney();void enrichJourney(generation);void refreshCrowding(generation);}catch(e){if(generation!==journeyGeneration)return;state.busy=false;state.enriching=false;state.journey=null;state.noRoute=e instanceof ApiRequestError&&(e.code==='NO_ROUTE'||e.code==='SEARCH_TIME_LIMIT');state.noRouteLimited=e instanceof ApiRequestError&&e.code==='SEARCH_TIME_LIMIT';state.message=e.message;setup();if(state.noRoute){void loadQaNoRouteAlerts(generation);startQaRecoveryWatch();}}}
