@@ -124,17 +124,53 @@ $transferCrowdingRoute=[
   ['id'=>'leg-b','mode'=>'metro','tripIds'=>['trip-b']]
  ]
 ];
-$combinedCrowding=journey_crowding_from_feeds($transferCrowdingRoute,['train'=>$trainUnknown,'metro'=>$metroKnown]);
+$combinedCrowding=journey_crowding_from_feeds($transferCrowdingRoute,['train'=>$trainUnknown,'metro'=>$metroKnown],1760000002);
 assertit($combinedCrowding['available']===true,'known crowding on one transfer leg makes journey crowding available');
 assertit($combinedCrowding['level']==='busy','journey crowding uses the busiest known leg');
 assertit($combinedCrowding['legs'][0]['vehicleMatched']===true&&$combinedCrowding['legs'][0]['level']==='unknown','matched vehicle with unknown occupancy stays unknown');
 assertit($combinedCrowding['legs'][1]['vehicleMatched']===true&&$combinedCrowding['legs'][1]['level']==='busy','known Metro occupancy is retained on transfer leg');
 
-$unknownOnly=journey_crowding_from_feeds(['legs'=>[['id'=>'leg-a','mode'=>'train','tripIds'=>['trip-a']]]],['train'=>$trainUnknown]);
+$unknownOnly=journey_crowding_from_feeds(['legs'=>[['id'=>'leg-a','mode'=>'train','tripIds'=>['trip-a']]]],['train'=>$trainUnknown],1760000002);
 assertit($unknownOnly['available']===false&&$unknownOnly['level']==='unknown','matched vehicle without occupancy does not claim crowding is available');
 
 $mismatch=journey_crowding_from_feeds(['legs'=>[['id'=>'leg-x','mode'=>'train','tripIds'=>['missing-trip']]]],['train'=>$trainUnknown]);
 assertit($mismatch['available']===false&&$mismatch['legs'][0]['vehicleMatched']===false,'trip-id mismatch fails open without crowding data');
+
+// SSA-03: source timestamps and conflicting GTFS matches must not be shown as live occupancy.
+$timedRoute=['legs'=>[['id'=>'leg-s','mode'=>'train','tripIds'=>['TRIP-A','alias-trip']]]];
+$liveRecord=['tripId'=>'trip-a','vehicleId'=>'vehicle-a','level'=>'busy','timestamp'=>1760000100,'carriages'=>[
+ ['name'=>'A','position'=>1,'level'=>'busy']
+]];
+$freshCrowding=journey_crowding_from_feeds($timedRoute,['train'=>['trip-a'=>$liveRecord]],1760000150);
+assertit($freshCrowding['available']===true&&$freshCrowding['updatedAt']==='2025-10-09T08:15:00+00:00','SSA-03 displays only fresh exact-trip crowding with source timestamp');
+$staleCrowding=journey_crowding_from_feeds($timedRoute,['train'=>['trip-a'=>$liveRecord]],1760000500);
+assertit($staleCrowding['available']===false&&$staleCrowding['updatedAt']===null&&
+ $staleCrowding['legs'][0]['vehicleMatched']===false&&$staleCrowding['legs'][0]['carriages']===[],
+ 'SSA-03 old vehicle observation never displays stale crowding');
+$futureCrowding=journey_crowding_from_feeds($timedRoute,['train'=>['trip-a'=>array_merge($liveRecord,['timestamp'=>1760000800])]],1760000150);
+assertit($futureCrowding['available']===false,'SSA-03 rejects implausible future vehicle timestamps');
+$noTimestamp=journey_crowding_from_feeds($timedRoute,['train'=>['trip-a'=>array_merge($liveRecord,['timestamp'=>0])]],1760000150);
+assertit($noTimestamp['available']===false,'SSA-03 missing TfNSW observation timestamp never becomes now');
+$conflictingFeeds=journey_crowding_from_feeds($timedRoute,['train'=>[
+ 'trip-a'=>$liveRecord,'alias-trip'=>array_merge($liveRecord,['vehicleId'=>'unrelated-vehicle'])
+]],1760000150);
+assertit($conflictingFeeds['available']===false&&$conflictingFeeds['legs'][0]['availability']==='ambiguous',
+ 'SSA-03 multiple exact IDs resolving to different physical vehicles fail safely');
+$sameVehicle=journey_crowding_from_feeds($timedRoute,['train'=>[
+ 'trip-a'=>$liveRecord,'alias-trip'=>array_merge($liveRecord,['timestamp'=>1760000120])
+]],1760000150);
+assertit($sameVehicle['available']===true&&$sameVehicle['legs'][0]['vehicleId']==='vehicle-a',
+ 'SSA-03 alternate exact IDs may agree only when tied to same physical vehicle');
+$anotherTrip=journey_crowding_from_feeds(['legs'=>[['id'=>'leg-s','mode'=>'train','tripIds'=>['another']]]],
+ ['train'=>['trip-a'=>$liveRecord]],1760000150);
+assertit($anotherTrip['available']===false,'SSA-03 shared line and departure never substitute a different trip ID');
+$duplicateVehicle=test_pb_msg(1,$tripMsg).test_pb_int(5,1760000000).test_pb_msg(8,test_pb_string(1,'train-other')).test_pb_int(9,3);
+$duplicateEnvelope=test_pb_msg(2,$entityMsg).test_pb_msg(2,test_pb_string(1,'entity-2').test_pb_msg(4,$duplicateVehicle));
+$duplicateDecoded=parse_vehicle_positions_feed($duplicateEnvelope);
+assertit(!empty($duplicateDecoded['3001.nsw-2-t4.1.ta.1432.sj2']['ambiguous'])&&
+ ($duplicateDecoded['3001.nsw-2-t4.1.ta.1432.sj2']['level']??null)==='unknown',
+ 'SSA-03 duplicate vehicle entities with same trip and timestamp are conservatively ambiguous');
+
 
 
 $routeWithKnownTransfer=[
