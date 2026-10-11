@@ -11,7 +11,6 @@ export interface IncomingCarriage {
   level?: string;
   position?: number | string | null;
   name?: string | null;
-  [key: string]: unknown;
 }
 export interface IncomingCrowdingLeg {
   legId?: string;
@@ -22,7 +21,6 @@ export interface IncomingCrowdingLeg {
   updatedAt?: string | null;
   carriages?: IncomingCarriage[];
   availability?: string;
-  [key: string]: unknown;
 }
 export interface IncomingCrowding {
   available?: boolean;
@@ -30,7 +28,6 @@ export interface IncomingCrowding {
   updatedAt?: string | null;
   checkedAt?: string | null;
   legs?: IncomingCrowdingLeg[];
-  [key: string]: unknown;
 }
 const known = ['quiet','moderate','busy','very_busy'] as const;
 const ageLimit = 5 * 60 * 1000;
