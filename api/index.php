@@ -31,7 +31,8 @@ try {
    }
    $normalized[]=['id'=>'leg-'.$i,'mode'=>$leg['mode'],'tripIds'=>$valid];
   }
-  $result=journey_crowding_status(['legs'=>$normalized]);
+  $qaCrowdingDiagnostic=str_contains((string)($_SERVER['SCRIPT_NAME']??''),'/qatest/api/');
+  $result=journey_crowding_status(['legs'=>$normalized],$qaCrowdingDiagnostic);
   echo json_encode(['data'=>$result],JSON_INVALID_UTF8_SUBSTITUTE);exit;
  }
  // QA-only list of independently normalized rail journeys near boarding time.
