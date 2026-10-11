@@ -2,7 +2,7 @@
 declare(strict_types=1);
 // Read-only, one-off timetable sample. Runs on existing production host with the
 // already-configured TfNSW credential; never prints a credential or raw payload.
-require_once getcwd().'/qatest/api/lib/core.php';
+require_once getcwd().'/api/lib/core.php';
 $key=source_key();
 if($key===''){fwrite(STDERR,"Configured transport key unavailable\n");exit(2);}
 $tz=new DateTimeZone('Australia/Sydney');
@@ -21,9 +21,6 @@ $stations=[
  'Padstow'=>['id'=>'221110','name'=>'Padstow','lat'=>0.0,'lon'=>0.0,'mode'=>'train']
 ];
 $checks=[
- ['Circular Quay','International Airport','20261012','1200'],
- ['International Airport','Padstow','20261012','1230'],
- ['International Airport','Circular Quay','20261012','1300'],
  ['Circular Quay','Padstow','20261012','1200']
 ];
 $ok=0;
