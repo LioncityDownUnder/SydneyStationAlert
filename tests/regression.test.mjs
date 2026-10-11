@@ -315,7 +315,7 @@ test('Step 5AX selection lists verified QA rail options and retains explicit boa
  assert.match(main,/state.boardingOptions=others.slice\(0,8\)/);
  assert.match(main,/function confirmBoardingOption\(index\)/);
  assert.match(main,/window.confirm\('Did you board this exact train/);
- assert.match(main,/journeyGeneration\+\+;state.journey=candidate;state.onboard=true/);
+ assert.match(main,/journeyGeneration\+\+;state.journey=candidate;state.crowdingChecked=false;state.onboard=true/);
  assert.match(main,/saveActiveTrip\(\);checkAlerts\(\);renderJourneyStable\(\)/);
  assert.match(main,/data-board-option/);
  assert.match(main,/cancel-boarding-choices/);
@@ -332,4 +332,33 @@ test('QA alert reliability notice stays collapsible above journey footer',()=>{
  assert.ok(render.indexOf('${notificationReliabilityNotice()}')>render.indexOf('<section class="panel">'));
  assert.ok(render.indexOf('${notificationReliabilityNotice()}')<render.indexOf('${footer}</main>'));
  assert.ok(!render.includes('${notificationReliabilityNotice()}${serviceUpdate(j)}'));
+});
+
+test('QA crowding fetch does not repeat the four-hour journey search',()=>{
+ const client=fs.readFileSync('src/api.ts','utf8');
+ const server=fs.readFileSync('api/index.php','utf8');
+ const ui=fs.readFileSync('src/main.ts','utf8');
+ assert.match(client,/export const getCrowding = \(journey\) => get\('crowding'/);
+ assert.match(client,/tripIds: \(leg\.tripIds \|\| \[\]\)\.slice\(0,8\)/);
+ assert.match(server,/if\(\$action==='crowding'\)/);
+ assert.match(server,/count\(\$legs\)>6/);
+ assert.match(server,/journey_crowding_status\(\['legs'=>\$normalized\]\)/);
+ assert.match(ui,/void refreshCrowding\(generation\)/);
+ assert.match(ui,/void refreshCrowding\(journeyGeneration\)/);
+ assert.match(ui,/selectedCrowdingIdentity\(state\.journey\)!==identity/);
+ assert.match(ui,/state\.journey\.crowding=result/);
+ assert.match(ui,/Crowding data unavailable for this service/);
+ assert.match(ui,/\$\{crowdingSummary\(j\)\}\$\{carriageCrowding\(j\)\}\$\{crowdingUnavailable\(j\)\}/);
+});
+test('QA selected-service crowding does not change confirmed boarding',()=>{
+ const ui=fs.readFileSync('src/main.ts','utf8');
+ const begin=ui.indexOf('async function refreshCrowding(');
+ const end=ui.indexOf('function crowdingUnavailable(',begin);
+ assert.ok(begin>=0&&end>begin);
+ const segment=ui.slice(begin,end);
+ assert.doesNotMatch(segment,/state\.journey\s*=/);
+ assert.doesNotMatch(segment,/state\.onboard\s*=/);
+ assert.match(segment,/generation!==journeyGeneration/);
+ assert.match(segment,/serial!==crowdingRequestSerial/);
+ assert.match(segment,/if\(state\.onboard\)saveActiveTrip\(\)/);
 });
