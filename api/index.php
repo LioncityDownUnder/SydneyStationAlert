@@ -2,9 +2,13 @@
 declare(strict_types=1);
 header('Content-Type: application/json; charset=utf-8');header('Cache-Control: no-store');header('X-Content-Type-Options: nosniff');
 require __DIR__.'/lib/core.php';
+require_once __DIR__.'/lib/boarded-timetable-handler.php';
+require_once __DIR__.'/lib/onward-recovery-handler.php';
 if($_SERVER['REQUEST_METHOD']!=='GET')fail('BAD_REQUEST','Only GET requests are accepted.',405);
 $action=(string)($_GET['action']??'');
 try {
+ if($action==='boarded-timetable')boarded_timetable_endpoint();
+ if($action==='onward-options')onward_recovery_endpoint();
  if($action==='health'){echo json_encode(['data'=>['ok'=>true,'configured'=>source_key()!=='']]);exit;}
  if($action==='station-index'){$data=station_index();echo json_encode(['data'=>$data],JSON_INVALID_UTF8_SUBSTITUTE);exit;}
  if($action==='stations'){$q=trim((string)($_GET['q']??''));if(mb_strlen($q)<2||mb_strlen($q)>70)fail('BAD_REQUEST','Enter at least two station-name characters.');$data=station_search($q);echo json_encode(['data'=>$data]);exit;}

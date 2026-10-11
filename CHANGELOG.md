@@ -1,5 +1,15 @@
 # Changelog
 
+## 17.1.0 — Selected-train reliability and connection recovery (11 October 2026)
+
+- **SSA-01:** Refresh only an explicitly confirmed train's timetable by strict TfNSW per-leg trip ID, station sequence and saved departure anchor. Show source planned-versus-estimated delay information where verifiable, and retain original times/train instead of silently switching services.
+- **SSA-02:** Offer a catchable next rail service after a missed interchange, searching after the actual expected first-leg arrival and three-minute transfer buffer. Proactive risk suggestions still require commuter confirmation before an onward train is changed; preserve already-boarded legs and trip persistence.
+- **SSA-03:** Reject stale, future-dated, conflicting or unidentifiable GTFS-Realtime vehicle occupancy. Match only verified exact trip IDs, suppress stale restored crowding after browser suspension and show an honest unavailable fallback.
+- **SSA-07:** Show the TfNSW crowding observation age for the actual displayed train/leg, never a refreshed page/request timestamp; hide labels for missing, stale or unverified data.
+- **Release discipline:** Selectively backport audited QA application/backend/test changes from `develop@9103931` onto production v17.0.1 rather than merging divergent branches. Preserve production deployment QA-subfolder exclusion, configuration/cache protection, PHP/module artifact checks and deeper trackwork-aware regression smoke.
+- **Validation limits:** 122 QA Node tests, PHP fixtures and deployed QA browser/endpoint smokes passed before release candidate; production candidate must pass all gates before release. Exact TfNSW vehicle/trip availability and a genuine delayed multi-leg commuter journey remain field-unverified; no invisible automatic boarding or rail substitution is claimed.
+
+
 ## 17.0.1 — Maintenance baseline (11 October 2026)
 
 - Promote the QA-verified modularisation of backend TfNSW transport, cache, journey routing, rail and station normalization, station discovery, service-alert matching, GTFS-Realtime crowding and performance instrumentation.

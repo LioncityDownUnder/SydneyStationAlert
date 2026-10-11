@@ -2,7 +2,7 @@ name: Production Release Candidate Verification
 
 on:
   push:
-    branches: [release/production-readiness-v1]
+    branches: ['release/**']
   workflow_dispatch:
 
 permissions:
@@ -35,6 +35,12 @@ jobs:
           test -f dist/api/lib/qa_route_rejections.php
           test -f dist/api/index.php
           test -f dist/api/lib/core.php
+          for module in boarded-timetable boarded-timetable-handler onward-recovery onward-recovery-handler gtfs-crowding; do
+            test -f "dist/api/lib/${module}.php"
+          done
+          for module in boarded-timetable connection-recovery crowding-safety crowding-markup; do
+            test -s "dist/assets/${module}.js"
+          done
       - name: Assert production deployment safeguards
         run: |
           grep -F -- "--exclude='/qatest/'" .github/workflows/deploy-production.yml

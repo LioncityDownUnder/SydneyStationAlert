@@ -39,7 +39,7 @@ jobs:
           test ! -e dist/api/gtfs-update.php
           test ! -e dist/api/gtfs-index.php
           test -f dist/api/lib/qa_route_rejections.php
-          for module in journey-performance upstream-transport service-alerts gtfs-crowding journey-routing rail-normalization station-discovery; do
+          for module in journey-performance upstream-transport service-alerts gtfs-crowding journey-routing rail-normalization station-discovery boarded-timetable boarded-timetable-handler onward-recovery onward-recovery-handler; do
             test -f "dist/api/lib/${module}.php"
           done
           test ! -e dist/api/diagnostics.php
