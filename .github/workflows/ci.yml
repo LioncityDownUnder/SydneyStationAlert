@@ -21,3 +21,35 @@ jobs:
           find api -name '*.php' -print0 | xargs -0 -n1 php -l
       - name: PHP fixture tests
         run: php tests/backend-test.php
+
+      - name: Compare live production and QA journey outcomes (diagnostic only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          for env in prod qa; do
+            if [ "$env" = prod ]; then base='https://trains.nytnetwork.work'; else base='https://trains.nytnetwork.work/qatest'; fi
+            echo "=== $env ==="
+            for name in Hurstville Kogarah Chatswood Gadigal; do
+              file="$(mktemp)"
+              code="$(curl --silent --show-error --max-time 25 --get "$base/api/index.php" --data-urlencode "action=stations" --data-urlencode "q=$name" -o "$file" -w '%{http_code}' || true)"
+              matches="$(jq -r --arg n "$name" '[.data[]? | select((.name|ascii_downcase)==($n|ascii_downcase))] | length' "$file" 2>/dev/null || echo 0)"
+              id="$(jq -r --arg n "$name" '.data[]? | select((.name|ascii_downcase)==($n|ascii_downcase)) | .id' "$file" 2>/dev/null | head -n1 || true)"
+              echo "Station $name: HTTP $code; exact matches $matches"
+              case "$name" in
+                Hurstville) hurstville="$id";;
+                Kogarah) kogarah="$id";;
+                Chatswood) chatswood="$id";;
+                Gadigal) gadigal="$id";;
+              esac
+              rm -f "$file"
+            done
+            for route in hurstville-kogarah chatswood-gadigal; do
+              if [ "$route" = hurstville-kogarah ]; then from="$hurstville"; to="$kogarah"; fn=Hurstville; tn=Kogarah; else from="$chatswood"; to="$gadigal"; fn=Chatswood; tn=Gadigal; fi
+              if [ -z "$from" ] || [ -z "$to" ]; then echo "Journey $fn to $tn: station IDs not resolved"; continue; fi
+              file="$(mktemp)"
+              result="$(curl --silent --show-error --max-time 40 --get "$base/api/index.php" --data-urlencode "action=journey" --data-urlencode "from=$from" --data-urlencode "to=$to" --data-urlencode "fromName=$fn" --data-urlencode "toName=$tn" --data-urlencode 'coreOnly=1' -o "$file" -w '%{http_code} %{time_total}' || true)"
+              kind="$(jq -r 'if .error? then .error.code // "UNKNOWN_ERROR" else if .data? then "JOURNEY_RETURNED" else "NO_JSON_DATA" end end' "$file" 2>/dev/null || echo 'INVALID_JSON')"
+              echo "Journey $fn to $tn: HTTP/time $result; kind $kind"
+              rm -f "$file"
+            done
+          done
