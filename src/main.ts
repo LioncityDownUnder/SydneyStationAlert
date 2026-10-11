@@ -175,66 +175,22 @@ function selectedCrowdingIdentity(j){
  return JSON.stringify((j?.legs||[]).map(l=>[l.mode,l.origin?.id,l.destination?.id,l.departure,(l.tripIds||[]).map(String).sort()]));
 }
 async function refreshCrowding(generation=journeyGeneration){
- const selected=state.journey;
- if(!selected||!navigator.onLine)return;
- const identity=selectedCrowdingIdentity(selected);
- const serial=++crowdingRequestSerial;
+ const selected=state.journey;if(!selected||!navigator.onLine)return;
+ const identity=selectedCrowdingIdentity(selected),serial=++crowdingRequestSerial;
  try{
   const result=await getCrowding(selected);
   if(generation!==journeyGeneration||serial!==crowdingRequestSerial||!state.journey||selectedCrowdingIdentity(state.journey)!==identity)return;
-  // Match history belongs to this exact selected service, not the next departure.
-  // Retain only a boolean per leg, including across confirmed-trip reloads.
-  const previous=state.journey.crowding;
-  if(isQaEnvironment){
-   result.matchHistory=(result.legs||[]).map((leg,i)=>Boolean(
-    leg.vehicleMatched||previous?.matchHistory?.[i]||
-    previous?.legs?.[i]?.vehicleMatched||
-    previous?.diagnostics?.[i]?.matched));
-   if(Array.isArray(result.diagnostics))result.diagnostics=result.diagnostics.map((d,i)=>({
-    ...d,previouslyMatched:!d.matched&&Boolean(result.matchHistory[i])
-   }));
-  }
-  // Only update optional metadata; never replace the selected trip or boarding state.
-  state.journey.crowding=result;
-  state.crowdingChecked=true;
-  if(state.onboard)saveActiveTrip();
-  renderJourneyStable();
- }catch(e){
+  state.journey.crowding=result;state.crowdingChecked=true;
+  if(state.onboard)saveActiveTrip();renderJourneyStable();
+ }catch{
   if(generation!==journeyGeneration||serial!==crowdingRequestSerial||!state.journey||selectedCrowdingIdentity(state.journey)!==identity)return;
-  // QA receives a category only, never raw trip IDs or upstream error details.
-  const reason=e instanceof ApiRequestError&&({
-    CROWDING_REQUEST_SIZE:'request_size',CROWDING_LEGS_INVALID:'legs_invalid',
-    CROWDING_MODE_INVALID:'mode_invalid',CROWDING_ID_COUNT:'id_count',
-    CROWDING_ID_FORMAT:'id_format',CROWDING_ID_NOT_STRING:'id_not_string',CROWDING_ID_TOO_LONG:'id_too_long',CROWDING_ID_BLANK:'id_blank',CROWDING_ID_CONTROL:'id_control'
-   }[e.code]||'') || (e instanceof ApiRequestError&&e.code==='BAD_REQUEST'?'request_rejected':
-    e instanceof ApiRequestError&&e.code==='MALFORMED_RESPONSE'?'invalid_response':
-    e instanceof ApiRequestError&&e.code==='UPSTREAM_UNAVAILABLE'?'request_unavailable':'request_failed');
-  state.journey.crowding={available:false,level:'unknown',legs:[],
-   diagnostics:isQaEnvironment?(selected.legs||[]).map((leg,i)=>({
-    legIndex:i,mode:leg.mode,tripIdCount:(leg.tripIds||[]).length,
-    feedVehicleCount:0,knownCarriages:0,reason
-   })):undefined};
-  state.crowdingChecked=true;
-  renderJourneyStable();
+  state.journey.crowding={available:false,level:'unknown',legs:[]};state.crowdingChecked=true;renderJourneyStable();
  }
 }
-function qaCrowdingDiagnosticDetails(j){
- if(!isQaEnvironment||!Array.isArray(j?.crowding?.diagnostics))return '';
- const labels={feed_unavailable:'TfNSW vehicle feed could not be retrieved',trip_id_missing:'Selected service has no trip identifier',trip_not_matched:'Selected trip not found in vehicle feed',occupancy_missing:'Train found, but occupancy fields are missing',available:'Occupancy information available',request_rejected:'Crowding request rejected by API validation',invalid_response:'Crowding API returned an invalid response',request_unavailable:'Crowding lookup failed or timed out',request_failed:'Crowding lookup could not complete',request_size:'Crowding request exceeded the API size limit',legs_invalid:'Crowding leg count or format rejected',mode_invalid:'Crowding transport mode rejected',id_count:'Crowding trip-ID count or list format rejected',id_format:'Crowding trip-ID format or length rejected',id_not_string:'A selected trip identifier was not text',id_too_long:'A selected trip identifier exceeds 150 bytes',id_blank:'A selected trip identifier is blank',id_control:'A selected trip identifier contains control characters'};
- const freshnessLabels={fresh:'recent vehicle update (within 90 seconds)',lagging:'vehicle update 1.5–5 minutes old',stale:'vehicle update over 5 minutes old',unknown:'vehicle update time unavailable',unavailable:'feed unavailable'};
- const rows=j.crowding.diagnostics.map(d=>{
-  const description=labels[d.reason]||'Occupancy status unknown';
-  return '<li>'+esc(d.mode==='metro'?'Metro':'Sydney Trains')+' leg '+esc(String(Number(d.legIndex)+1))+': '+esc(description)+
-   ' (selected IDs: '+esc(String(d.tripIdCount))+', feed vehicles: '+esc(String(d.feedVehicleCount))+', carriages with occupancy: '+esc(String(d.knownCarriages))+')'+
-   '; Feed freshness: '+esc(freshnessLabels[d.feedFreshness]||'not checked')+
-   '; Previously matched selected service: '+esc(d.previouslyMatched?'yes — now missing':'no recorded match')+'</li>';
- }).join('');
- return '<details class="notice"><summary>QA crowding diagnostics</summary><p>Counts only; no train identifiers or API credentials are shown.</p><ul>'+rows+'</ul></details>';
-}
 function crowdingUnavailable(j){
- return state.crowdingChecked&&!j?.crowding?.available
-   ?'<div class="muted" role="status">Crowding data unavailable for this service.</div>'+qaCrowdingDiagnosticDetails(j):'';
+ return state.crowdingChecked&&!j?.crowding?.available?'<div class="muted" role="status">Crowding data unavailable for this service.</div>':'';
 }
+function renderJourneyStable(){const x=window.scrollX,y=window.scrollY;renderJourney();requestAnimationFrame(()=>window.scrollTo(x,y));}
 async function enrichJourney(generation){if(!state.journey)return;state.enriching=true;renderJourneyStable();const statusTimer=window.setTimeout(()=>{if(generation===journeyGeneration&&state.enriching){state.enriching=false;renderJourneyStable();}},5000);try{const updated=await getJourney(state.journey.origin,state.journey.destination,qaRailPilot);if(generation!==journeyGeneration||!state.journey)return;const adopted=adoptJourneyUpdate(updated);if(adopted){state.lastChecked=new Date();state.message='';}checkAlerts();}catch(e){if(generation===journeyGeneration&&state.journey)state.message='Live service details could not be verified. Showing previously saved journey information.';}finally{clearTimeout(statusTimer);if(generation===journeyGeneration){state.enriching=false;renderJourneyStable();}}}
 async function setJourney(){stopQaRecoveryWatch();if(!state.origin||!state.destination||state.origin.id===state.destination.id)return;const generation=++journeyGeneration;state.busy=true;state.enriching=false;state.message='';state.noRoute=false;state.noRouteLimited=false;state.noRouteAlerts=null;state.noRouteAlertsLoading=false;setup();try{const j=await getJourney(state.origin,state.destination,true);if(generation!==journeyGeneration)return;state.journey=j;state.crowdingChecked=false;state.boardingOptions=null;state.suggestedConnection=null;state.lastSuggestionCheck=0;state.onboard=false;clearActiveTrip();state.busy=false;state.paused=false;state.lastChecked=new Date();state.alert='';fired.clear();startTracking();startPolling();renderJourney();void enrichJourney(generation);void refreshCrowding(generation);}catch(e){if(generation!==journeyGeneration)return;state.busy=false;state.enriching=false;state.journey=null;state.noRoute=e instanceof ApiRequestError&&(e.code==='NO_ROUTE'||e.code==='SEARCH_TIME_LIMIT');state.noRouteLimited=e instanceof ApiRequestError&&e.code==='SEARCH_TIME_LIMIT';state.message=e.message;setup();if(state.noRoute){void loadQaNoRouteAlerts(generation);startQaRecoveryWatch();}}}
 function stopTracking(){if(watchId!==null&&navigator.geolocation)navigator.geolocation.clearWatch(watchId);watchId=null;clearInterval(pollId);pollId=undefined;}
