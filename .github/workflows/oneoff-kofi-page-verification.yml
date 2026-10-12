@@ -30,3 +30,15 @@ jobs:
               except OSError:
                   pass
           PY
+      - name: Verify currently served QA footer module has both exact destination URLs
+        run: |
+          set -euo pipefail
+          file="$(mktemp)"
+          status="$(curl -sSL --max-time 25 'https://trains.nytnetwork.work/qatest/assets/community-footer.js' -o "$file" -w '%{http_code}')"
+          echo "QA built footer module HTTP status: $status"
+          test "$status" = 200
+          grep -Fq 'https://tally.so/r/9qLvLp' "$file"
+          grep -Fq 'https://ko-fi.com/sydstnalrt' "$file"
+          grep -Fq 'Feedback &amp; report an issue' "$file"
+          grep -Fq 'Buy me a coffee' "$file"
+          echo "PASS QA compiled footer: correct Tally + Ko-fi external URLs"
