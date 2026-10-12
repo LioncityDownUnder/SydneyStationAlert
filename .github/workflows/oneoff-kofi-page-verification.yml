@@ -1,0 +1,32 @@
+name: One-off SSA-12 public creator page verification (read only)
+on:
+  push:
+    branches: [diagnostic/ssa-12-verify-kofi-public-page]
+permissions:
+  contents: read
+jobs:
+  public-page:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check public Ko-fi creator page and Tally public link without submissions
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import subprocess, re, html
+          urls=['https://ko-fi.com/sydstnalrt','https://tally.so/r/9qLvLp']
+          for url in urls:
+              path='/tmp/community-page-'+str(urls.index(url))
+              p=subprocess.run(['curl','-L','-sS','--max-time','25','--user-agent','Mozilla/5.0 (compatible; community URL verification)','-o',path,'-w','%{http_code} %{url_effective}',url],text=True,capture_output=True)
+              print('Requested:',url)
+              print('HTTP result:',p.stdout.strip())
+              print('Curl exit code:',p.returncode)
+              if p.stderr: print('Connection note:',p.stderr[:250])
+              try:
+                  content=open(path,encoding='utf-8',errors='replace').read()
+                  title=re.search(r'<title[^>]*>(.*?)</title>',content,re.S|re.I)
+                  print('Title:',html.unescape(re.sub('<[^>]+>','',title.group(1))).strip()[:180] if title else '(not found)')
+                  print('Public response bytes:',len(content))
+              except OSError:
+                  pass
+          PY
