@@ -3,14 +3,19 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { communityDestinations, safeCommunityUrl, renderCommunityFooter } from '../dist/assets/community-footer.js';
 
-test('owner-supplied Tally feedback link appears, while Ko-fi stays hidden until user configures it',()=>{
-  assert.deepEqual(communityDestinations,{feedback:'https://tally.so/r/9qLvLp',coffee:''});
+test('owner-supplied Tally and Ko-fi links both appear without collecting user data',()=>{
+  assert.deepEqual(communityDestinations,{
+    feedback:'https://tally.so/r/9qLvLp',
+    coffee:'https://ko-fi.com/sydstnalrt'
+  });
   const markup=renderCommunityFooter();
   assert.match(markup,/href="https:\/\/tally\.so\/r\/9qLvLp"/);
+  assert.match(markup,/href="https:\/\/ko-fi\.com\/sydstnalrt"/);
   assert.match(markup,/Feedback &amp; report an issue/);
-  assert.equal((markup.match(/<a\b/g)||[]).length,1);
-  assert.match(markup,/target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer"/);
-  assert.doesNotMatch(markup,/ko-fi\.com|Buy me a coffee|<iframe|<form/);
+  assert.match(markup,/Buy me a coffee/);
+  assert.equal((markup.match(/<a\b/g)||[]).length,2);
+  assert.equal((markup.match(/target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer"/g)||[]).length,2);
+  assert.doesNotMatch(markup,/<iframe|<form|<script|onclick=/i);
   assert.match(markup,/Designed for Sydney commuters by Y\.T\. Ng/);
 });
 
