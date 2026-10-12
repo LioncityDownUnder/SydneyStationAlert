@@ -9,7 +9,7 @@
  */
 export const communityDestinations={
   feedback: 'https://tally.so/r/9qLvLp',
-  coffee: '',
+  coffee: 'https://ko-fi.com/sydstnalrt',
 };
 
 /** Do not render links to arbitrary hosts or to non-HTTPS payment/form pages. */
