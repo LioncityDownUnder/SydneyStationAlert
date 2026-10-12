@@ -36,7 +36,13 @@ async function scenario(mode) {
  assert.equal(await feedback.getAttribute('href'),'https://tally.so/r/9qLvLp');
  assert.equal(await feedback.getAttribute('target'),'_blank');
  assert.match(await feedback.getAttribute('rel'),/noopener noreferrer/);
- assert.equal(await page.getByRole('link',{name:'Buy me a coffee'}).count(),0,'Unconfigured Ko-fi link must stay hidden');
+ const coffee=page.getByRole('link',{name:'Buy me a coffee'});
+ await coffee.waitFor();
+ assert.equal(await coffee.getAttribute('href'),'https://ko-fi.com/sydstnalrt');
+ assert.equal(await coffee.getAttribute('target'),'_blank');
+ assert.match(await coffee.getAttribute('rel'),/noopener noreferrer/);
+ assert.equal(await coffee.getAttribute('referrerpolicy'),'no-referrer');
+ assert.equal(await page.locator('.footer-community a').count(),2);
  await page.locator('#origin').fill('Hurstville');
  await page.getByRole('option',{name:/Hurstville/}).click();
  await page.locator('#destination').fill('Casula');
@@ -44,7 +50,8 @@ async function scenario(mode) {
  await page.locator('#set').click();
  await page.getByText(mode==='limited'?'SEARCH TIME LIMIT REACHED':'JOURNEY NOT FOUND').waitFor({timeout:12000});
  assert.equal(await page.getByRole('link',{name:'Feedback & report an issue'}).getAttribute('href'),'https://tally.so/r/9qLvLp');
- assert.equal(await page.getByRole('link',{name:'Buy me a coffee'}).count(),0);
+ assert.equal(await page.getByRole('link',{name:'Buy me a coffee'}).getAttribute('href'),'https://ko-fi.com/sydstnalrt');
+ assert.equal(await page.locator('.footer-community a').count(),2);
  if(mode==='limited')await page.getByText(/This does not confirm service cancellation/).waitFor();
  if(mode==='active'||mode==='limited'){
   await page.getByText('Active T4 trackwork').waitFor();
