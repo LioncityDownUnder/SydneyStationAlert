@@ -1,0 +1,32 @@
+name: One-off read-only v17.1.2 production community footer verification
+on:
+  push:
+    branches: [diagnostic/verify-v17.1.2-community-production]
+permissions:
+  contents: read
+jobs:
+  verify-public-footer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Check production version, compiled footer, safe outbound attributes, QA survival
+        run: |
+          set -euo pipefail
+          base=https://trains.nytnetwork.work
+          curl -fsS --retry 3 --retry-delay 2 --max-time 25 "$base/release.json" > /tmp/prod-release.json
+          jq -e '.commit=="139e1c6b477bcb5dc1e5f09beb9b39edaa97b5fa"' /tmp/prod-release.json
+          curl -fsS --retry 3 --retry-delay 2 --max-time 25 "$base/assets/community-footer.js" > /tmp/prod-footer.js
+          grep -Fq 'https://tally.so/r/9qLvLp' /tmp/prod-footer.js
+          grep -Fq 'https://ko-fi.com/sydstnalrt' /tmp/prod-footer.js
+          grep -Fq 'Feedback &amp; report an issue' /tmp/prod-footer.js
+          grep -Fq 'Buy me a coffee' /tmp/prod-footer.js
+          grep -Fq 'noopener noreferrer' /tmp/prod-footer.js
+          grep -Fq 'no-referrer' /tmp/prod-footer.js
+          curl -fsS --retry 3 --retry-delay 2 --max-time 25 "$base/assets/main.js" > /tmp/prod-main.js
+          grep -Fq 'community-footer.js' /tmp/prod-main.js
+          curl -fsS --retry 3 --retry-delay 2 --max-time 25 "$base/qatest/assets/community-footer.js" > /tmp/qa-footer.js
+          grep -Fq 'https://tally.so/r/9qLvLp' /tmp/qa-footer.js
+          grep -Fq 'https://ko-fi.com/sydstnalrt' /tmp/qa-footer.js
+          curl -fsS --retry 3 --retry-delay 2 --max-time 25 "$base/api/index.php?action=health" | jq -e '.data.ok==true and .data.configured==true'
+          curl -fsS --retry 3 --retry-delay 2 --max-time 25 "$base/qatest/api/index.php?action=health" | jq -e '.data.ok==true and .data.configured==true'
+          echo "PASS: v17.1.2 production deployed release SHA and both compiled safe footer links, QA survived, APIs healthy"
