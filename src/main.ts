@@ -12,6 +12,7 @@ import { sameService, firstDepartureTime } from './journey-service.js';
 import { findConnectionAtRisk, calculateDisplayedProgress } from './journey-monitoring.js';
 import { datedTrainTime, stopDisplayTime, displayLineName, transferDisplay } from './timetable-display.js';
 import { renderNotificationReliabilityNotice, renderRailTravelLinks } from './notice-markup.js';
+import { renderCommunityFooter } from './community-footer.js';
 import { renderRouteMap } from './route-map.js';
 import { earliestCatchableDeparture, validOnwardConnection, verifiedLateConnectionRisk, buildRecoveredJourney } from './connection-recovery.js';
 import { canCheckBoardedTimetable, mergeVerifiedBoardedTimetable, estimatedStopDelayMinutes } from './boarded-timetable.js';
@@ -100,7 +101,7 @@ function mergeStationIndex(stations){
  saveStationCache(stationIndex);
 }
 const brand=`<header class="top"><div class="brand"><div class="mark" aria-hidden="true">↗</div>Sydney Station Alert</div><div class="topmeta">SYDNEY TRAINS <span style="color:#d46d2c">/</span> METRO</div></header>`;
-const footer=`<footer class="footer">Designed for Sydney commuters by Y.T. Ng</footer>`;
+const footer=renderCommunityFooter();
 function message(text,warn=false){return text?`<p class="notice${warn?' warn':''}" role="status">${esc(text)}</p>`:'';}
 function notificationReliabilityNotice(){
  const permission=('Notification' in window)?Notification.permission:'unsupported';
