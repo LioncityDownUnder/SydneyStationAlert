@@ -1,5 +1,14 @@
 # Changelog
 
+## 17.1.2 — Feedback and voluntary support links (13 October 2026)
+
+- **SSA-11:** Add optional footer link to the owner-provided Tally feedback form, https://tally.so/r/9qLvLp.
+- **SSA-12:** Add optional footer link to the owner-provided Ko-fi page, https://ko-fi.com/sydstnalrt.
+- Both are small external text links with restricted HTTPS destinations, new-tab isolation and no-referrer behavior. No embedded external scripts, payment processing, feedback backend, tracking or interruption to commuter journeys.
+- User confirms configuring Tally reCAPTCHA and Ko-fi in AUD for one-time tips with the intended payout account. No test payment or test form submission was attempted.
+- Selective production promotion from QA `develop@463d62f` with frontend/footer source, CSS, HTML, README, browser/regression tests and release metadata only. QA checks passed. No routing, TfNSW, station count, Revesby interchange, backend or deployment-workflow changes; the nighttime regression-smoke improvement remains deferred.
+
+
 ## 17.1.1 — Airport station identity correction (11 October 2026)
 
 - **SSA-09:** Correct TfNSW platform-only labels: prefer the actual parent station name when a stop's `disassembledName` is only `Platform 1/2`. Domestic Airport and International Airport are shown separately with correct station IDs and platform numbers.

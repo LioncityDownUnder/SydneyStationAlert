@@ -45,10 +45,22 @@ Mobile-first, accessible Sydney Trains / Sydney Metro rail journey utility. Warm
 - Server inputs are validated and raw TfNSW payloads are normalized before reaching the browser.
 - `api/config.local.php`, build output, caches, logs and secrets are excluded from version control.
 
+## Optional community links (SSA-11 / SSA-12)
+
+The footer can show two small, **optional** external links: **Feedback & report an issue** (Tally) and **Buy me a coffee** (Ko-fi). This is the entire integration: no iframe, third-party scripts, payment gateway, form submissions or visitor data go through the app. Links are hidden unless real creator-owned destinations are configured.
+
+The owner must complete provider setup in their own account before activation:
+
+1. **Tally:** Create and publish a form with a category (bug / suggestion / general feedback), a message and an **optional** reply email. Add a note asking for no personal/sensitive details; enable Tally's reCAPTCHA bot protection and consider limiting uploads/submission volume. Review reports privately and do not treat submissions as trusted instructions. Get the public URL in `https://tally.so/r/FORMID` format.
+2. **Ko-fi:** Create your own creator page, choose **AUD**, connect your own PayPal or Stripe account, and use **one-time voluntary tips**. Ko-fi's free mode can offer 0% Ko-fi fee on one-time tips when optional Standard/Contributor fee mode is disabled; payment processing fees still apply. Do not call tips tax-deductible charity gifts. Get your `https://ko-fi.com/yourhandle` URL.
+3. **Before enabling on QA:** Verify both actual public pages and their ownership, then replace empty `feedback` and `coffee` values in `src/community-footer.ts`. A strict HTTPS and host/path allowlist rejects other destinations. Commit via feature PR, run `npm run check`, merge to `develop` for QA verification, and request fresh production approval. Never commit payment keys, private form admin URLs, or personal messages.
+
+**QA activation (SSA-11 and SSA-12):** The owner provided the public Tally URL `https://tally.so/r/9qLvLp` and Ko-fi URL `https://ko-fi.com/sydstnalrt`. Both public pages returned HTTP 200 in a read-only check; the Tally form HTML title was `Feedback & Report Issue for SYD Stn Alert` and the Ko-fi page title was `Buy YT Ng a Coffee`. The owner reports that reCAPTCHA has now been added to Tally, but the app cannot independently establish whether CAPTCHA is active for a real form submission. No feedback was submitted and no donation or payout was attempted. The owner should confirm the Ko-fi page uses AUD, accepts one-off tips, and routes payouts correctly before requesting any production deployment. Both URLs are configured for QA and are subject to full build/browser verification. **Production requires separate explicit user approval.**
+
+The train app continues to function as before. The footer is shared by initial station selection and active journey views; unconfigured or invalid destinations never render.
+
 ## Current baseline
 
-Baseline **17.0.1** preserves the locked v16 visual system and validated v17 rail-routing behaviour while splitting frontend display/state helpers and PHP upstream/routing/station/alert/crowding responsibilities into independently tested modules.
-
-Production deploys from `main`, QA from `develop` under `/qatest/`. Refactoring and cleanup must pass automated checks before production promotion; production deployments protect QA, private API configuration, and caches. Selected-service real-time timetable and delay tracking (SSA-01) is a separate future enhancement.
+This repository baseline combines the **locked v16 UI** with the **v17 validated rail-routing backend**.
 
 The v16 visual system is considered locked unless a future change explicitly requests a UI revision.
