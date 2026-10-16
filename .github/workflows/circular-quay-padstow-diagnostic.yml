@@ -1,0 +1,62 @@
+name: Circular Quay Padstow live diagnostic
+
+on:
+  pull_request:
+    branches: [develop]
+    paths:
+      - '.github/workflows/circular-quay-padstow-diagnostic.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  live-diagnostic:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Compare deployed QA and production (read-only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          for env in qa prod; do
+            if [[ "$env" == qa ]]; then
+              api="https://trains.nytnetwork.work/qatest/api/index.php"
+            else
+              api="https://trains.nytnetwork.work/api/index.php"
+            fi
+            echo "== $env health =="
+            curl --silent --show-error --max-time 15 --get "$api" --data-urlencode 'action=health' -o /tmp/health.json -w 'HTTP %{http_code}, %{time_total}s\n'
+            jq -c '{ok:.data.ok,configured:.data.configured,error:.error.code}' /tmp/health.json
+            ids=()
+            for name in 'Circular Quay' 'Padstow'; do
+              curl --fail --silent --show-error --max-time 20 --get "$api" --data-urlencode 'action=stations' --data-urlencode "q=$name" -o /tmp/stations.json
+              id="$(jq -r --arg n "$name" '.data[] | select((.name|ascii_downcase)==($n|ascii_downcase)) | .id' /tmp/stations.json | head -n1)"
+              if [[ -z "$id" ]]; then echo "::error::$env station not found: $name"; exit 1; fi
+              ids+=("$id")
+            done
+            for attempt in 1 2 3; do
+              echo "== $env journey attempt $attempt =="
+              metrics="$(curl --silent --show-error --max-time 45 --get "$api" \
+                --data-urlencode 'action=journey' \
+                --data-urlencode "from=${ids[0]}" --data-urlencode "to=${ids[1]}" \
+                --data-urlencode 'fromName=Circular Quay' --data-urlencode 'toName=Padstow' \
+                --data-urlencode 'coreOnly=1' \
+                -D /tmp/headers.txt -o /tmp/journey.json -w '%{http_code} %{time_total}')"
+              status="${metrics%% *}"
+              seconds="${metrics#* }"
+              echo "$env attempt=$attempt HTTP=$status duration_seconds=$seconds"
+              jq -c '{error:.error.code,legs:(.data.legs|length),stops:(.data.stops|length),firstMode:.data.legs[0].mode}' /tmp/journey.json
+              if [[ "$env" == qa ]]; then
+                grep -iE '^(server-timing|x-qa-journey-search):' /tmp/headers.txt || true
+              fi
+              if [[ "$status" == 200 ]]; then
+                jq -e '(.data.legs|length)>0 and (.data.stops|length)>=2 and all(.data.legs[]; .mode=="train" or .mode=="metro")' /tmp/journey.json >/dev/null
+              elif [[ "$status" == 404 ]] && jq -e '.error.code=="NO_ROUTE"' /tmp/journey.json >/dev/null; then
+                echo "::warning::$env returned NO_ROUTE (not counted as a pass)"
+              else
+                echo "::error::$env unexpected HTTP $status or malformed journey response"
+                exit 1
+              fi
+            done
+          done
