@@ -122,13 +122,14 @@ jobs:
           node-version: "20"
       - run: npm install --no-save playwright@1.56.1
       - run: npx playwright install --with-deps chromium
-      - name: Verify no-route display and retry in Chromium (mocked API)
+      - name: Verify QA journeys and retry states in Chromium (mocked API)
         run: |
           python3 -m http.server 8765 --directory qa-site > /tmp/qa-browser-server.log 2>&1 &
           SERVER_PID=$!
           trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
           sleep 2
           node scripts/qa-browser.mjs
+          node scripts/qa-journey-browser.mjs
 
   verify-qa-endpoints:
     needs: deploy-qa
