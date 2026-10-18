@@ -126,7 +126,7 @@ async function selectRoute(page,destination) {
 }
 async function board(page) {
   await page.locator('#board').click();
-  await page.locator('.pill').getByText(/ON BOARD/).waitFor();
+  await page.locator('.pill').filter({hasText:'ON BOARD'}).waitFor();
   assert.ok(await page.evaluate(key=>localStorage.getItem(key)!==null,ACTIVE_KEY),
     'Boarded trip must be saved locally');
 }
@@ -145,7 +145,7 @@ try {
     await board(page);
     assert.equal((await persisted(page)).journey.id,'browser-direct-t4');
     await page.reload({waitUntil:'domcontentloaded'});
-    await page.locator('.pill').getByText(/ON BOARD/).waitFor();
+    await page.locator('.pill').filter({hasText:'ON BOARD'}).waitFor();
     assert.equal(await page.locator('.route .stop').count(),4);
     assert.equal((await persisted(page)).journey.id,'browser-direct-t4');
     assert.equal(await page.locator('#board').count(),0,
@@ -170,7 +170,7 @@ try {
     assert.deepEqual((await persisted(page)).journey.qaConfirmedTransfers,
       [byName['Wolli Creek'].id]);
     await page.reload({waitUntil:'domcontentloaded'});
-    await page.locator('.pill').getByText(/ON BOARD/).waitFor();
+    await page.locator('.pill').filter({hasText:'ON BOARD'}).waitFor();
     assert.equal(await page.locator('[data-confirm-onward]').count(),0,
       'Confirmed transfer must stay confirmed after reload');
     assert.equal(await page.getByText('Connecting train not yet confirmed').count(),0);
