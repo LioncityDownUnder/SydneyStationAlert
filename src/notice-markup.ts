@@ -23,7 +23,7 @@ export function renderNotificationReliabilityNotice(
     + (expanded ? ' open' : '')
     + '><summary>Alert Reliability Notice</summary><p>'
     + esc(status)
-    + ' Location and timetable checks may stop when your phone is locked or the browser is suspended. Keep the app open for best results; do not rely on it as your only stop reminder.</p></details>';
+    + ' Location and timetable checks may stop when your phone is locked or the browser is suspended. Keep the app open for best results; do not rely on it as your only stop reminder. Location-triggered alerts require confirmed boarding and a recent, accurate GPS fix near a scheduled stop. Returning to the app can resume checks, but it cannot recover alerts missed while the browser was suspended.</p></details>';
 }
 
 /** Official TfNSW alternatives; only shown where the rail-pilot UI requests them. */
