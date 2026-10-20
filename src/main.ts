@@ -340,7 +340,7 @@ function displayedProgress(j){
  const index=nearbyGpsStop(j,state.location);
  const p=calculateDisplayedProgress(j,index===null?null:state.location,state.onboard);
  const last=Number.isInteger(j.monitoringGpsIndex)?j.monitoringGpsIndex:0;
- return state.onboard&&p.index<last?progressAtIndex(j,last):p;
+ return state.onboard&&p.index<last?{...progressAtIndex(j,last),nearest:null}:p;
 }
 function mapMarkup(j,p){return renderRouteMap(j,p,locationIsFresh(state.location)?state.location:null);}
 function qaOnwardConnectionIsValid(onward,transfer,prior,recoveryRequestedAt){
