@@ -50,7 +50,7 @@ test('upstream station name escapes HTML and inputs stay unchanged',()=>{
 test('main still delegates with current GPS and preserves boarding/recovery',()=>{
   const main=fs.readFileSync('src/main.ts','utf8');
   assert.match(main,/import \{ renderRouteMap \} from '\.\/route-map\.js'/);
-  assert.match(main,/function mapMarkup\(j,p\)\{return renderRouteMap\(j,p,state\.location\);\}/);
+  assert.match(main,/function mapMarkup\(j,p\)\{return renderRouteMap\(j,p,locationIsFresh\(state\.location\)\?state\.location:null\);\}/);
   assert.doesNotMatch(main,/<svg class="map"/);
   assert.match(main,/function qaSameSelectedTrain\(a,b\)/);
   assert.match(main,/async function recoverMissedConnection\(legIndex\)/);
