@@ -14,7 +14,7 @@ const p=(name,id,lat,lon,time)=>({
 });
 const stations=[
  p('Hurstville','A',-33.967,151.103,0),
- p('Bypassed','X',-33.964,151.110,null),
+ p('Bypassed','X',-33.964,151.118,null),
  p('Kogarah','B',-33.962,151.132,5),
  p('Wolli Creek','C',-33.9287,151.153,12),
  p('Central','D',-33.883,151.207,25)
@@ -39,7 +39,7 @@ test('location-triggered station alerts require proximity to a stopping station'
  const route=journey();
  const near=reliableGpsFix(fix(-33.962,151.132),now);
  assert.equal(nearbyGpsStop(route,near,now),2);
- assert.equal(nearbyGpsStop(route,reliableGpsFix(fix(-33.964,151.110),now),now),null,
+ assert.equal(nearbyGpsStop(route,reliableGpsFix(fix(-33.964,151.118),now),now),null,
   'A skipped station should not trigger an alert');
  assert.equal(nearbyGpsStop(route,{lat:0,lon:0,accuracy:5,timestamp:now},now),null);
  assert.equal(nearbyGpsStop(route,{...near,timestamp:now-GPS_FIX_MAX_AGE_MS-1},now),null);
