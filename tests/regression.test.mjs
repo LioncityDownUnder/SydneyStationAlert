@@ -35,7 +35,8 @@ test('confirmed boarding only adopts updates for the same service',()=>{
  const main=fs.readFileSync('src/main.ts','utf8');
  assert.match(main,/function adoptJourneyUpdate\(updated\)/);
  assert.match(main,/if\(!qaSameSelectedTrain\(state\.journey,updated\)\)return false/);
- assert.match(main,/state\.onboard=true;state\.timetableStatus='not_checked';state\.journey\.boardedDepartureAnchor=[^;]+;saveActiveTrip\(\)/);
+ assert.match(main,/state\.onboard=true;state\.timetableStatus='not_checked';state\.journey\.boardedDepartureAnchor=[^;]+;/);
+ assert.match(main,/state\.journey\.monitoringGpsIndex=0;fired\.clear\(\);checkAlerts\(\);saveActiveTrip\(\)/);
  assert.match(main,/const restoredTrip=loadActiveTrip\(\)/);
  assert.match(main,/clearActiveTrip\(\);stopTracking\(\)/);
 });
@@ -86,7 +87,7 @@ test('GPS missed-connection inference is removed without removing manual recover
  assert.doesNotMatch(main,/suspectedMissedConnection|updateConnectionWarning|locationCheckedAt/);
  assert.match(main,/async function recoverMissedConnection\(legIndex\)/);
  assert.match(main,/function connectionAtRisk\(j\)/);
- assert.match(main,/function checkAlerts\(\)\{updateDelayConnectionWarning\(\);/);
+ assert.match(main,/function checkAlerts\(\)\{\s*if\(!state\.journey\|\|state\.paused\|\|!state\.onboard\)return;\s*updateDelayConnectionWarning\(\);/);
 });
 
 test('onboard delay-aware connection warning uses arrival and departure with interchange buffer',()=>{

@@ -78,6 +78,27 @@ async function browserScenario(name,action) {
   const errors=[];
   let journeyRequests=0;
   page.on('pageerror',error => errors.push(error.message));
+  // Deterministic browser geolocation and notification spies. Nothing is sent
+  // to the operating system or production. No fix is emitted automatically.
+  await page.addInitScript(() => {
+    const watchers=new Map();
+    let nextWatch=1;
+    Object.defineProperty(navigator,'geolocation',{configurable:true,value:{
+      watchPosition(callback){const id=nextWatch++;watchers.set(id,callback);return id;},
+      clearWatch(id){watchers.delete(id);}
+    }});
+    window.__emitGps=({lat,lon,accuracy=12,timestamp=Date.now()})=>{
+      const position={timestamp,coords:{latitude:lat,longitude:lon,accuracy}};
+      for(const callback of watchers.values())callback(position);
+    };
+    window.__notifications=[];
+    class MockNotification {
+      static permission='granted';
+      static requestPermission=async()=> 'granted';
+      constructor(title,options){window.__notifications.push({title,body:options?.body,tag:options?.tag});}
+    }
+    Object.defineProperty(window,'Notification',{configurable:true,value:MockNotification});
+  });
   await page.route('**/api/index.php?*',async route=>{
     const url=new URL(route.request().url());
     const q=url.searchParams;
@@ -176,6 +197,49 @@ try {
     assert.equal(await page.getByText('Connecting train not yet confirmed').count(),0);
     assert.deepEqual((await persisted(page)).journey.qaConfirmedTransfers,
       [byName['Wolli Creek'].id]);
+  });
+
+  await browserScenario('GPS freshness, non-regression and notifications survive refresh',async page=>{
+    await selectRoute(page,'Central');
+    const emit=async (station,accuracy=12,timestamp=Date.now())=>
+      page.evaluate(({lat,lon,accuracy,timestamp})=>
+        window.__emitGps({lat,lon,accuracy,timestamp}),
+        {lat:byName[station].lat,lon:byName[station].lon,accuracy,timestamp});
+    const notices=()=>page.evaluate(()=>window.__notifications.slice());
+    await emit('Kogarah');
+    assert.equal((await notices()).length,0,'GPS must not alert before boarding');
+    await board(page);
+    await page.getByText('2 stops to Central').waitFor();
+    assert.match(await page.locator('.bigstatus').innerText(),/2\s+stops/);
+    assert.deepEqual((await persisted(page)).journey.notifiedAlertKeys,['destination-two']);
+    await emit('Central',999);
+    assert.match(await page.locator('.bigstatus').innerText(),/2\s+stops/,
+      'Inaccurate GPS must not advance the displayed stop count');
+    await emit('Central',12,Date.now()-120000);
+    assert.match(await page.locator('.bigstatus').innerText(),/2\s+stops/,
+      'Stale GPS must not advance the displayed stop count');
+    await emit('Wolli Creek');
+    await page.getByText('1 stop to Central').waitFor();
+    assert.match(await page.locator('.bigstatus').innerText(),/1\s+stop/);
+    assert.deepEqual((await notices()).map(x=>x.body),
+      ['2 stops to Central','1 stop to Central']);
+    await emit('Kogarah');
+    assert.match(await page.locator('.bigstatus').innerText(),/1\s+stop/,
+      'Backwards GPS jitter must not regress confirmed station progress');
+    const saved=await persisted(page);
+    assert.equal(saved.journey.monitoringGpsIndex,2,
+      'Wolli Creek should be the confirmed third stop (array index 2)');
+    assert.deepEqual(saved.journey.notifiedAlertKeys,
+      ['destination-two','destination-one']);
+    await page.reload({waitUntil:'domcontentloaded'});
+    await page.locator('.pill').filter({hasText:'ON BOARD'}).waitFor();
+    assert.match(await page.locator('.bigstatus').innerText(),/1\s+stop/);
+    await page.evaluate(({lat,lon})=>window.__emitGps({lat,lon}),{
+      lat:byName['Wolli Creek'].lat,lon:byName['Wolli Creek'].lon
+    });
+    assert.equal((await notices()).length,0,'Refresh must not replay previously notified stops');
+    assert.deepEqual((await persisted(page)).journey.notifiedAlertKeys,
+      ['destination-two','destination-one']);
   });
 
   await browserScenario('Abandon trip clears local persistence',async page=>{
