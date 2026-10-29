@@ -1,0 +1,20 @@
+name: Investigate Airport Route (read-only)
+
+on:
+  pull_request:
+    branches: [develop]
+    paths:
+      - "scripts/diagnose-airport-route.mjs"
+      - ".github/workflows/investigate-airport-route.yml"
+
+jobs:
+  live-api-probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Compare read-only QA and production journey APIs
+        run: node scripts/diagnose-airport-route.mjs
