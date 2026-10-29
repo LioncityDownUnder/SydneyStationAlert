@@ -5,12 +5,13 @@ on:
     branches: [develop]
     paths:
       - "scripts/diagnose-airport-alias.mjs"
+      - "scripts/diagnose-airport-alias-ui.mjs"
       - ".github/workflows/diagnose-airport-alias.yml"
 
 jobs:
   station-alias:
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -18,3 +19,9 @@ jobs:
           node-version: "20"
       - name: Compare names station IDs and journey responses
         run: node scripts/diagnose-airport-alias.mjs
+      - name: Install Chromium
+        run: |
+          npm install --no-save playwright@1.56.1
+          npx playwright install --with-deps chromium
+      - name: Reproduce screenshot destination label in Chromium
+        run: node scripts/diagnose-airport-alias-ui.mjs
