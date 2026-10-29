@@ -1,0 +1,20 @@
+name: Diagnose Sydney Airport station alias (read only)
+
+on:
+  pull_request:
+    branches: [develop]
+    paths:
+      - "scripts/diagnose-airport-alias.mjs"
+      - ".github/workflows/diagnose-airport-alias.yml"
+
+jobs:
+  station-alias:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Compare names station IDs and journey responses
+        run: node scripts/diagnose-airport-alias.mjs
