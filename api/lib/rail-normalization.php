@@ -125,13 +125,24 @@ function is_transfer_walk(mixed $transport):bool{
  $label=transport_label($transport);
  return str_contains($label,'walk')||str_contains($label,'footpath')||str_contains($label,'walking')||str_contains($label,'fussweg')||str_contains($label,'fußweg')||str_contains($label,'pedestrian');
 }
+/**
+ * TfNSW exposes stop 202030 as both "International Airport" and "Sydney
+ * International Airport". The train timetable uses platform stop IDs such as
+ * 2020101, so exact ID matching alone cannot reconcile the station search
+ * selection with the actual train endpoint. This is a verified, single-station
+ * alias only; never strip arbitrary "Sydney" prefixes.
+ */
+function station_identity_name(string $name):string{
+ $normalized=strtolower(clean_station_name($name));
+ return $normalized==='sydney international airport'?'international airport':$normalized;
+}
 function same_station(array $a,array $b):bool{
  if((string)val($a,'id','')!==''&&(string)val($a,'id','')===(string)val($b,'id',''))return true;
  $an=strtolower(clean_station_name((string)val($a,'name','')));$bn=strtolower(clean_station_name((string)val($b,'name','')));
  // "Platform 2" is not a station identity: never collapse unrelated stop IDs
  // or treat a platform-only label as the requested origin/destination.
  if($an===''||platform_only_station_name($an)||platform_only_station_name($bn))return false;
- return $an===$bn;
+ return station_identity_name($an)===station_identity_name($bn);
 }
 function iso_ts(mixed $value):?int{
  if(!is_string($value)||trim($value)==='')return null;
