@@ -21,7 +21,7 @@ const stations = [
   {id:'221710',name:'Kogarah',mode:'train',lat:-33.9620,lon:151.1320},
   {id:'220510',name:'Wolli Creek',mode:'train',lat:-33.9287,lon:151.1530},
   {id:'200010',name:'Central',mode:'train',lat:-33.8830,lon:151.2070},
-  {id:'202010',name:'International Airport',mode:'train',lat:-33.9344,lon:151.1655},
+  {id:'202030',name:'International Airport',mode:'train',lat:-33.9344,lon:151.1655},
   {id:'221110',name:'Revesby',mode:'train',lat:-33.9516,lon:151.0145},
   {id:'221310',name:'Padstow',mode:'train',lat:-33.9528,lon:151.0300}
 ];
@@ -50,6 +50,23 @@ function directJourney() {
   return {
     id:'browser-direct-t4',origin:stops[0],destination:stops.at(-1),
     stops,transfers:[],legs:[leg('T4','browser-t4-central',stops)],
+    fetchedAt:new Date().toISOString(),serviceStatus:{level:'ok'}
+  };
+}
+function airportJourney() {
+  const stops=[
+    stop('Hurstville',null,0),
+    stop('Kogarah',5,5),
+    stop('Wolli Creek',12,18),
+    stop('International Airport',22,null)
+  ];
+  return {
+    id:'browser-airport-t4-t8',origin:stops[0],destination:stops.at(-1),
+    stops,transfers:[stops[2]],
+    legs:[
+      leg('T4','browser-t4-wolli-airport',stops.slice(0,3)),
+      leg('T8','browser-t8-international',stops.slice(2))
+    ],
     fetchedAt:new Date().toISOString(),serviceStatus:{level:'ok'}
   };
 }
@@ -115,6 +132,7 @@ async function browserScenario(name,action) {
         assert.equal(from,byName.Hurstville.id);
         if(to===byName.Central.id)return response(directJourney());
         if(to===byName.Padstow.id)return response(interchangeJourney());
+        if(to===byName['International Airport'].id)return response(airportJourney());
         return route.fulfill({status:404,contentType:'application/json',
           body:JSON.stringify({error:{code:'NO_ROUTE',message:'Fixture route absent'}})});
       }
@@ -171,6 +189,21 @@ try {
     assert.equal((await persisted(page)).journey.id,'browser-direct-t4');
     assert.equal(await page.locator('#board').count(),0,
       'Restored journey must not require boarding again');
+  });
+
+  await browserScenario('Hurstville to International Airport via Wolli Creek uses correct station ID',async page=>{
+    await selectRoute(page,'International Airport');
+    assert.equal(await page.locator('.route .stop').count(),4);
+    assert.match(await page.locator('.journeyhead .subtitle').innerText(),/1 train change/);
+    assert.match(await page.locator('.journeyhead .subtitle').innerText(),/T4/);
+    assert.match(await page.locator('.journeyhead .subtitle').innerText(),/T8/);
+    assert.equal(await page.locator('.stop .transfer-detail').count(),1);
+    await board(page);
+    assert.equal((await persisted(page)).journey.destination.id,'202030');
+    await page.reload({waitUntil:'domcontentloaded'});
+    await page.locator('.pill').filter({hasText:'ON BOARD'}).waitFor();
+    assert.equal((await persisted(page)).journey.destination.id,'202030');
+    await page.getByText('Connecting train not yet confirmed').waitFor();
   });
 
   await browserScenario('Interchange confirmation and hard refresh',async page=>{
