@@ -61,6 +61,14 @@ for(const [environment,api] of Object.entries(base)){
   console.log(JSON.stringify({type:'station',environment,name,status:r.status,options}));
  }
 }
+for(const [environment,api] of Object.entries(base)){
+ const u=new URL(api);u.searchParams.set('action','station-index');
+ const index=await request(u,25000);
+ const all=Array.isArray(index.body?.data)?index.body.data:[];
+ const matches=all.filter(s=>/^(International Airport|Hurstville|Wolli Creek)$/i.test(s.name||''))
+   .map(s=>({name:s.name,id:String(s.id),mode:s.mode}));
+ console.log(JSON.stringify({type:'station-index',environment,status:index.status,count:all.length,matches}));
+}
 for(const environment of ['qa','production']){
  const api=base[environment];
  for(const [fromName,toName] of pairs){
