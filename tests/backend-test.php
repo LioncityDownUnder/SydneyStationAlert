@@ -40,6 +40,33 @@ $airportStopPoint=$airportFixture['circularQuayToPadstow']['journeys'][0]['legs'
 $domesticStopPoint=$airportFixture['circularQuayToPadstow']['journeys'][0]['legs'][0]['stopSequence'][6]['stopPoint'];
 $airportNormalized=stop($airportStopPoint,'train');
 $domesticNormalized=stop($domesticStopPoint,'train');
+// User-reported 2026-10-29 production false NO_ROUTE: the station picker returns
+// "Sydney International Airport" (id 202030) while TfNSW timetable stop
+// records use "International Airport" (platform stop id 2020101/2020102).
+$stationIASearchAlias=$stationIA;
+$stationIASearchAlias['name']='Sydney International Airport';
+assertit(same_station($stationIASearchAlias,$airportNormalized),
+ 'Sydney International Airport selector matches verified International Airport platform');
+assertit(same_station($airportNormalized,$stationIASearchAlias),
+ 'International Airport station alias matching works in either direction');
+assertit(!same_station($stationIASearchAlias,$domesticNormalized),
+ 'International Airport alias never matches Domestic Airport');
+assertit(!same_station($stationIASearchAlias,['id'=>'x','name'=>'Sydney Domestic Airport']),
+ 'Only verified International Airport alias is canonicalized, not arbitrary Sydney labels');
+assertit(!same_station($stationIASearchAlias,['id'=>'platform-only','name'=>'Platform 2']),
+ 'International Airport alias never accepts a platform-only stop name');
+assertit(!same_station($stationIASearchAlias,['id'=>'x','name'=>'International Airport Road']),
+ 'International Airport alias does not match unrelated similar station names');
+assertit(clean_station_name('Sydney International Airport')==='Sydney International Airport',
+ 'Airport display label remains unchanged by identity matching');
+$aliasAirportRoute=normalized_journey(
+ $airportFixture['circularQuayToInternational'],$stationCQ,$stationIASearchAlias
+);
+assertit($aliasAirportRoute!==null&&
+ ($aliasAirportRoute['legs'][count($aliasAirportRoute['legs'])-1]['destination']['name']??'')==='International Airport'&&
+ ($aliasAirportRoute['destination']['name']??'')==='Sydney International Airport',
+ 'Valid T8 airport journey normalizes when selected station has Sydney prefix');
+
 assertit($airportNormalized['name']==='International Airport'&&$airportNormalized['platform']==='2'&&$airportNormalized['id']==='2020102',
  'SSA-09 international airport resolves parent station name while retaining platform 2 and original stop ID');
 assertit($domesticNormalized['name']==='Domestic Airport'&&$domesticNormalized['platform']==='2'&&$domesticNormalized['id']==='202092',
