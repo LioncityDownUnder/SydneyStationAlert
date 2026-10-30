@@ -126,15 +126,19 @@ function is_transfer_walk(mixed $transport):bool{
  return str_contains($label,'walk')||str_contains($label,'footpath')||str_contains($label,'walking')||str_contains($label,'fussweg')||str_contains($label,'fußweg')||str_contains($label,'pedestrian');
 }
 /**
- * TfNSW exposes stop 202030 as both "International Airport" and "Sydney
- * International Airport". The train timetable uses platform stop IDs such as
- * 2020101, so exact ID matching alone cannot reconcile the station search
- * selection with the actual train endpoint. This is a verified, single-station
- * alias only; never strip arbitrary "Sydney" prefixes.
+ * TfNSW's station finder can return "Sydney International Airport" (202030)
+ * and "Sydney Domestic Airport" (202020), while train platform stop records
+ * use shorter "International Airport" (2020101/2020102) and "Domestic Airport"
+ * (202091/202092) names. Reconcile ONLY these verified pairs; a general
+ * "Sydney" prefix removal would conflate unrelated station identities.
  */
 function station_identity_name(string $name):string{
  $normalized=strtolower(clean_station_name($name));
- return $normalized==='sydney international airport'?'international airport':$normalized;
+ return match($normalized){
+  'sydney international airport'=>'international airport',
+  'sydney domestic airport'=>'domestic airport',
+  default=>$normalized
+ };
 }
 function same_station(array $a,array $b):bool{
  if((string)val($a,'id','')!==''&&(string)val($a,'id','')===(string)val($b,'id',''))return true;
