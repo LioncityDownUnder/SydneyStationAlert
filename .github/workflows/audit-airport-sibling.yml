@@ -1,0 +1,20 @@
+name: Audit Airport Station Variants (read-only)
+
+on:
+  pull_request:
+    branches: [develop]
+    paths:
+      - "scripts/audit-airport-sibling.mjs"
+      - ".github/workflows/audit-airport-sibling.yml"
+
+jobs:
+  airport-variants:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Check Central-to-airport station naming variants
+        run: node scripts/audit-airport-sibling.mjs
