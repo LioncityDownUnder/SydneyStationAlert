@@ -1,0 +1,20 @@
+name: Audit All Catalogued Rail Station Picker IDs (read-only)
+
+on:
+  pull_request:
+    branches: [develop]
+    paths:
+      - "scripts/audit-current-station-picker.mjs"
+      - ".github/workflows/audit-current-station-picker.yml"
+
+jobs:
+  station-picker:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Compare station picker with GTFS rail platform identities
+        run: node scripts/audit-current-station-picker.mjs
