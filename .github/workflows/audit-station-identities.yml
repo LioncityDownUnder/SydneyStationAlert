@@ -5,6 +5,7 @@ on:
     branches: [develop]
     paths:
       - "scripts/audit-station-identities.mjs"
+      - "scripts/audit-rail-platform-mismatches.mjs"
       - ".github/workflows/audit-station-identities.yml"
 
 jobs:
@@ -17,4 +18,4 @@ jobs:
         with:
           node-version: "20"
       - name: Inspect public GTFS station/stop mappings
-        run: node scripts/audit-station-identities.mjs
+        run: node scripts/audit-rail-platform-mismatches.mjs
