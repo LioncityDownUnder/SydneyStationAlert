@@ -1,0 +1,20 @@
+name: Audit Rail Station Identity (read-only)
+
+on:
+  pull_request:
+    branches: [develop]
+    paths:
+      - "scripts/audit-station-identities.mjs"
+      - ".github/workflows/audit-station-identities.yml"
+
+jobs:
+  station-identity:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Inspect public GTFS station/stop mappings
+        run: node scripts/audit-station-identities.mjs
