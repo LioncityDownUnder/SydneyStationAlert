@@ -1,0 +1,20 @@
+name: Diagnose Hurstville 1520 Platform (read-only)
+
+on:
+  pull_request:
+    branches: [develop]
+    paths:
+      - "scripts/diagnose-hurstville-platform-1520.mjs"
+      - ".github/workflows/diagnose-hurstville-platform.yml"
+
+jobs:
+  platform-probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Read production and QA platform stop data only
+        run: node scripts/diagnose-hurstville-platform-1520.mjs
